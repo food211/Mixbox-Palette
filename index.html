@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://scrtwpns.com/mixbox.js"></script>
+    <meta charset="UTF-8">
+    <title>Mixbox 调色板</title>
+    <style>@import url('style.css');</style>
+</head>
+<body>
+    <div class="container">
+        <div class="header-container">
+            <h1>🎨 Mixbox 调色板</h1>
+            <div class="palette-info">Winsor & Newton Cotman 16 色水彩</div>
+            <div class="palette-selector">
+                <button id="paletteBtn" class="palette-btn">切换颜料</button>
+                <div id="paletteDropdown" class="palette-dropdown"></div>
+            </div>
+        </div>
+        
+        <!-- 16 色选择器 -->
+        <div class="color-picker" id="colorPicker"></div>
+        
+        <!-- 控制按钮 -->
+        <div class="controls">
+            <button id="clearBtn" class="clear">清空</button>
+            <div class="brush-size">
+                <label>笔刷大小</label>
+                <input type="range" id="brushSize" min="2" max="50" value="15">
+                <span id="brushSizeValue">15</span>px
+            </div>
+            <div class="brush-size">
+                <label>颜料浓度</label>
+                <input type="range" id="brushMix" min="1" max="50" value="30">
+                <span id="brushMixStrength">30</span>%
+            </div>
+            <div class="brush-preview-btn" id="brushPreviewBtn" title="选择笔刷">
+                <canvas id="brushPreviewCanvas" width="28" height="28"></canvas>
+            </div>
+            <div class="history-buttons">
+                <button id="undoBtn" title="撤销" disabled>↶</button>
+                <button id="redoBtn" title="重做" disabled>↷</button>
+            </div>
+        </div>
+        
+        <!-- 混色区 -->
+        <div class="mix-area-container">
+            <div class="mix-area-header">
+                <h3>混色区</h3>
+                <div class="color-indicators">
+                    <div class="color-indicator">
+                        <div class="color-box foreground" id="fgColorBox"></div>
+                        <span>前景色</span>
+                    </div>
+                    <div class="color-indicator">
+                        <div class="color-box background" id="bgColorBox"></div>
+                        <span>背景色</span>
+                    </div>
+                </div>
+            </div>
+            <div class="mix-area">
+                <canvas id="mixCanvas" width="550" height="400"></canvas>
+            </div>
+        </div>
+        
+        <!-- 信息显示 -->
+        <div class="info">
+            <p><strong>操作说明：</strong></p>
+            <p>• <strong>点击颜料</strong> → 选择颜色后在调色区绘制</p>
+            <p>• <strong>点击笔刷图标</strong> → 选择/上传笔刷</p>
+            <p>• <strong>Alt + 左键点击画布</strong> → 取色为前景色</p>
+            <p>• <strong>Alt + 右键点击画布</strong> → 取色为背景色</p>
+            <p>• 点击 ↶ 撤销 / ↷ 重做</p>
+            <p id="statusText">• 当前模式: <strong>绘制</strong></p>
+        </div>
+    </div>
+
+    <!-- 笔刷选择器弹窗 -->
+    <div class="brush-selector-modal" id="brushModal">
+        <div class="brush-selector-content">
+            <div class="brush-selector-header">
+                <h3>选择笔刷</h3>
+                <button class="close-btn" id="closeModalBtn">×</button>
+            </div>
+            <div class="brush-grid" id="brushGrid"></div>
+        </div>
+    </div>
+
+    <!-- 脚本引用 -->
+    <script src="js/palette-storage.js"></script>
+    <script src="js/mixbox-painter.js"></script>
+    <script src="js/brush-manager.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
