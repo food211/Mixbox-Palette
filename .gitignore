@@ -31,3 +31,6 @@ out/
 *.tmp
 git-helper.ps1
 CLAUDE.md
+package-lock.json
+package.json
+packer.js
