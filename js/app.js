@@ -479,7 +479,30 @@ function bindEvents() {
             isDrawing = true;
             strokeStarted = true;
             
-            drawBrush(x, y, currentBrushColor);
+            // 检查是否需要插值（连续点击场景）
+            if (lastX !== 0 || lastY !== 0) {  // 不是第一次点击
+                const distance = Math.sqrt(Math.pow(x - lastX, 2) + Math.pow(y - lastY, 2));
+                const interpolationDistance = Math.max(1, brushSize * 0.25);  // 插值间隔：笔刷大小的 25%
+                const maxInterpolationRange = brushSize * 3;  // 最大插值范围：笔刷直径的 3 倍
+                
+                if (distance > interpolationDistance && distance < maxInterpolationRange) {
+                    // 在两次点击之间插值，确保笔触连续
+                    const steps = Math.ceil(distance / interpolationDistance);
+                    for (let i = 0; i <= steps; i++) {
+                        const ratio = i / steps;
+                        const interpX = lastX + (x - lastX) * ratio;
+                        const interpY = lastY + (y - lastY) * ratio;
+                        drawBrush(interpX, interpY, currentBrushColor);
+                    }
+                } else {
+                    // 距离太远或太近，直接绘制
+                    drawBrush(x, y, currentBrushColor);
+                }
+            } else {
+                // 第一次点击，直接绘制
+                drawBrush(x, y, currentBrushColor);
+            }
+            
             lastX = x;
             lastY = y;
         }
