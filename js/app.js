@@ -555,27 +555,9 @@ function bindEvents() {
         const y = (e.clientY - rect.top) * (mixCanvas.height / rect.height);
         
         if (isEyedropperMode) {
+            // 吸管模式下阻止默认行为，但不立即取色
             e.preventDefault();
-            const pickedColor = pickColor(Math.floor(x), Math.floor(y));
-            if (e.button === 0) {
-                foregroundColor = pickedColor;
-                currentBrushColor = foregroundColor;
-                updateStatus('eyedropper-fg');
-            } else if (e.button === 2) {
-                backgroundColor = pickedColor;
-                updateStatus('eyedropper-bg');
-            }
-            updateColorDisplay();
-            
-            // 吸取颜色后自动退出吸管模式
-            isEyedropperMode = false;
-            const eyedropperBtn = document.getElementById('eyedropperBtn');
-            if (eyedropperBtn) {
-                eyedropperBtn.classList.remove('active');
-            }
-            mixCanvas.classList.remove('eyedropper');
-            mixCanvas.classList.add('brush');
-            updateStatus('ready');
+            return;
         } else if (currentTool === 'brush') {
             // 笔刷工具模式
             isDrawing = true;
@@ -659,7 +641,37 @@ function bindEvents() {
         }
     });
     
-    mixCanvas.addEventListener('mouseup', () => {
+    mixCanvas.addEventListener('mouseup', (e) => {
+        // 吸管模式：在松开鼠标时取色
+        if (isEyedropperMode) {
+            const rect = mixCanvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) * (mixCanvas.width / rect.width);
+            const y = (e.clientY - rect.top) * (mixCanvas.height / rect.height);
+            
+            const pickedColor = pickColor(Math.floor(x), Math.floor(y));
+            if (e.button === 0) {
+                foregroundColor = pickedColor;
+                currentBrushColor = foregroundColor;
+                updateStatus('eyedropper-fg');
+            } else if (e.button === 2) {
+                backgroundColor = pickedColor;
+                updateStatus('eyedropper-bg');
+            }
+            updateColorDisplay();
+            
+            // 吸取颜色后自动退出吸管模式
+            isEyedropperMode = false;
+            const eyedropperBtn = document.getElementById('eyedropperBtn');
+            if (eyedropperBtn) {
+                eyedropperBtn.classList.remove('active');
+            }
+            mixCanvas.classList.remove('eyedropper');
+            mixCanvas.classList.add('brush');
+            updateStatus('ready');
+            return;
+        }
+        
+        // 笔刷/涂抹模式：保存状态
         if (isDrawing && strokeStarted) {
             isDrawing = false;
             strokeStarted = false;
