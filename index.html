@@ -1,20 +1,14 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <script src="https://scrtwpns.com/mixbox.js"></script>
     <meta charset="UTF-8">
     <title>Mixbox 调色板</title>
-    <style>@import url('style.css');</style>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
         <div class="header-container">
             <h1>🎨 Mixbox 调色板</h1>
-            <button id="githubBtn" class="github-btn" title="GitHub">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
-                </svg>
-            </button>
             <div class="palette-info">Winsor & Newton Cotman 16 色水彩</div>
             <div class="palette-selector">
                 <button id="paletteBtn" class="palette-btn">切换颜料</button>
@@ -80,6 +74,7 @@
             <p>• <strong>Alt + 右键点击画布</strong> → 取色为背景色</p>
             <p>• 点击 ↶ 撤销 / ↷ 重做</p>
             <p id="statusText">• 当前模式: <strong>绘制</strong></p>
+            <p class="github-link">GitHub: <a href="https://github.com/brairou/mixbox-palette" target="_blank">github.com/brairou/mixbox-palette</a></p>
         </div>
     </div>
 
@@ -94,6 +89,8 @@
         </div>
     </div>
 
+    <!-- 本地加载mixbox.js -->
+    <script src="js/mixbox.js"></script>
     <!-- 脚本引用 -->
     <script src="js/palette-storage.js"></script>
     <script src="js/mixbox-painter.js"></script>

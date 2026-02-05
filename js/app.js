@@ -505,16 +505,6 @@ function bindEvents() {
         paletteDropdown.classList.toggle('show');
     });
     
-    document.getElementById('githubBtn').addEventListener('click', () => {
-        // 使用 UXP 的 shell 模块打开浏览器
-        if (window.require) {
-            const shell = window.require('uxp').shell;
-            shell.openExternal('https://github.com/food211/mixbox-palette');
-        } else {
-            // 降级方案，尝试直接打开
-            window.open('https://github.com/food211/mixbox-palette', '_blank');
-        }
-    });
     // 点击其他地方关闭下拉菜单
     document.addEventListener('click', (e) => {
         if (!paletteBtn.contains(e.target) && !paletteDropdown.contains(e.target)) {
