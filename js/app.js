@@ -111,6 +111,12 @@ let isDrawing = false;
 let isEyedropperMode = false;
 let currentBrush = { type: 'watercolor', image: null };
 
+// 工具模式
+let currentTool = 'brush';  // 'brush' 或 'smudge'
+let smudgeStrength = 50;  // 涂抹强度 (0-100)
+let smudgeBrushSize = 15;  // 涂抹工具的笔刷大小
+let savedBrushSettings = null;  // 临时保存笔刷设置（切换到涂抹工具时使用）
+
 // 历史记录
 let history = [];
 let historyStep = -1;
@@ -357,6 +363,12 @@ function updateColorPicker() {
             foregroundColor = colorObj.hex;
             currentBrushColor = foregroundColor;
             updateColorDisplay();
+            
+            // 选择颜色后自动关闭涂抹模式
+            if (currentTool === 'smudge') {
+                const smudgeBtn = document.getElementById('smudgeBtn');
+                smudgeBtn.click();  // 触发切换回笔刷模式
+            }
         });
         
         colorPicker.appendChild(circle);
@@ -405,6 +417,71 @@ function bindEvents() {
     undoBtn.addEventListener('click', undo);
     redoBtn.addEventListener('click', redo);
     
+    // 涂抹工具按钮
+    const smudgeBtn = document.getElementById('smudgeBtn');
+    smudgeBtn.addEventListener('click', () => {
+        if (currentTool === 'brush') {
+            // 切换到涂抹工具
+            currentTool = 'smudge';
+            smudgeBtn.classList.add('active');
+            
+            // 临时保存当前笔刷设置
+            savedBrushSettings = {
+                size: brushSize,
+                mixStrength: parseInt(brushMixValue.textContent)
+            };
+            
+            // 加载涂抹工具设置
+            brushSize = smudgeBrushSize;
+            brushSizeInput.value = smudgeBrushSize;
+            brushSizeValue.textContent = smudgeBrushSize;
+            
+            brushMixSlider.value = smudgeStrength;
+            brushMixValue.textContent = smudgeStrength;
+            
+            console.log('✅ 切换到涂抹工具');
+        } else {
+            // 切换回笔刷工具
+            currentTool = 'brush';
+            smudgeBtn.classList.remove('active');
+            
+            // 保存涂抹工具设置
+            smudgeBrushSize = brushSize;
+            smudgeStrength = parseInt(brushMixValue.textContent);
+            
+            // 恢复之前保存的笔刷设置
+            if (savedBrushSettings) {
+                brushSize = savedBrushSettings.size;
+                brushSizeInput.value = savedBrushSettings.size;
+                brushSizeValue.textContent = savedBrushSettings.size;
+                
+                brushMixSlider.value = savedBrushSettings.mixStrength;
+                brushMixValue.textContent = savedBrushSettings.mixStrength;
+                webglPainter.setMixStrength(savedBrushSettings.mixStrength / 100);
+            }
+            
+            console.log('✅ 切换回笔刷工具');
+        }
+    });
+    
+    // 吸管工具按钮
+    const eyedropperBtn = document.getElementById('eyedropperBtn');
+    eyedropperBtn.addEventListener('click', () => {
+        if (!isEyedropperMode) {
+            // 进入吸管模式
+            isEyedropperMode = true;
+            eyedropperBtn.classList.add('active');
+            updateStatus('eyedropper');
+            console.log('✅ 进入吸管模式');
+        } else {
+            // 退出吸管模式
+            isEyedropperMode = false;
+            eyedropperBtn.classList.remove('active');
+            updateStatus('ready');
+            console.log('✅ 退出吸管模式');
+        }
+    });
+    
     // 打开笔刷选择器
     brushPreviewBtn.addEventListener('click', () => {
         brushModal.classList.add('active');
@@ -442,6 +519,12 @@ function bindEvents() {
             mixCanvas.classList.add('eyedropper');
             mixCanvas.classList.remove('brush');
             updateStatus('eyedropper-fg');
+            
+            // 按下 Alt 键时高亮吸管按钮
+            const eyedropperBtn = document.getElementById('eyedropperBtn');
+            if (eyedropperBtn) {
+                eyedropperBtn.classList.add('active');
+            }
         }
     });
     
@@ -451,6 +534,12 @@ function bindEvents() {
             mixCanvas.classList.remove('eyedropper');
             mixCanvas.classList.add('brush');
             updateStatus('draw');
+            
+            // 松开 Alt 键时取消高亮
+            const eyedropperBtn = document.getElementById('eyedropperBtn');
+            if (eyedropperBtn) {
+                eyedropperBtn.classList.remove('active');
+            }
         }
     });
     
@@ -466,18 +555,11 @@ function bindEvents() {
         const y = (e.clientY - rect.top) * (mixCanvas.height / rect.height);
         
         if (isEyedropperMode) {
+            // 吸管模式下阻止默认行为，但不立即取色
             e.preventDefault();
-            const pickedColor = pickColor(Math.floor(x), Math.floor(y));
-            if (e.button === 0) {
-                foregroundColor = pickedColor;
-                currentBrushColor = foregroundColor;
-                updateStatus('eyedropper-fg');
-            } else if (e.button === 2) {
-                backgroundColor = pickedColor;
-                updateStatus('eyedropper-bg');
-            }
-            updateColorDisplay();
-        } else {
+            return;
+        } else if (currentTool === 'brush') {
+            // 笔刷工具模式
             isDrawing = true;
             strokeStarted = true;
             
@@ -508,6 +590,12 @@ function bindEvents() {
             
             lastX = x;
             lastY = y;
+        } else if (currentTool === 'smudge') {
+            // 涂抹工具模式
+            isDrawing = true;
+            strokeStarted = true;
+            lastX = x;
+            lastY = y;
         }
     });
     
@@ -517,34 +605,73 @@ function bindEvents() {
             const x = (e.clientX - rect.left) * (mixCanvas.width / rect.width);
             const y = (e.clientY - rect.top) * (mixCanvas.height / rect.height);
             
-            // 计算与上一个点的距离
-            const distance = Math.sqrt(Math.pow(x - lastX, 2) + Math.pow(y - lastY, 2));
-            
-            // 如果距离超过最小阈值，则绘制新的笔触
-            if (distance >= minDistance) {
-                // 在当前点和上一点之间插值绘制多个点，确保线条平滑
-                const steps = Math.floor(distance / minDistance);
+            if (currentTool === 'brush') {
+                // 笔刷工具模式
+                const distance = Math.sqrt(Math.pow(x - lastX, 2) + Math.pow(y - lastY, 2));
                 
-                if (steps > 1) {
-                    // 多个点插值
-                    for (let i = 1; i <= steps; i++) {
-                        const ratio = i / steps;
-                        const interpX = lastX + (x - lastX) * ratio;
-                        const interpY = lastY + (y - lastY) * ratio;
-                        drawBrush(interpX, interpY, currentBrushColor);
+                if (distance >= minDistance) {
+                    const steps = Math.floor(distance / minDistance);
+                    
+                    if (steps > 1) {
+                        for (let i = 1; i <= steps; i++) {
+                            const ratio = i / steps;
+                            const interpX = lastX + (x - lastX) * ratio;
+                            const interpY = lastY + (y - lastY) * ratio;
+                            drawBrush(interpX, interpY, currentBrushColor);
+                        }
+                    } else {
+                        drawBrush(x, y, currentBrushColor);
                     }
-                } else {
-                    // 单点绘制
-                    drawBrush(x, y, currentBrushColor);
+                    
+                    lastX = x;
+                    lastY = y;
                 }
+            } else if (currentTool === 'smudge') {
+                // 涂抹工具模式
+                const distance = Math.sqrt(Math.pow(x - lastX, 2) + Math.pow(y - lastY, 2));
                 
-                lastX = x;
-                lastY = y;
+                if (distance >= minDistance) {
+                    // 沿着拖动路径涂抹
+                    smudgeAlongPath(lastX, lastY, x, y);
+                    
+                    lastX = x;
+                    lastY = y;
+                }
             }
         }
     });
     
-    mixCanvas.addEventListener('mouseup', () => {
+    mixCanvas.addEventListener('mouseup', (e) => {
+        // 吸管模式：在松开鼠标时取色
+        if (isEyedropperMode) {
+            const rect = mixCanvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) * (mixCanvas.width / rect.width);
+            const y = (e.clientY - rect.top) * (mixCanvas.height / rect.height);
+            
+            const pickedColor = pickColor(Math.floor(x), Math.floor(y));
+            if (e.button === 0) {
+                foregroundColor = pickedColor;
+                currentBrushColor = foregroundColor;
+                updateStatus('eyedropper-fg');
+            } else if (e.button === 2) {
+                backgroundColor = pickedColor;
+                updateStatus('eyedropper-bg');
+            }
+            updateColorDisplay();
+            
+            // 吸取颜色后自动退出吸管模式
+            isEyedropperMode = false;
+            const eyedropperBtn = document.getElementById('eyedropperBtn');
+            if (eyedropperBtn) {
+                eyedropperBtn.classList.remove('active');
+            }
+            mixCanvas.classList.remove('eyedropper');
+            mixCanvas.classList.add('brush');
+            updateStatus('ready');
+            return;
+        }
+        
+        // 笔刷/涂抹模式：保存状态
         if (isDrawing && strokeStarted) {
             isDrawing = false;
             strokeStarted = false;
@@ -767,6 +894,72 @@ function drawBrush(x, y, color) {
     
     // 4. 读取到 Canvas 2D（用于显示）
     webglPainter.readToCanvas2D();
+}
+
+/**
+ * 涂抹工具：沿着路径涂抹
+ */
+function smudgeAlongPath(x1, y1, x2, y2) {
+    if (!webglPainter) return;
+    
+    // 计算路径长度
+    const distance = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+    const steps = Math.max(1, Math.floor(distance / 2));  // 每 2 像素采样一次
+    
+    // 沿着路径插值
+    for (let i = 0; i <= steps; i++) {
+        const ratio = i / steps;
+        const x = x1 + (x2 - x1) * ratio;
+        const y = y1 + (y2 - y1) * ratio;
+        
+        // 在当前位置执行涂抹
+        smudgeAtPoint(x, y, x2 - x1, y2 - y1);
+    }
+    
+    // 读取到 Canvas 2D
+    webglPainter.readToCanvas2D();
+}
+
+/**
+ * 在指定点执行涂抹
+ */
+function smudgeAtPoint(x, y, dx, dy) {
+    if (!webglPainter) return;
+    
+    const ctx = mixCanvas.getContext('2d', { willReadFrequently: true });
+    const radius = brushSize / 2;
+    
+    // 1. 采样起点颜色（当前位置的颜色）
+    const sourceColor = pickColor(Math.floor(x), Math.floor(y));
+    
+    // 2. 计算推移方向（单位化）
+    const length = Math.sqrt(dx * dx + dy * dy);
+    const dirX = length > 0 ? dx / length : 0;
+    const dirY = length > 0 ? dy / length : 0;
+    
+    // 3. 计算目标位置（沿着方向推移）
+    const pushDistance = radius * (smudgeStrength / 100);  // 根据强度计算推移距离
+    const targetX = x + dirX * pushDistance;
+    const targetY = y + dirY * pushDistance;
+    
+    // 4. 采样目标位置的颜色
+    const targetColor = pickColor(Math.floor(targetX), Math.floor(targetY));
+    
+    // 5. 混合两个颜色（使用 Mixbox）
+    const sourceRGB = hexToRgb(sourceColor);
+    const targetRGB = hexToRgb(targetColor);
+    
+    // 6. 创建笔刷纹理
+    const brushCanvas = brushManager.createBrushTexture(brushSize, currentBrush);
+    
+    // 7. 在目标位置绘制混合后的颜色
+    webglPainter.drawBrush(
+        targetX,
+        targetY,
+        brushSize * 2,
+        sourceRGB,  // 使用采样的颜色
+        brushCanvas
+    );
 }
 
 // 启动应用

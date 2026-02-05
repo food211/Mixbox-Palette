@@ -252,6 +252,35 @@ h1 {
     background-color: #4c4c4c; /* 深色悬停背景 */
 }
 
+/* 工具按钮 */
+.tool-buttons {
+    display: flex;
+    gap: 5px;
+    margin-left: 10px;
+}
+
+.tool-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 4px;
+    background-color: #3c3c3c;
+    border: 1px solid #4c4c4c;
+    font-size: 18px;
+    cursor: pointer;
+    color: #e0e0e0;
+    transition: all 0.2s;
+}
+
+.tool-btn:hover {
+    background-color: #4c4c4c;
+}
+
+.tool-btn.active {
+    background-color: #2196F3;
+    border-color: #1976D2;
+    box-shadow: 0 0 8px rgba(33, 150, 243, 0.5);
+}
+
 /* 混色区 */
 .mix-area-container {
     margin-bottom: 20px;
