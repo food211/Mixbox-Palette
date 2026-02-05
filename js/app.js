@@ -1,10 +1,24 @@
+// 检测是否在Adobe UXP环境中
+const isAdobeUXP = typeof window !== 'undefined' && window.require && window.require('uxp') !== undefined;
+function isWebGLSupported() {
+    try {
+        const canvas = document.createElement('canvas');
+        return !!(window.WebGLRenderingContext && 
+            (canvas.getContext('webgl') || canvas.getContext('experimental-webgl')));
+    } catch (e) {
+        return false;
+    }
+}
+
+
+
 /**
  * 主应用逻辑
  */
 // 全局变量
-let webglPainter = null;  // WebGL 引擎实例
 let paletteStorage = null;  // 持久化存储
 let brushManager = null;  // 笔刷管理器
+let painter = null;  // 混色引擎实例 (WebGL或Canvas)
 
 // 颜料预设
 const palettePresets = {
@@ -220,38 +234,55 @@ async function initCanvas() {
         return;
     }
 
-    // 初始化 WebGL 引擎
-    console.log('🎨 初始化 Mixbox WebGL 引擎...');
-    webglPainter = new MixboxWebGLPainter(mixCanvas);
-    await webglPainter.init();
-    
-    // 尝试加载保存的画布
-    const savedCanvas = paletteStorage.load();
-    
-    if (savedCanvas) {
-        // 加载保存的画布
-        const img = new Image();
-        img.onload = () => {
-            ctx2d.drawImage(img, 0, 0);
-            // 同步到 WebGL
-            webglPainter.writeFromCanvas2D();
-            // 强制渲染一次，确保 WebGL 帧缓冲区也被更新
-            webglPainter.readToCanvas2D();
+    // 根据环境选择合适的Painter实现
+    console.log('🎨 初始化 Mixbox 引擎...');
+    try {
+        // 检查全局对象是否可用
+        if (typeof MixboxWebGLPainter !== 'undefined' && isWebGLSupported()) {
+            // 标准Web环境 - 使用WebGL实现
+            painter = new MixboxWebGLPainter(mixCanvas);
+            console.log('使用 WebGL 渲染器');
+        } else if (typeof MixboxCanvasPainter !== 'undefined') {
+            // 使用Canvas 2D实现
+            painter = new MixboxCanvasPainter(mixCanvas);
+            console.log('使用 Canvas 2D 渲染器');
+        } else {
+            throw new Error('没有可用的渲染器，请确保已加载 mixbox-painter.js 或 mixbox-canvas-painter.js');
+        }
+        
+        await painter.init();
+        
+        // 尝试加载保存的画布
+        const savedCanvas = paletteStorage.load();
+        
+        if (savedCanvas) {
+            // 加载保存的画布
+            const img = new Image();
+            img.onload = () => {
+                ctx2d.drawImage(img, 0, 0);
+                // 同步到绘图引擎
+                painter.writeFromCanvas2D();
+                // 强制渲染一次，确保帧缓冲区也被更新
+                painter.readToCanvas2D();
+                saveState();
+                console.log('✅ 画布内容已恢复');
+            };
+            img.src = savedCanvas;
+        } else {
+            // 新建画布
+            painter.clear({ r: 0.973, g: 0.973, b: 0.961 });
+            painter.readToCanvas2D();
             saveState();
-            console.log('✅ 画布内容已恢复');
-        };
-        img.src = savedCanvas;
-    } else {
-        // 新建画布
-        webglPainter.clear({ r: 0.973, g: 0.973, b: 0.961 });
-        webglPainter.readToCanvas2D();
-        saveState();
+        }
+        
+        updateColorDisplay();
+        updateBrushPreview();
+        
+        console.log('✅ Mixbox 引擎初始化完成');
+    } catch (error) {
+        console.error('初始化 Mixbox 引擎失败:', error);
+        alert('无法初始化绘图引擎，请检查浏览器兼容性。错误: ' + error.message);
     }
-    
-    updateColorDisplay();
-    updateBrushPreview();
-    
-    console.log('✅ Mixbox 引擎初始化完成');
 }
 
 /**
@@ -390,18 +421,19 @@ function bindEvents() {
         const value = parseInt(e.target.value);
         brushMixValue.textContent = value;
         
-        // ✅ 将 1-50 的范围转换为 0.01-0.5 的混合强度
-        const mixStrength = value / 100;  // 1% -> 0.01, 50% -> 0.5
-        webglPainter.setMixStrength(mixStrength);
-        
-        console.log(`混合强度: ${value}% (${mixStrength.toFixed(2)})`);
+        if (painter && painter.setMixStrength) {
+            // 将 1-100 的范围转换为 0.01-1.0 的混合强度
+            const mixStrength = value / 100;  // 1% -> 0.01, 100% -> 1.0
+            painter.setMixStrength(mixStrength);
+            console.log(`混合强度: ${value}% (${mixStrength.toFixed(2)})`);
+        }
     });
     
     // 清空按钮
     clearBtn.addEventListener('click', () => {
-        if (webglPainter) {
-            webglPainter.clear({ r: 0.973, g: 0.973, b: 0.961 });
-            webglPainter.readToCanvas2D();
+        if (painter) {
+            painter.clear({ r: 0.973, g: 0.973, b: 0.961 });
+            painter.readToCanvas2D();
             saveState();
         } else {
             ctx.fillStyle = '#F8F8F5';
@@ -457,7 +489,7 @@ function bindEvents() {
                 
                 brushMixSlider.value = savedBrushSettings.mixStrength;
                 brushMixValue.textContent = savedBrushSettings.mixStrength;
-                webglPainter.setMixStrength(savedBrushSettings.mixStrength / 100);
+                painter.setMixStrength(savedBrushSettings.mixStrength / 100);
             }
             
             console.log('✅ 切换回笔刷工具');
@@ -779,9 +811,19 @@ function updateStatus(mode) {
  * 保存状态到历史记录
  */
 function saveState() {
-    const imageData = mixCanvas.toDataURL();
+    // 每次都重新获取 context，确保可用
+    const context = mixCanvas.getContext('2d', { willReadFrequently: true });
+    if (!context) {
+        console.error('无法获取 2D 上下文');
+        return;
+    }
+    
+    // 直接保存 ImageData 而不是 Data URL
+    const imageData = context.getImageData(0, 0, mixCanvas.width, mixCanvas.height);
+    
     history.splice(historyStep + 1);
     history.push(imageData);
+    
     if (history.length > MAX_HISTORY) {
         history.shift();
     } else {
@@ -789,34 +831,86 @@ function saveState() {
     }
     updateHistoryButtons();
     
-    // 准备笔刷设置
-    const brushSettings = {
-        brushType: currentBrush.type,
-        brushSize: brushSize,
-    };
-    
-    // 自动保存画布、调色盘预设和笔刷设置（2秒防抖）
-    paletteStorage.autoSaveAll(imageData, currentPalette, brushSettings);
+    // 持久化存储部分（异步，不阻塞）
+    saveCanvasToStorage();
 }
+
 
 /**
  * 恢复历史状态
  */
 function restoreState(step) {
     if (step < 0 || step >= history.length) return;
-    const img = new Image();
-    img.onload = function() {
-        ctx.clearRect(0, 0, mixCanvas.width, mixCanvas.height);
-        ctx.drawImage(img, 0, 0);
-        
-        // 同步到 WebGL
-        if (webglPainter) {
-            webglPainter.writeFromCanvas2D();
-        }
-    };
-    img.src = history[step];
+    
+    const context = mixCanvas.getContext('2d', { willReadFrequently: true });
+    if (!context) {
+        console.error('无法获取 2D 上下文');
+        return;
+    }
+    
+    const imageData = history[step];
+    context.putImageData(imageData, 0, 0);
+    
+    // 同步到 WebGL
+    if (painter) {
+        painter.writeFromCanvas2D();
+    }
+    
     historyStep = step;
     updateHistoryButtons();
+}
+
+/**
+ * 持久化存储当前画布（异步，不阻塞撤销/重做）
+ */
+async function saveCanvasToStorage() {
+    try {
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = mixCanvas.width;
+        tempCanvas.height = mixCanvas.height;
+        const tempCtx = tempCanvas.getContext('2d');
+        
+        if (!tempCtx) {
+            console.error('无法创建临时 canvas 上下文');
+            return;
+        }
+        
+        // 从主 canvas 复制当前内容
+        tempCtx.drawImage(mixCanvas, 0, 0);
+        
+        // 转换为 Data URL（兼容 UXP）
+        let dataURL;
+        if (isAdobeUXP && tempCanvas.toBlob) {
+            // UXP 环境：使用 toBlob
+            dataURL = await new Promise((resolve, reject) => {
+                tempCanvas.toBlob((blob) => {
+                    if (!blob) {
+                        reject(new Error('toBlob 失败'));
+                        return;
+                    }
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
+                }, 'image/png');
+            });
+        } else if (tempCanvas.toDataURL) {
+            // 标准浏览器环境
+            dataURL = tempCanvas.toDataURL('image/png');
+        } else {
+            console.warn('当前环境不支持 canvas 导出');
+            return;
+        }
+        
+        const brushSettings = {
+            brushType: currentBrush.type,
+            brushSize: brushSize,
+        };
+        
+        paletteStorage.autoSaveAll(dataURL, currentPalette, brushSettings);
+    } catch (error) {
+        console.error('保存画布失败:', error);
+    }
 }
 
 /**
@@ -875,7 +969,7 @@ function hexToRgb(hex) {
  * 绘制笔刷
  */
 function drawBrush(x, y, color) {
-    if (!color || !webglPainter) return;
+    if (!color || !painter) return;
     
     // 1. 转换颜色为 RGB (0-1)
     const colorRGB = hexToRgb(color);
@@ -884,7 +978,7 @@ function drawBrush(x, y, color) {
     const brushCanvas = brushManager.createBrushTexture(brushSize, currentBrush);
     
     // 3. 使用 WebGL 绘制（物理混色）
-    webglPainter.drawBrush(
+    painter.drawBrush(
         x, 
         y, 
         brushSize * 2,  // WebGL 笔刷尺寸需要 *2
@@ -893,14 +987,14 @@ function drawBrush(x, y, color) {
     );
     
     // 4. 读取到 Canvas 2D（用于显示）
-    webglPainter.readToCanvas2D();
+    painter.readToCanvas2D();
 }
 
 /**
  * 涂抹工具：沿着路径涂抹
  */
 function smudgeAlongPath(x1, y1, x2, y2) {
-    if (!webglPainter) return;
+    if (!painter) return;
     
     // 计算路径长度
     const distance = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
@@ -917,14 +1011,14 @@ function smudgeAlongPath(x1, y1, x2, y2) {
     }
     
     // 读取到 Canvas 2D
-    webglPainter.readToCanvas2D();
+    painter.readToCanvas2D();
 }
 
 /**
  * 在指定点执行涂抹
  */
 function smudgeAtPoint(x, y, dx, dy) {
-    if (!webglPainter) return;
+    if (!painter) return;
     
     const ctx = mixCanvas.getContext('2d', { willReadFrequently: true });
     const radius = brushSize / 2;
@@ -953,7 +1047,7 @@ function smudgeAtPoint(x, y, dx, dy) {
     const brushCanvas = brushManager.createBrushTexture(brushSize, currentBrush);
     
     // 7. 在目标位置绘制混合后的颜色
-    webglPainter.drawBrush(
+    painter.drawBrush(
         targetX,
         targetY,
         brushSize * 2,
@@ -962,5 +1056,6 @@ function smudgeAtPoint(x, y, dx, dy) {
     );
 }
 
-// 启动应用
-document.addEventListener('DOMContentLoaded', initApp);
+// 导出到全局
+window.initApp = initApp;
+console.log('🚀 app.js 加载完成，调用 initApp() 初始化应用');

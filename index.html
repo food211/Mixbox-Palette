@@ -89,12 +89,74 @@
         </div>
     </div>
 
-    <!-- 本地加载mixbox.js -->
-    <script src="js/mixbox.js"></script>
-    <!-- 脚本引用 -->
-    <script src="js/palette-storage.js"></script>
-    <script src="js/mixbox-painter.js"></script>
-    <script src="js/brush-manager.js"></script>
-    <script src="js/app.js"></script>
+<!-- 脚本加载 -->
+<script>
+    // 创建script标签加载适当的库
+    function loadScript(src) {
+        return new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = src;
+            script.onload = () => resolve();
+            script.onerror = () => {
+                console.error(`Failed to load script: ${src}`);
+                reject(new Error(`Failed to load script: ${src}`));
+            };
+            document.head.appendChild(script);
+        });
+    }
+    
+    // 检测WebGL支持
+    function isWebGLSupported() {
+        try {
+            const canvas = document.createElement('canvas');
+            return !!(window.WebGLRenderingContext && 
+                (canvas.getContext('webgl') || canvas.getContext('experimental-webgl')));
+        } catch(e) {
+            return false;
+        }
+    }
+    
+    // 初始化应用
+    async function loadAppScripts() {
+        try {
+            // 首先加载基础的 mixbox.js
+            await loadScript('js/mixbox.js');
+            console.log('✅ mixbox.js 已加载');
+            
+            // 根据环境选择合适的渲染器
+            if (isWebGLSupported()) {
+                console.log('WebGL 可用，使用 WebGL 渲染器');
+                await loadScript('js/mixbox-painter.js');
+                console.log('✅ mixbox-painter.js 已加载');
+            } else {
+                console.log('WebGL 不可用，使用 Canvas 2D 渲染器');
+                await loadScript('js/mixbox-canvas-painter.js');
+                console.log('✅ mixbox-canvas-painter.js 已加载');
+            }
+            
+            // 加载其他依赖
+            await Promise.all([
+                loadScript('js/brush-manager.js'),
+                loadScript('js/palette-storage.js')
+            ]);
+            console.log('✅ 其他依赖已加载');
+            
+            // 最后加载应用主逻辑
+            await loadScript('js/app.js');
+            console.log('✅ app.js 已加载');
+
+            // 重要：手动调用 app.js 中的 initApp 函数
+            console.log('🚀 正在初始化应用...');
+            window.initApp();
+            
+        } catch (error) {
+            console.error('初始化失败:', error);
+            alert('加载应用程序时出错，请检查控制台获取详细信息。');
+        }
+    }
+    
+    // 页面加载完成后加载脚本
+    window.addEventListener('DOMContentLoaded', loadAppScripts);
+</script>
 </body>
 </html>
