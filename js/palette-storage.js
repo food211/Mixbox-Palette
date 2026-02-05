@@ -1,12 +1,13 @@
 /**
  * 画布持久化存储类
- * 负责保存和加载画布状态、调色盘预设和笔刷设置
+ * 负责保存和加载画布状态、调色盘预设、笔刷设置和历史记录
  */
 class PaletteStorage {
-    constructor(key = 'mixbox_canvas_v1', paletteKey = 'mixbox_palette_preset', brushKey = 'mixbox_brush_settings') {
+    constructor(key = 'mixbox_canvas_v1', paletteKey = 'mixbox_palette_preset', brushKey = 'mixbox_brush_settings', historyKey = 'mixbox_history') {
         this.key = key;
         this.paletteKey = paletteKey;
         this.brushKey = brushKey;
+        this.historyKey = historyKey;
         this.autoSaveTimer = null;
     }
     
@@ -99,6 +100,38 @@ class PaletteStorage {
         }
         return null;
     }
+
+    /**
+     * 保存历史记录
+     */
+    saveHistory(historyData, historyStep) {
+        try {
+            const data = JSON.stringify({ history: historyData, step: historyStep });
+            localStorage.setItem(this.historyKey, data);
+            console.log('💾 历史记录已保存');
+            return true;
+        } catch (e) {
+            console.error('历史记录保存失败:', e);
+            return false;
+        }
+    }
+
+    /**
+     * 加载历史记录
+     */
+    loadHistory() {
+        try {
+            const saved = localStorage.getItem(this.historyKey);
+            if (saved) {
+                const data = JSON.parse(saved);
+                console.log('✅ 加载已保存的历史记录');
+                return data;
+            }
+        } catch (e) {
+            console.error('历史记录加载失败:', e);
+        }
+        return null;
+    }
     
     /**
      * 自动保存（防抖）
@@ -146,6 +179,7 @@ class PaletteStorage {
         localStorage.removeItem(this.key);
         localStorage.removeItem(this.paletteKey);
         localStorage.removeItem(this.brushKey);
-        console.log('🗑️ 画布、调色盘预设和笔刷设置已清除');
+        localStorage.removeItem(this.historyKey);
+        console.log('🗑️ 画布、调色盘预设、笔刷设置和历史记录已清除');
     }
 }
