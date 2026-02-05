@@ -484,10 +484,11 @@ function bindEvents() {
             // 检查是否需要插值（连续点击场景）
             if (lastX !== 0 || lastY !== 0) {  // 不是第一次点击
                 const distance = Math.sqrt(Math.pow(x - lastX, 2) + Math.pow(y - lastY, 2));
+                const brushRadius = brushSize / 2;  // 笔刷半径
+                const maxInterpolationRange = brushRadius * 1.5;  // 最大插值范围：1.5 倍笔刷半径
                 const interpolationDistance = Math.max(1, brushSize * 0.25);  // 插值间隔：笔刷大小的 25%
-                const maxInterpolationRange = brushSize * 3;  // 最大插值范围：笔刷直径的 3 倍
                 
-                if (distance > interpolationDistance && distance < maxInterpolationRange) {
+                if (distance > 0 && distance <= maxInterpolationRange) {
                     // 在两次点击之间插值，确保笔触连续
                     const steps = Math.ceil(distance / interpolationDistance);
                     for (let i = 0; i <= steps; i++) {
