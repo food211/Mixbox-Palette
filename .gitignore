@@ -29,3 +29,4 @@ out/
 # 其他
 *.log
 *.tmp
+git-helper.ps1
