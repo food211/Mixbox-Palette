@@ -18,7 +18,14 @@
         "minimumSize": { "width": 600, "height": 600 },
         "maximumSize": { "width": 2000, "height": 2000 },
         "preferredDockedSize": { "width": 600, "height": 600 },
-        "preferredFloatingSize": { "width": 600, "height": 600 }
+        "preferredFloatingSize": { "width": 600, "height": 600 },
+        "icons": [
+          {
+            "width": 23,
+            "height": 23,
+            "path": "icons/icon.png"
+          }
+        ]
       }
     ],
     "icons": [
@@ -29,10 +36,9 @@
       }
     ],
     "requiredPermissions": {
-    "allowCodeGenerationFromStrings": true,
-    "launchProcess": {
-      "schemes": ["http", "https"]
+      "allowCodeGenerationFromStrings": true,
+      "launchProcess": {
+        "schemes": ["http", "https"]
+      }
     }
-  }
-  }
-  
+}
