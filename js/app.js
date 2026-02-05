@@ -229,6 +229,8 @@ async function initCanvas() {
             ctx2d.drawImage(img, 0, 0);
             // 同步到 WebGL
             webglPainter.writeFromCanvas2D();
+            // 强制渲染一次，确保 WebGL 帧缓冲区也被更新
+            webglPainter.readToCanvas2D();
             saveState();
             console.log('✅ 画布内容已恢复');
         };
