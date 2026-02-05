@@ -1,4 +1,4 @@
-/* 全局样式 */
+
 * {
     margin: 0;
     padding: 0;
@@ -7,8 +7,8 @@
 }
 
 body {
-    background-color: #2b2b2b; /* 深色背景 */
-    color: #e0e0e0; /* 浅色文字 */
+    background-color: #2b2b2b; 
+    color: #e0e0e0; 
     padding: 20px;
     display: flex;
     justify-content: center;
@@ -17,9 +17,9 @@ body {
 }
 
 .container {
-    background-color: #1e1e1e; /* 深色容器背景 */
+    background-color: #1e1e1e; 
     border-radius: 10px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); /* 更深的阴影 */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); 
     padding: 20px;
     max-width: 600px;
     width: 100%;
@@ -29,10 +29,10 @@ h1 {
     text-align: center;
     margin-bottom: 5px;
     font-size: 24px;
-    color: #e0e0e0; /* 浅色标题 */
+    color: #e0e0e0; 
 }
 
-/* GitHub 按钮样式 */
+
 .header-top {
     display: flex;
     justify-content: center;
@@ -57,7 +57,7 @@ h1 {
     text-decoration: underline;
 }
 
-/* 调色板选择器 */
+
 .palette-selector {
     position: relative;
     display: inline-block;
@@ -65,7 +65,7 @@ h1 {
 }
 
 .palette-btn {
-    background-color: #2196F3; /* 更亮的蓝色按钮 */
+    background-color: #2196F3; 
     color: white;
     border: none;
     padding: 6px 12px;
@@ -90,7 +90,7 @@ h1 {
     position: absolute;
     top: 100%;
     left: 0;
-    background-color: #2c2c2c; /* 深色下拉菜单 */
+    background-color: #2c2c2c; 
     border-radius: 4px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     min-width: 180px;
@@ -98,7 +98,7 @@ h1 {
     display: none;
     margin-top: 5px;
     overflow: hidden;
-    border: 1px solid #3c3c3c; /* 深色边框 */
+    border: 1px solid #3c3c3c; 
 }
 
 .palette-dropdown.show {
@@ -110,19 +110,19 @@ h1 {
     cursor: pointer;
     transition: all 0.2s;
     font-size: 13px;
-    color: #e0e0e0; /* 浅色文字 */
+    color: #e0e0e0; 
 }
 
 .palette-option:hover {
-    background-color: #3c3c3c; /* 深色悬停背景 */
+    background-color: #3c3c3c; 
 }
 
 .palette-option.active {
-    background-color: #2196F3; /* 蓝色高亮 */
+    background-color: #2196F3; 
     color: white;
 }
 
-/* 标题区域布局 */
+
 .header-container {
     display: flex;
     flex-direction: column;
@@ -130,7 +130,7 @@ h1 {
     margin-bottom: 15px;
 }
 
-/* 调整原有样式 */
+
 h1 {
     margin-bottom: 5px;
 }
@@ -138,10 +138,10 @@ h1 {
 .palette-info {
     margin-bottom: 10px;
     font-size: 14px;
-    color: #b0b0b0; /* 浅灰色文字 */
+    color: #b0b0b0; 
 }
 
-/* 颜色选择器 */
+
 .color-picker {
     display: grid;
     grid-template-columns: repeat(8, 1fr);
@@ -149,7 +149,7 @@ h1 {
     margin-bottom: 20px;
     padding: 10px;
     border-radius: 8px;
-    background-color: #2c2c2c; /* 深色背景 */
+    background-color: #2c2c2c; 
 }
 
 .color-circle {
@@ -158,9 +158,9 @@ h1 {
     border-radius: 50%;
     cursor: pointer;
     position: relative;
-    border: 2px solid #ffffff; /* 添加白色描边 */
+    border: 2px solid #ffffff; 
     transition: transform 0.2s;
-    box-shadow: 0 0 3px rgba(0, 0, 0, 0.3); /* 添加阴影增强效果 */
+    box-shadow: 0 0 3px rgba(0, 0, 0, 0.3); 
 }
 
 .color-circle:hover {
@@ -168,11 +168,11 @@ h1 {
 }
 
 .color-circle.selected-bg {
-    border: 3px dashed #000000; /* 黑色粗边框，虚线 */
+    border: 3px dashed #000000; 
 }
 
 .color-circle.selected-fg {
-    border: 4px solid #6afe6f; /* 绿色粗边框，实线 */
+    border: 4px solid #6afe6f; 
 }
 
 .color-name-tooltip {
@@ -180,7 +180,7 @@ h1 {
     bottom: 100%;
     left: 50%;
     transform: translateX(-50%);
-    background-color: #4c4c4c; /* 深色提示背景 */
+    background-color: #4c4c4c; 
     color: white;
     padding: 4px 8px;
     border-radius: 4px;
@@ -197,7 +197,7 @@ h1 {
     visibility: visible;
 }
 
-/* 控制按钮 */
+
 .controls {
     display: flex;
     align-items: center;
@@ -228,28 +228,28 @@ h1 {
 
 .brush-size label {
     font-size: 13px;
-    color: #b0b0b0; /* 浅灰色文字 */
+    color: #b0b0b0; 
 }
 
 .brush-size input[type="range"] {
     width: 100px;
-    background-color: #3c3c3c; /* 深色滑块背景 */
+    background-color: #3c3c3c; 
 }
 
 .brush-preview-btn {
     width: 36px;
     height: 36px;
     border-radius: 4px;
-    background-color: #3c3c3c; /* 深色按钮背景 */
+    background-color: #3c3c3c; 
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    border: 1px solid #4c4c4c; /* 深色边框 */
+    border: 1px solid #4c4c4c; 
 }
 
 .brush-preview-btn:hover {
-    background-color: #4c4c4c; /* 深色悬停背景 */
+    background-color: #4c4c4c; 
 }
 
 .history-buttons {
@@ -261,11 +261,11 @@ h1 {
     width: 36px;
     height: 36px;
     border-radius: 4px;
-    background-color: #3c3c3c; /* 深色按钮背景 */
-    border: 1px solid #4c4c4c; /* 深色边框 */
+    background-color: #3c3c3c; 
+    border: 1px solid #4c4c4c; 
     font-size: 18px;
     cursor: pointer;
-    color: #e0e0e0; /* 浅色文字 */
+    color: #e0e0e0; 
 }
 
 .history-buttons button:disabled {
@@ -274,10 +274,10 @@ h1 {
 }
 
 .history-buttons button:hover:not(:disabled) {
-    background-color: #4c4c4c; /* 深色悬停背景 */
+    background-color: #4c4c4c; 
 }
 
-/* 工具按钮 */
+
 .tool-buttons {
     display: flex;
     gap: 5px;
@@ -306,7 +306,7 @@ h1 {
     box-shadow: 0 0 8px rgba(33, 150, 243, 0.5);
 }
 
-/* 混色区 */
+
 .mix-area-container {
     margin-bottom: 20px;
 }
@@ -320,7 +320,7 @@ h1 {
 
 .mix-area-header h3 {
     font-size: 16px;
-    color: #e0e0e0; /* 浅色标题 */
+    color: #e0e0e0; 
 }
 
 .color-indicators {
@@ -333,7 +333,7 @@ h1 {
     align-items: center;
     gap: 5px;
     font-size: 12px;
-    color: #b0b0b0; /* 浅灰色文字 */
+    color: #b0b0b0; 
 }
 
 .color-box {
@@ -343,18 +343,18 @@ h1 {
 }
 
 .color-box.foreground {
-    border: 2px solid #fff; /* 白色边框 */
+    border: 2px solid #fff; 
 }
 
 .color-box.background {
-    border: 2px dashed #fff; /* 白色虚线边框 */
+    border: 2px dashed #fff; 
 }
 
 .mix-area {
-    border: 1px solid #4c4c4c; /* 深色边框 */
+    border: 1px solid #4c4c4c; 
     border-radius: 8px;
     overflow: hidden;
-    background-color: #2c2c2c; /* 深色背景 */
+    background-color: #2c2c2c; 
 }
 
 #mixCanvas {
@@ -365,21 +365,21 @@ h1 {
 }
 
 #mixCanvas.brush {
-    cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" fill="rgba(255,255,255,0.4)"/></svg>') 12 12, auto; /* 白色光标 */
+    cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" fill="rgba(255,255,255,0.4)"/></svg>') 12 12, auto; 
 }
 
 #mixCanvas.eyedropper {
-    cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M17.5 2.5L23 8l-15 15H2v-6L17.5 2.5z" stroke="white" stroke-width="2" fill="#333"/></svg>') 2 22, auto; /* 深色吸管光标 */
+    cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M17.5 2.5L23 8l-15 15H2v-6L17.5 2.5z" stroke="white" stroke-width="2" fill="#333"/></svg>') 2 22, auto; 
 }
 
-/* 信息显示 */
+
 .info {
-    background-color: #2c2c2c; /* 深色背景 */
+    background-color: #2c2c2c; 
     padding: 15px;
     border-radius: 8px;
     font-size: 13px;
     line-height: 1.5;
-    color: #b0b0b0; /* 浅灰色文字 */
+    color: #b0b0b0; 
 }
 
 .info p {
@@ -387,17 +387,17 @@ h1 {
 }
 
 .info strong {
-    color: #e0e0e0; /* 浅色强调文字 */
+    color: #e0e0e0; 
 }
 
-/* 笔刷选择器弹窗 */
+
 .brush-selector-modal {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.7); /* 更暗的遮罩 */
+    background-color: rgba(0, 0, 0, 0.7); 
     display: flex;
     align-items: center;
     justify-content: center;
@@ -413,14 +413,14 @@ h1 {
 }
 
 .brush-selector-content {
-    background-color: #2c2c2c; /* 深色背景 */
+    background-color: #2c2c2c; 
     border-radius: 8px;
     padding: 20px;
     width: 90%;
     max-width: 600px;
     max-height: 80vh;
     overflow-y: auto;
-    color: #e0e0e0; /* 浅色文字 */
+    color: #e0e0e0; 
 }
 
 .brush-selector-header {
@@ -432,7 +432,7 @@ h1 {
 
 .brush-selector-header h3 {
     font-size: 18px;
-    color: #e0e0e0; /* 浅色标题 */
+    color: #e0e0e0; 
 }
 
 .close-btn {
@@ -440,7 +440,7 @@ h1 {
     border: none;
     font-size: 24px;
     cursor: pointer;
-    color: #b0b0b0; /* 浅灰色图标 */
+    color: #b0b0b0; 
 }
 
 .brush-grid {
@@ -461,11 +461,11 @@ h1 {
 }
 
 .brush-option:hover {
-    background-color: #3c3c3c; /* 深色悬停背景 */
+    background-color: #3c3c3c; 
 }
 
 .brush-option.selected {
-    background-color: #1e3a5f; /* 深蓝色选中背景 */
+    background-color: #1e3a5f; 
 }
 
 .brush-option canvas {
@@ -477,20 +477,20 @@ h1 {
 .brush-option-name {
     font-size: 12px;
     text-align: center;
-    color: #b0b0b0; /* 浅灰色文字 */
+    color: #b0b0b0; 
 }
 
 .custom-brush-upload {
     margin-top: 15px;
     padding-top: 15px;
-    border-top: 1px solid #3c3c3c; /* 深色分隔线 */
+    border-top: 1px solid #3c3c3c; 
 }
 
 .custom-brush-upload label {
     display: block;
     margin-bottom: 10px;
     font-size: 14px;
-    color: #b0b0b0; /* 浅灰色文字 */
+    color: #b0b0b0; 
 }
 
 .custom-brush-upload input[type="file"] {
@@ -498,7 +498,7 @@ h1 {
 }
 
 .upload-btn {
-    background-color: #2196F3; /* 更亮的蓝色按钮 */
+    background-color: #2196F3; 
     color: white;
     border: none;
     padding: 8px 16px;
@@ -512,7 +512,7 @@ h1 {
     background-color: #1976D2;
 }
 
-/* 响应式调整 */
+
 @media (max-width: 768px) {
     .container {
         padding: 15px;

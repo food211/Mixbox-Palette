@@ -516,3 +516,5 @@ class MixboxWebGLPainter {
         this.readToCanvas2D();
     }
 }
+window.MixboxWebGLPainter = MixboxWebGLPainter;
+console.log("MixboxWebGLPainter 加载成功");
