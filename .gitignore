@@ -30,3 +30,4 @@ out/
 *.log
 *.tmp
 git-helper.ps1
+CLAUDE.md
