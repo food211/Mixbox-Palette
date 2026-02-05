@@ -464,6 +464,24 @@ function bindEvents() {
         }
     });
     
+    // 吸管工具按钮
+    const eyedropperBtn = document.getElementById('eyedropperBtn');
+    eyedropperBtn.addEventListener('click', () => {
+        if (!isEyedropperMode) {
+            // 进入吸管模式
+            isEyedropperMode = true;
+            eyedropperBtn.classList.add('active');
+            updateStatus('eyedropper');
+            console.log('✅ 进入吸管模式');
+        } else {
+            // 退出吸管模式
+            isEyedropperMode = false;
+            eyedropperBtn.classList.remove('active');
+            updateStatus('ready');
+            console.log('✅ 退出吸管模式');
+        }
+    });
+    
     // 打开笔刷选择器
     brushPreviewBtn.addEventListener('click', () => {
         brushModal.classList.add('active');
@@ -501,6 +519,12 @@ function bindEvents() {
             mixCanvas.classList.add('eyedropper');
             mixCanvas.classList.remove('brush');
             updateStatus('eyedropper-fg');
+            
+            // 按下 Alt 键时高亮吸管按钮
+            const eyedropperBtn = document.getElementById('eyedropperBtn');
+            if (eyedropperBtn) {
+                eyedropperBtn.classList.add('active');
+            }
         }
     });
     
@@ -510,6 +534,12 @@ function bindEvents() {
             mixCanvas.classList.remove('eyedropper');
             mixCanvas.classList.add('brush');
             updateStatus('draw');
+            
+            // 松开 Alt 键时取消高亮
+            const eyedropperBtn = document.getElementById('eyedropperBtn');
+            if (eyedropperBtn) {
+                eyedropperBtn.classList.remove('active');
+            }
         }
     });
     
@@ -536,6 +566,16 @@ function bindEvents() {
                 updateStatus('eyedropper-bg');
             }
             updateColorDisplay();
+            
+            // 吸取颜色后自动退出吸管模式
+            isEyedropperMode = false;
+            const eyedropperBtn = document.getElementById('eyedropperBtn');
+            if (eyedropperBtn) {
+                eyedropperBtn.classList.remove('active');
+            }
+            mixCanvas.classList.remove('eyedropper');
+            mixCanvas.classList.add('brush');
+            updateStatus('ready');
         } else if (currentTool === 'brush') {
             // 笔刷工具模式
             isDrawing = true;
