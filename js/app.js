@@ -115,6 +115,7 @@ let currentBrush = { type: 'watercolor', image: null };
 let currentTool = 'brush';  // 'brush' 或 'smudge'
 let smudgeStrength = 50;  // 涂抹强度 (0-100)
 let smudgeBrushSize = 15;  // 涂抹工具的笔刷大小
+let savedBrushSettings = null;  // 临时保存笔刷设置（切换到涂抹工具时使用）
 
 // 历史记录
 let history = [];
@@ -362,6 +363,12 @@ function updateColorPicker() {
             foregroundColor = colorObj.hex;
             currentBrushColor = foregroundColor;
             updateColorDisplay();
+            
+            // 选择颜色后自动关闭涂抹模式
+            if (currentTool === 'smudge') {
+                const smudgeBtn = document.getElementById('smudgeBtn');
+                smudgeBtn.click();  // 触发切换回笔刷模式
+            }
         });
         
         colorPicker.appendChild(circle);
@@ -418,8 +425,8 @@ function bindEvents() {
             currentTool = 'smudge';
             smudgeBtn.classList.add('active');
             
-            // 保存当前笔刷设置
-            const currentBrushSettings = {
+            // 临时保存当前笔刷设置
+            savedBrushSettings = {
                 size: brushSize,
                 mixStrength: parseInt(brushMixValue.textContent)
             };
@@ -442,17 +449,15 @@ function bindEvents() {
             smudgeBrushSize = brushSize;
             smudgeStrength = parseInt(brushMixValue.textContent);
             
-            // 恢复笔刷设置（从 localStorage 加载）
-            const saved = paletteStorage.loadBrushSettings();
-            if (saved) {
-                brushSize = saved.size || 15;
-                brushSizeInput.value = brushSize;
-                brushSizeValue.textContent = brushSize;
+            // 恢复之前保存的笔刷设置
+            if (savedBrushSettings) {
+                brushSize = savedBrushSettings.size;
+                brushSizeInput.value = savedBrushSettings.size;
+                brushSizeValue.textContent = savedBrushSettings.size;
                 
-                const mixStrength = saved.mixStrength || 30;
-                brushMixSlider.value = mixStrength;
-                brushMixValue.textContent = mixStrength;
-                webglPainter.setMixStrength(mixStrength / 100);
+                brushMixSlider.value = savedBrushSettings.mixStrength;
+                brushMixValue.textContent = savedBrushSettings.mixStrength;
+                webglPainter.setMixStrength(savedBrushSettings.mixStrength / 100);
             }
             
             console.log('✅ 切换回笔刷工具');
