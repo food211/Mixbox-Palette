@@ -32,6 +32,41 @@ h1 {
     color: #e0e0e0; /* 浅色标题 */
 }
 
+/* GitHub 按钮样式 */
+.header-top {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    width: 100%;
+}
+
+.github-btn {
+    position: absolute;
+    right: 0;
+    top: 0;
+    background-color: #333;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.github-btn:hover {
+    background-color: #444;
+}
+
+.github-btn svg {
+    width: 18px;
+    height: 18px;
+}
+
 /* 调色板选择器 */
 .palette-selector {
     position: relative;
