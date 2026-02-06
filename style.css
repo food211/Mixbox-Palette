@@ -130,12 +130,15 @@ h1 {
     flex-direction: column;
     align-items: center;
     margin-bottom: 15px;
+    position: relative;
 }
 
 .header-controls {
     display: flex;
     gap: 10px;
     align-items: center;
+    width: 100%;
+    justify-content: center;
 }
 
 h1 {
@@ -150,32 +153,34 @@ h1 {
 
 /* 缩放选择器样式 */
 .zoom-selector {
-    position: relative;
-    display: inline-block;
+    position: absolute;
+    top: 0;
+    right: 0;
 }
 
 .zoom-btn {
-    background-color: #4CAF50;
-    color: white;
+    background-color: #404040;
+    color: #b0b0b0;
     border: none;
-    padding: 6px 12px;
-    border-radius: 4px;
+    padding: 4px 8px;
+    border-radius: 3px;
     cursor: pointer;
-    font-size: 13px;
+    font-size: 11px;
     display: flex;
     align-items: center;
-    gap: 6px;
-    min-width: 100px;
-    justify-content: space-between;
+    gap: 4px;
+    opacity: 0.6;
+    transition: opacity 0.2s, background-color 0.2s;
 }
 
 .zoom-btn:hover {
-    background-color: #45a049;
+    background-color: #505050;
+    opacity: 1;
 }
 
 .zoom-btn::after {
     content: '▼';
-    font-size: 10px;
+    font-size: 8px;
 }
 
 .zoom-dropdown {
@@ -185,10 +190,10 @@ h1 {
     background-color: #2c2c2c;
     border-radius: 4px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    min-width: 100px;
-    z-index: 100;
+    min-width: 80px;
+    z-index: 1000;
     display: none;
-    margin-top: 5px;
+    margin-top: 3px;
     overflow: hidden;
     border: 1px solid #3c3c3c;
 }
@@ -198,10 +203,10 @@ h1 {
 }
 
 .zoom-option {
-    padding: 10px 12px;
+    padding: 6px 10px;
     cursor: pointer;
     transition: all 0.2s;
-    font-size: 13px;
+    font-size: 11px;
     color: #e0e0e0;
     text-align: center;
 }
@@ -211,8 +216,8 @@ h1 {
 }
 
 .zoom-option.active {
-    background-color: #4CAF50;
-    color: white;
+    background-color: #505050;
+    color: #ffffff;
 }
 
 
