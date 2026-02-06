@@ -1317,7 +1317,7 @@ function initZoomControl() {
     function applyZoom(zoom) {
         container.style.transform = `scale(${zoom})`;
         container.style.transformOrigin = 'top center';
-        zoomBtn.textContent = `缩放: ${Math.round(zoom * 100)}%`;
+        zoomBtn.textContent = `${Math.round(zoom * 100)}%`;
 
         // 调整 body 的 padding，防止缩放后内容被裁剪
         if (zoom < 1) {
