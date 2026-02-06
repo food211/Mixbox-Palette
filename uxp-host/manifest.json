@@ -38,8 +38,15 @@
   "requiredPermissions": {
     "webview": {
       "allow": "yes",
-      "domains": ["https://brairou.github.io"],
+      "domains": [
+        "https://food211.github.io"
+      ],
       "enableMessageBridge": "localAndRemote"
+    },
+    "network": {
+      "domains": [
+        "https://food211.github.io"
+      ]
     }
   }
 }
