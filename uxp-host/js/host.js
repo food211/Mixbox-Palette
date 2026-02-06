@@ -3,15 +3,8 @@
  */
 const { action } = require("photoshop");
 
-// ============ 进度条控制 ============
-const loadingContainer = document.getElementById('loadingContainer');
-const progressBar = document.getElementById('progressBar');
-const progressPercent = document.getElementById('progressPercent');
-const loadingText = document.getElementById('loadingText');
-const errorMessage = document.getElementById('errorMessage');
-const retryBtn = document.getElementById('retryBtn');
-const webview = document.getElementById('mixboxWebview');
-
+// ============ 全局变量 ============
+let loadingContainer, progressBar, progressPercent, loadingText, errorMessage, retryBtn, webview;
 let progress = 0;
 let progressInterval = null;
 
@@ -75,9 +68,6 @@ function retry() {
   webview.src = webview.src; // 重新加载
 }
 
-// 重试按钮
-retryBtn.addEventListener('click', retry);
-
 // ============ 颜色设置 ============
 async function setForegroundColor(r, g, b) {
   try {
@@ -117,7 +107,7 @@ async function setBackgroundColor(r, g, b) {
 
 // ============ 消息监听 ============
 window.addEventListener("message", async (e) => {
-  if (!e.origin.includes("brairou.github.io")) {
+  if (!e.origin.includes("food211.github.io")) {
     return;
   }
 
@@ -132,23 +122,64 @@ window.addEventListener("message", async (e) => {
   }
 });
 
-// ============ WebView 事件 ============
-document.addEventListener("DOMContentLoaded", () => {
+// ============ 初始化 ============
+function init() {
+  // 获取 DOM 元素
+  loadingContainer = document.getElementById('loadingContainer');
+  progressBar = document.getElementById('progressBar');
+  progressPercent = document.getElementById('progressPercent');
+  loadingText = document.getElementById('loadingText');
+  errorMessage = document.getElementById('errorMessage');
+  retryBtn = document.getElementById('retryBtn');
+  webview = document.getElementById('mixboxWebview');
+
+  // 检查元素是否存在
+  if (!webview) {
+    console.error("❌ WebView 元素未找到！");
+    return;
+  }
+
+  console.log("✅ DOM 元素已加载");
+
+  // 绑定重试按钮
+  retryBtn.addEventListener('click', retry);
+
+  // 启动进度条
   startProgress();
 
-  webview.addEventListener("loadstart", () => {
-    console.log("⏳ WebView 开始加载...");
+  // 绑定 WebView 事件
+  webview.addEventListener("loadstart", (e) => {
+    console.log("⏳ WebView 开始加载...", webview.src);
   });
 
-  webview.addEventListener("loadstop", () => {
+  webview.addEventListener("loadstop", (e) => {
     console.log("✅ Mixbox Palette 已加载");
     completeProgress();
   });
 
   webview.addEventListener("loaderror", (e) => {
-    console.error("❌ 加载失败:", e.message);
-    showError(e.message);
+    console.error("❌ 加载失败 - 完整错误对象:", e);
+    console.error("错误详情:", {
+      message: e.message,
+      url: e.url,
+      code: e.code,
+      type: e.type
+    });
+    showError(`加载失败: ${e.message || e.code || 'Unknown'}`);
   });
-});
 
-console.log("✅ UXP Host 就绪");
+  webview.addEventListener("loadabort", (e) => {
+    console.error("⚠️ 加载被中止:", e);
+    showError("加载被取消 (Operation canceled)");
+  });
+}
+
+// ============ WebView 事件 ============
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", init);
+} else {
+  // DOM 已经加载完成
+  init();
+}
+
+console.log("✅ UXP Host 脚本就绪");
