@@ -234,6 +234,8 @@ function saveBrushSettings() {
  * 初始化画布
  */
 async function initCanvas() {
+    mixCanvas.width = 380;
+    mixCanvas.height = 280;
     // 先获取2D上下文，这样它就会被保留
     const ctx2d = mixCanvas.getContext('2d', { willReadFrequently: true });
     if (!ctx2d) {
