@@ -1,0 +1,45 @@
+{
+  "id": "com.brairou.mixboxpalette",
+  "name": "Mixbox Palette",
+  "version": "2.0.0",
+  "main": "index.html",
+  "host": [
+    {
+      "app": "PS",
+      "minVersion": "23.0.0"
+    }
+  ],
+  "manifestVersion": 5,
+  "entrypoints": [
+    {
+      "type": "panel",
+      "id": "mixboxpalette",
+      "label": "Mixbox Palette",
+      "minimumSize": { "width": 600, "height": 600 },
+      "maximumSize": { "width": 2000, "height": 2000 },
+      "preferredDockedSize": { "width": 600, "height": 600 },
+      "preferredFloatingSize": { "width": 600, "height": 600 },
+      "icons": [
+        {
+          "width": 23,
+          "height": 23,
+          "path": "icons/icon.png"
+        }
+      ]
+    }
+  ],
+  "icons": [
+    {
+      "width": 23,
+      "height": 23,
+      "path": "icons/icon.png"
+    }
+  ],
+  "requiredPermissions": {
+    "webview": {
+      "allow": "yes",
+      "domains": ["https://brairou.github.io"],
+      "enableMessageBridge": "localAndRemote"
+    }
+  }
+}

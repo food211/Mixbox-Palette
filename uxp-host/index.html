@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Mixbox Palette</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #2b2b2b;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    /* 加载容器 */
+    #loadingContainer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: #2b2b2b;
+      z-index: 100;
+      transition: opacity 0.3s ease;
+    }
+
+    #loadingContainer.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* 加载图标 */
+    .loading-icon {
+      font-size: 48px;
+      margin-bottom: 20px;
+    }
+
+    /* 加载文字 */
+    .loading-text {
+      color: #e0e0e0;
+      font-size: 14px;
+      margin-bottom: 16px;
+    }
+
+    /* 进度条容器 */
+    .progress-container {
+      width: 280px;
+      height: 4px;
+      background: #404040;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    /* 进度条 */
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #4a9eff, #7b68ee);
+      border-radius: 2px;
+      transition: width 0.3s ease;
+    }
+
+    /* 进度百分比 */
+    .progress-percent {
+      color: #888;
+      font-size: 12px;
+      margin-top: 8px;
+    }
+
+    /* WebView */
+    #mixboxWebview {
+      width: 100%;
+      height: 100%;
+      border: none;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    #mixboxWebview.loaded {
+      opacity: 1;
+    }
+
+    /* 错误状态 */
+    .error-message {
+      color: #ff6b6b;
+      font-size: 13px;
+      margin-top: 16px;
+      display: none;
+    }
+
+    .error-message.show {
+      display: block;
+    }
+
+    .retry-btn {
+      margin-top: 12px;
+      padding: 8px 20px;
+      background: #4a9eff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      display: none;
+    }
+
+    .retry-btn.show {
+      display: inline-block;
+    }
+
+    .retry-btn:hover {
+      background: #3a8eef;
+    }
+  </style>
+</head>
+<body>
+  <!-- 加载进度条 -->
+  <div id="loadingContainer">
+    <div class="loading-icon">🎨</div>
+    <div class="loading-text" id="loadingText">正在加载 Mixbox Palette...</div>
+    <div class="progress-container">
+      <div class="progress-bar" id="progressBar"></div>
+    </div>
+    <div class="progress-percent" id="progressPercent">0%</div>
+    <div class="error-message" id="errorMessage">加载失败，请检查网络连接</div>
+    <button class="retry-btn" id="retryBtn">重试</button>
+  </div>
+
+  <!-- WebView -->
+  <webview id="mixboxWebview"
+           src="https://brairou.github.io/mixbox-palette/"
+           width="100%"
+           height="100%"
+           uxpAllowInspector="true">
+  </webview>
+
+  <script src="js/host.js"></script>
+</body>
+</html>
