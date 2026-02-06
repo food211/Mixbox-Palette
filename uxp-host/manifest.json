@@ -15,9 +15,9 @@
       "type": "panel",
       "id": "mixboxpalette",
       "label": "Mixbox Palette",
-      "minimumSize": { "width": 600, "height": 600 },
+      "minimumSize": { "width": 400, "height": 600 },
       "maximumSize": { "width": 2000, "height": 2000 },
-      "preferredDockedSize": { "width": 600, "height": 600 },
+      "preferredDockedSize": { "width": 400, "height": 600 },
       "preferredFloatingSize": { "width": 600, "height": 600 },
       "icons": [
         {
