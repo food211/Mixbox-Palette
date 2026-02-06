@@ -7,9 +7,9 @@
 }
 
 body {
-    background-color: #2b2b2b;
+    background-color: #6b6b6b;
     color: #e0e0e0;
-    padding: 20px;
+    padding: 12px;
     display: flex;
     justify-content: center;
     align-items: flex-start;
@@ -18,19 +18,19 @@ body {
 }
 
 .container {
-    background-color: #1e1e1e;
-    border-radius: 10px;
+    background-color: #272727;
+    border-radius: 8px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    padding: 20px;
-    max-width: 600px;
+    padding: 15px;
+    max-width: 400px;
     width: 100%;
     transition: transform 0.3s ease;
 }
 
 h1 {
     text-align: center;
-    margin-bottom: 5px;
-    font-size: 24px;
+    margin-bottom: 3px;
+    font-size: 18px;
     color: #e0e0e0; 
 }
 
@@ -63,20 +63,20 @@ h1 {
 .palette-selector {
     position: relative;
     display: inline-block;
-    margin-bottom: 15px;
+    margin-bottom: 5px;
 }
 
 .palette-btn {
     background-color: #2196F3; 
     color: white;
     border: none;
-    padding: 6px 12px;
+    padding: 3px 6px;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 13px;
+    font-size: 12px;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 2px;
 }
 
 .palette-btn:hover {
@@ -85,7 +85,7 @@ h1 {
 
 .palette-btn::after {
     content: '▼';
-    font-size: 10px;
+    font-size: 8px;
 }
 
 .palette-dropdown {
@@ -95,12 +95,13 @@ h1 {
     background-color: #2c2c2c; 
     border-radius: 4px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    min-width: 180px;
+    min-width: 160px; /* 从180px减小到160px */
     z-index: 100;
     display: none;
-    margin-top: 5px;
+    margin-top: 3px; /* 从5px减小到3px */
     overflow: hidden;
     border: 1px solid #3c3c3c; 
+    font-size: 12px; /* 添加整体字体大小 */
 }
 
 .palette-dropdown.show {
@@ -108,10 +109,10 @@ h1 {
 }
 
 .palette-option {
-    padding: 10px 12px;
+    padding: 6px 10px; /* 从10px 12px减小到6px 10px */
     cursor: pointer;
     transition: all 0.2s;
-    font-size: 13px;
+    font-size: 12px; /* 从13px减小到12px */
     color: #e0e0e0; 
 }
 
@@ -129,7 +130,7 @@ h1 {
     display: flex;
     flex-direction: column;
     align-items: center;
-    margin-bottom: 15px;
+    margin-bottom: 10px;
     position: relative;
 }
 
@@ -139,10 +140,6 @@ h1 {
     align-items: center;
     width: 100%;
     justify-content: center;
-}
-
-h1 {
-    margin-bottom: 5px;
 }
 
 .palette-info {
@@ -220,13 +217,12 @@ h1 {
     color: #ffffff;
 }
 
-
 .color-picker {
     display: grid;
-    grid-template-columns: repeat(8, 1fr);
-    gap: 8px;
-    margin-bottom: 20px;
-    padding: 10px;
+    grid-template-columns: repeat(auto-fit, minmax(36px, 1fr));
+    gap: 2px;
+    margin-bottom: 15px;
+    padding: 5px;
     border-radius: 8px;
     background-color: #2c2c2c; 
 }
@@ -280,17 +276,17 @@ h1 {
 .controls {
     display: flex;
     align-items: center;
-    margin-bottom: 20px;
+    margin-bottom: 10px;
     flex-wrap: wrap;
-    gap: 15px;
+    gap: 8px;
 }
 
 .clear {
     background-color: #f44336;
     color: white;
     border: none;
-    padding: 8px 16px;
-    border-radius: 4px;
+    padding: 3px 8px;
+    border-radius: 2px;
     cursor: pointer;
     font-weight: bold;
 }
@@ -299,25 +295,38 @@ h1 {
     background-color: #d32f2f;
 }
 
+#brushSizeValue, #brushMixStrength {
+    font-size: 11px; /* 减小字体大小 */
+    color: #a0a0a0; /* 使颜色更柔和 */
+    min-width: 16px; /* 确保数字有足够的空间 */
+    display: inline-block;
+    text-align: right; /* 数字右对齐 */
+}
+
 .brush-size {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 2px;
 }
 
 .brush-size label {
-    font-size: 13px;
-    color: #b0b0b0; 
+    font-size: 12px;
+    color: #ffffff; 
 }
 
 .brush-size input[type="range"] {
-    width: 100px;
+    width: 50px;
     background-color: #3c3c3c; 
 }
 
+.brush-size label + input + span + span {
+    font-size: 5px;
+    color: #a0a0a0;
+}
+
 .brush-preview-btn {
-    width: 36px;
-    height: 36px;
+    width: 24px;
+    height: 24px;
     border-radius: 4px;
     background-color: #3c3c3c; 
     display: flex;
@@ -333,12 +342,12 @@ h1 {
 
 .history-buttons {
     display: flex;
-    gap: 5px;
+    gap: 4px;
 }
 
 .history-buttons button {
-    width: 36px;
-    height: 36px;
+    width: 24px;
+    height: 24px;
     border-radius: 4px;
     background-color: #3c3c3c; 
     border: 1px solid #4c4c4c; 
@@ -359,13 +368,13 @@ h1 {
 
 .tool-buttons {
     display: flex;
-    gap: 5px;
-    margin-left: 10px;
+    gap: 3px;
+    margin-left: 8px;
 }
 
 .tool-btn {
-    width: 36px;
-    height: 36px;
+    width: 26px;
+    height: 26px;
     border-radius: 4px;
     background-color: #3c3c3c;
     border: 1px solid #4c4c4c;
@@ -387,18 +396,18 @@ h1 {
 
 
 .mix-area-container {
-    margin-bottom: 20px;
+    margin-bottom: 5px;
 }
 
 .mix-area-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 10px;
+    margin-bottom: 5px;
 }
 
 .mix-area-header h3 {
-    font-size: 16px;
+    font-size: 14px;
     color: #e0e0e0; 
 }
 
@@ -439,7 +448,7 @@ h1 {
 #mixCanvas {
     display: block;
     width: 100%;
-    height: auto;
+    height: 100%;
     cursor: crosshair;
 }
 
@@ -589,24 +598,4 @@ h1 {
 
 .upload-btn:hover {
     background-color: #1976D2;
-}
-
-
-@media (max-width: 768px) {
-    .container {
-        padding: 15px;
-    }
-    
-    .color-picker {
-        grid-template-columns: repeat(4, 1fr);
-    }
-    
-    .controls {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-    
-    .brush-size {
-        width: 100%;
-    }
 }
