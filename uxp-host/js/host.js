@@ -1,7 +1,7 @@
 /**
  * UXP Host - 加载进度条 + 颜色传递
  */
-const { action } = require("photoshop");
+const { action, core } = require("photoshop");
 
 // ============ 全局变量 ============
 let loadingContainer, progressBar, progressPercent, loadingText, errorMessage, retryBtn, webview;
@@ -71,16 +71,18 @@ function retry() {
 // ============ 颜色设置 ============
 async function setForegroundColor(r, g, b) {
   try {
-    await action.batchPlay([{
-      _obj: "set",
-      _target: [{ _ref: "color", _property: "foregroundColor" }],
-      to: {
-        _obj: "RGBColor",
-        red: r,
-        green: g,
-        blue: b
-      }
-    }], {});
+    await core.executeAsModal(async () => {
+      await action.batchPlay([{
+        _obj: "set",
+        _target: [{ _ref: "color", _property: "foregroundColor" }],
+        to: {
+          _obj: "RGBColor",
+          red: r,
+          green: g,
+          blue: b
+        }
+      }], {});
+    }, { commandName: "Set Foreground Color" });
     console.log(`✅ 前景色: rgb(${r}, ${g}, ${b})`);
   } catch (error) {
     console.error("设置前景色失败:", error);
@@ -89,16 +91,18 @@ async function setForegroundColor(r, g, b) {
 
 async function setBackgroundColor(r, g, b) {
   try {
-    await action.batchPlay([{
-      _obj: "set",
-      _target: [{ _ref: "color", _property: "backgroundColor" }],
-      to: {
-        _obj: "RGBColor",
-        red: r,
-        green: g,
-        blue: b
-      }
-    }], {});
+    await core.executeAsModal(async () => {
+      await action.batchPlay([{
+        _obj: "set",
+        _target: [{ _ref: "color", _property: "backgroundColor" }],
+        to: {
+          _obj: "RGBColor",
+          red: r,
+          green: g,
+          blue: b
+        }
+      }], {});
+    }, { commandName: "Set Background Color" });
     console.log(`✅ 背景色: rgb(${r}, ${g}, ${b})`);
   } catch (error) {
     console.error("设置背景色失败:", error);
