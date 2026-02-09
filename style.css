@@ -148,6 +148,30 @@ h1 {
     color: #b0b0b0;
 }
 
+/* 语言切换按钮 */
+.lang-selector {
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+
+.lang-btn {
+    background-color: #404040;
+    color: #b0b0b0;
+    border: none;
+    padding: 4px 8px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 11px;
+    opacity: 0.6;
+    transition: opacity 0.2s, background-color 0.2s;
+}
+
+.lang-btn:hover {
+    background-color: #505050;
+    opacity: 1;
+}
+
 /* 缩放选择器样式 */
 .zoom-selector {
     position: absolute;
