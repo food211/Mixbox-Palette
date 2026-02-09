@@ -6,12 +6,12 @@ class BrushManager {
     constructor() {
         // 预设笔刷
         this.presetBrushes = [
-            { name: '圆形', type: 'circle' },
-            { name: '柔边', type: 'soft' },
-            { name: '水彩', type: 'watercolor' },
-            { name: '喷溅', type: 'splatter' },
-            { name: '扁平笔', type: 'flat' },
-            { name: '干笔刷', type: 'dry' }
+            { type: 'circle' },
+            { type: 'soft' },
+            { type: 'watercolor' },
+            { type: 'splatter' },
+            { type: 'flat' },
+            { type: 'dry' }
         ];
     }
 

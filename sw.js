@@ -1,11 +1,12 @@
 /**
  * Service Worker - Mixbox Palette 离线缓存
  */
-const CACHE_NAME = 'mixbox-palette-v1';
+const CACHE_NAME = 'mixbox-palette-v2';
 const CACHE_URLS = [
   './',
   './index.html',
   './style.css',
+  './js/i18n.js',
   './js/app.js',
   './js/mixbox.js',
   './js/mixbox-painter.js',

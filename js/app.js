@@ -215,6 +215,9 @@ async function initApp() {
 
     // 9. 初始化缩放控制
     initZoomControl();
+
+    // 10. 初始化语言切换
+    initLangToggle();
 }
 
 /**
@@ -320,11 +323,8 @@ function initUI() {
     updateColorDisplay();
     updateBrushPreview();
 
-    // 更新混色距离标签
-    const mixStrengthLabel = document.querySelector('label[for="brushMix"]');
-    if (mixStrengthLabel) {
-        mixStrengthLabel.textContent = '混色强度:';
-    }
+    // 应用 i18n 到 DOM
+    I18N.applyToDOM();
 }
 
 /**
@@ -341,7 +341,7 @@ function initPaletteDropdown() {
         if (key === currentPalette) {
             option.classList.add('active');
         }
-        option.textContent = palettePresets[key].name;
+        option.textContent = I18N.paletteName(key);
         option.dataset.palette = key;
         
         option.addEventListener('click', (e) => {
@@ -360,7 +360,7 @@ function initPaletteDropdown() {
  * 更新调色板信息
  */
 function updatePaletteInfo() {
-    paletteInfo.textContent = palettePresets[currentPalette].name;
+    paletteInfo.textContent = I18N.paletteName(currentPalette);
 }
 
 /**
@@ -407,7 +407,7 @@ function updateColorPicker() {
         
         const tooltip = document.createElement('div');
         tooltip.className = 'color-name-tooltip';
-        tooltip.textContent = colorObj.nameCN;
+        tooltip.textContent = I18N.colorName(colorObj);
         circle.appendChild(tooltip);
         
         circle.addEventListener('click', (e) => {
@@ -806,7 +806,7 @@ function initBrushSelector() {
         
         const name = document.createElement('div');
         name.className = 'brush-option-name';
-        name.textContent = brush.name;
+        name.textContent = I18N.brushName(brush.type);
         
         option.appendChild(canvas);
         option.appendChild(name);
@@ -854,11 +854,11 @@ function updateColorDisplay() {
  */
 function updateStatus(mode) {
     if (mode === 'eyedropper-fg') {
-        statusText.innerHTML = '• 当前模式: <strong style="color: #1473e6;">吸管 (前景色)</strong>';
+        statusText.innerHTML = t('statusEyedropperFg');
     } else if (mode === 'eyedropper-bg') {
-        statusText.innerHTML = '• 当前模式: <strong style="color: #44b556;">吸管 (背景色)</strong>';
+        statusText.innerHTML = t('statusEyedropperBg');
     } else {
-        statusText.innerHTML = '• 当前模式: <strong>绘制</strong>';
+        statusText.innerHTML = t('statusDraw');
     }
 }
 
@@ -1338,6 +1338,28 @@ function initZoomControl() {
             document.body.style.padding = '20px';
         }
     }
+}
+
+// ============ 语言切换 ============
+function initLangToggle() {
+    const langBtn = document.getElementById('langBtn');
+    langBtn.textContent = I18N.getLang().toUpperCase();
+
+    langBtn.addEventListener('click', () => {
+        const newLang = I18N.getLang() === 'en' ? 'zh' : 'en';
+        I18N.setLang(newLang);
+        langBtn.textContent = newLang.toUpperCase();
+
+        // 更新所有 data-i18n DOM 元素
+        I18N.applyToDOM();
+
+        // 更新动态生成的内容
+        updateColorPicker();
+        initPaletteDropdown();
+        updatePaletteInfo();
+        initBrushSelector();
+        updateStatus('draw');
+    });
 }
 
 // 导出到全局

@@ -2,12 +2,16 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Mixbox 调色板</title>
+    <title>Mixbox Palette</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
         <div class="header-container">
+            <!-- 语言切换 - 左上角 -->
+            <div class="lang-selector">
+                <button id="langBtn" class="lang-btn">EN</button>
+            </div>
             <!-- 缩放控制 - 右上角 -->
             <div class="zoom-selector">
                 <button id="zoomBtn" class="zoom-btn">100%</button>
@@ -22,11 +26,11 @@
                 </div>
             </div>
 
-            <h1>🎨 Mixbox 调色板</h1>
-            <div class="palette-info">Winsor & Newton Cotman 16 色水彩</div>
+            <h1 data-i18n="title">🎨 Mixbox Palette</h1>
+            <div class="palette-info"></div>
             <div class="header-controls">
                 <div class="palette-selector">
-                    <button id="paletteBtn" class="palette-btn">切换颜料</button>
+                    <button id="paletteBtn" class="palette-btn" data-i18n="switchPalette">Palette</button>
                     <div id="paletteDropdown" class="palette-dropdown"></div>
                 </div>
             </div>
@@ -37,42 +41,42 @@
         
         <!-- 控制按钮 -->
         <div class="controls">
-            <button id="clearBtn" class="clear">清空</button>
+            <button id="clearBtn" class="clear" data-i18n="clear">Clear</button>
             <div class="brush-size">
-                <label>笔刷大小</label>
+                <label data-i18n="brushSize">Brush Size</label>
                 <input type="range" id="brushSize" min="2" max="50" value="15">
                 <span id="brushSizeValue">15</span>px
             </div>
             <div class="brush-size">
-                <label>颜料浓度</label>
+                <label data-i18n="paintConcentration">Concentration</label>
                 <input type="range" id="brushMix" min="1" max="50" value="30">
                 <span id="brushMixStrength">30</span>%
             </div>
-            <div class="brush-preview-btn" id="brushPreviewBtn" title="选择笔刷">
+            <div class="brush-preview-btn" id="brushPreviewBtn" data-i18n-title="selectBrush" title="Select Brush">
                 <canvas id="brushPreviewCanvas" width="28" height="28"></canvas>
             </div>
             <div class="history-buttons">
-                <button id="undoBtn" title="撤销" disabled>↶</button>
-                <button id="redoBtn" title="重做" disabled>↷</button>
+                <button id="undoBtn" data-i18n-title="undo" title="Undo" disabled>↶</button>
+                <button id="redoBtn" data-i18n-title="redo" title="Redo" disabled>↷</button>
             </div>
             <div class="tool-buttons">
-                <button id="smudgeBtn" class="tool-btn" title="涂抹工具">🖌️</button>
-                <button id="eyedropperBtn" class="tool-btn" title="吸管工具 (Alt)">💧</button>
+                <button id="smudgeBtn" class="tool-btn" data-i18n-title="smudgeTool" title="Smudge Tool">🖌️</button>
+                <button id="eyedropperBtn" class="tool-btn" data-i18n-title="eyedropperTool" title="Eyedropper (Alt)">💧</button>
             </div>
         </div>
         
         <!-- 混色区 -->
         <div class="mix-area-container">
             <div class="mix-area-header">
-                <h3>混色区</h3>
+                <h3 data-i18n="mixArea">Mixing Area</h3>
                 <div class="color-indicators">
                     <div class="color-indicator">
                         <div class="color-box foreground" id="fgColorBox"></div>
-                        <span>前景色</span>
+                        <span data-i18n="foreground">Foreground</span>
                     </div>
                     <div class="color-indicator">
                         <div class="color-box background" id="bgColorBox"></div>
-                        <span>背景色</span>
+                        <span data-i18n="background">Background</span>
                     </div>
                 </div>
             </div>
@@ -83,13 +87,13 @@
         
         <!-- 信息显示 -->
         <div class="info">
-            <p><strong>操作说明：</strong></p>
-            <p>• <strong>点击颜料</strong> → 选择颜色后在调色区绘制</p>
-            <p>• <strong>点击笔刷图标</strong> → 选择/上传笔刷</p>
-            <p>• <strong>Alt + 左键点击画布</strong> → 取色为前景色</p>
-            <p>• <strong>Alt + 右键点击画布</strong> → 取色为背景色</p>
-            <p>• 点击 ↶ 撤销 / ↷ 重做</p>
-            <p id="statusText">• 当前模式: <strong>绘制</strong></p>
+            <p><strong data-i18n="instructions">Instructions:</strong></p>
+            <p>• <span data-i18n="inst1"><strong>Click paint</strong> → Select color and paint on canvas</span></p>
+            <p>• <span data-i18n="inst2"><strong>Click brush icon</strong> → Select brush</span></p>
+            <p>• <span data-i18n="inst3"><strong>Alt + Left Click canvas</strong> → Pick as foreground</span></p>
+            <p>• <span data-i18n="inst4"><strong>Alt + Right Click canvas</strong> → Pick as background</span></p>
+            <p>• <span data-i18n="inst5">Click ↶ Undo / ↷ Redo</span></p>
+            <p id="statusText" data-i18n="statusDraw">• Mode: <strong>Draw</strong></p>
             <p class="github-link">GitHub: <a href="https://github.com/brairou/mixbox-palette" target="_blank">github.com/brairou/mixbox-palette</a></p>
         </div>
     </div>
@@ -98,7 +102,7 @@
     <div class="brush-selector-modal" id="brushModal">
         <div class="brush-selector-content">
             <div class="brush-selector-header">
-                <h3>选择笔刷</h3>
+                <h3 data-i18n="selectBrushModal">Select Brush</h3>
                 <button class="close-btn" id="closeModalBtn">×</button>
             </div>
             <div class="brush-grid" id="brushGrid"></div>
@@ -135,7 +139,10 @@
     // 初始化应用
     async function loadAppScripts() {
         try {
-            // 首先加载基础的 mixbox.js
+            // 首先加载 i18n
+            await loadScript('js/i18n.js');
+
+            // 加载基础的 mixbox.js
             await loadScript('js/mixbox.js');
             console.log('✅ mixbox.js 已加载');
             
