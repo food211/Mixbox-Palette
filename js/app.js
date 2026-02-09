@@ -16,7 +16,6 @@ function sendColorToPS(target, hexColor) {
       target: target,
       color: { r, g, b, hex: hexColor }
     });
-    console.log(`📤 → PS ${target}: ${hexColor}`);
   }
 }
 // ============ WebView 通信结束 ============
@@ -416,7 +415,6 @@ function updateColorPicker() {
             foregroundColor = colorObj.hex;
             currentBrushColor = foregroundColor;
             updateColorDisplay();
-            sendColorToPS('foreground', colorObj.hex);
             
             // 选择颜色后自动关闭涂抹模式
             if (currentTool === 'smudge') {
@@ -728,11 +726,9 @@ function bindEvents() {
                 foregroundColor = pickedColor;
                 currentBrushColor = foregroundColor;
                 updateStatus('eyedropper-fg');
-                sendColorToPS('foreground', pickedColor);
             } else if (e.button === 2) {
                 backgroundColor = pickedColor;
                 updateStatus('eyedropper-bg');
-                sendColorToPS('background', pickedColor);
             }
             updateColorDisplay();
             
@@ -826,8 +822,12 @@ function initBrushSelector() {
     });
 }
 
+// 上一次同步到 PS 的颜色（用于检测变化）
+let lastSyncedFgColor = null;
+let lastSyncedBgColor = null;
+
 /**
- * 更新颜色显示
+ * 更新颜色显示，并在颜色变化时自动同步到 PS
  */
 function updateColorDisplay() {
     fgColorBox.style.backgroundColor = foregroundColor;
@@ -837,6 +837,16 @@ function updateColorDisplay() {
         circle.classList.toggle('selected-fg', color === foregroundColor);
         circle.classList.toggle('selected-bg', color === backgroundColor);
     });
+
+    // 检测颜色变化并自动同步到 PS
+    if (foregroundColor !== lastSyncedFgColor) {
+        lastSyncedFgColor = foregroundColor;
+        sendColorToPS('foreground', foregroundColor);
+    }
+    if (backgroundColor !== lastSyncedBgColor) {
+        lastSyncedBgColor = backgroundColor;
+        sendColorToPS('background', backgroundColor);
+    }
 }
 
 /**
