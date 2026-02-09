@@ -7,6 +7,7 @@ const { action, core } = require("photoshop");
 let loadingContainer, progressBar, progressPercent, loadingText, errorMessage, retryBtn, webview;
 let progress = 0;
 let progressInterval = null;
+let currentSourceIndex = 0;
 
 // 模拟加载进度
 function startProgress() {
@@ -60,12 +61,27 @@ function showError(message) {
   retryBtn.classList.add('show');
 }
 
-function retry() {
+function loadSource(index) {
+  currentSourceIndex = index;
   errorMessage.classList.remove('show');
   retryBtn.classList.remove('show');
   loadingText.textContent = '正在加载 Mixbox Palette...';
   startProgress();
-  webview.src = webview.src; // 重新加载
+  webview.src = SOURCES[index];
+}
+
+function tryNextSource() {
+  const nextIndex = currentSourceIndex + 1;
+  if (nextIndex < SOURCES.length) {
+    console.log(`⏭️ 尝试备用源: ${SOURCES[nextIndex]}`);
+    loadSource(nextIndex);
+  } else {
+    showError("所有源均加载失败，请检查网络连接");
+  }
+}
+
+function retry() {
+  loadSource(0);
 }
 
 // ============ 颜色设置 ============
@@ -111,7 +127,7 @@ async function setBackgroundColor(r, g, b) {
 
 // ============ 消息监听 ============
 window.addEventListener("message", async (e) => {
-  if (!e.origin.includes("food211.github.io")) {
+  if (!e.origin.includes("food211.github.io") && !e.origin.includes("mixbox-palette.pages.dev")) {
     return;
   }
 
@@ -148,34 +164,28 @@ function init() {
   // 绑定重试按钮
   retryBtn.addEventListener('click', retry);
 
-  // 启动进度条
-  startProgress();
-
   // 绑定 WebView 事件
-  webview.addEventListener("loadstart", (e) => {
+  webview.addEventListener("loadstart", () => {
     console.log("⏳ WebView 开始加载...", webview.src);
   });
 
-  webview.addEventListener("loadstop", (e) => {
+  webview.addEventListener("loadstop", () => {
     console.log("✅ Mixbox Palette 已加载");
     completeProgress();
   });
 
   webview.addEventListener("loaderror", (e) => {
-    console.error("❌ 加载失败 - 完整错误对象:", e);
-    console.error("错误详情:", {
-      message: e.message,
-      url: e.url,
-      code: e.code,
-      type: e.type
-    });
-    showError(`加载失败: ${e.message || e.code || 'Unknown'}`);
+    console.error(`❌ 源 ${SOURCES[currentSourceIndex]} 加载失败:`, e.message || e.code);
+    tryNextSource();
   });
 
-  webview.addEventListener("loadabort", (e) => {
-    console.error("⚠️ 加载被中止:", e);
-    showError("加载被取消 (Operation canceled)");
+  webview.addEventListener("loadabort", () => {
+    console.error(`⚠️ 源 ${SOURCES[currentSourceIndex]} 加载被中止`);
+    tryNextSource();
   });
+
+  // 加载第一个源
+  loadSource(0);
 }
 
 // ============ WebView 事件 ============

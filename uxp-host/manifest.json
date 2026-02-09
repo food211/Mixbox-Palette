@@ -41,13 +41,15 @@
     "webview": {
       "allow": "yes",
       "domains": [
-        "https://food211.github.io"
+        "https://food211.github.io",
+        "https://mixbox-palette.pages.dev"
       ],
       "enableMessageBridge": "localAndRemote"
     },
     "network": {
       "domains": [
-        "https://food211.github.io"
+        "https://food211.github.io",
+        "https://mixbox-palette.pages.dev"
       ]
     }
   }
