@@ -1,48 +1,69 @@
 /**
- * UXP Host - 加载进度条 + 颜色传递
+ * UXP Host - Loading progress + color bridge
  */
 const { action, core } = require("photoshop");
 
-// ============ 全局变量 ============
+// ============ Global Variables ============
+const SOURCES = [
+  "https://mixbox-palette.pages.dev/",
+  "https://food211.github.io/Mixbox-Palette/"
+];
+
 let loadingContainer, progressBar, progressPercent, loadingText, errorMessage, retryBtn, webview;
-let progress = 0;
-let progressInterval = null;
+let progressAnimation = null;
+let loadTimeout = null;
 let currentSourceIndex = 0;
+let loaded = false;
 
-// 模拟加载进度
+const LOAD_TIMEOUT_MS = 10000; // 10s timeout
+
+// Indeterminate progress animation
 function startProgress() {
-  progress = 0;
-  updateProgress(0);
+  loaded = false;
+  progressBar.style.transition = 'none';
+  progressBar.style.width = '0%';
+  progressPercent.textContent = '';
 
-  progressInterval = setInterval(() => {
-    // 快速到 30%，然后慢慢增加到 90%
-    if (progress < 30) {
-      progress += 5;
-    } else if (progress < 60) {
-      progress += 2;
-    } else if (progress < 90) {
-      progress += 0.5;
+  let pos = 0;
+  let dir = 1;
+  progressAnimation = setInterval(() => {
+    pos += dir * 3;
+    if (pos >= 80) dir = -1;
+    if (pos <= 0) dir = 1;
+    progressBar.style.width = (20 + pos * 0.5) + '%';
+    progressBar.style.marginLeft = pos + '%';
+  }, 30);
+
+  // Timeout: try next source
+  loadTimeout = setTimeout(() => {
+    if (!loaded) {
+      console.error(`⏰ Timeout: ${SOURCES[currentSourceIndex]}`);
+      tryNextSource();
     }
-    updateProgress(progress);
-  }, 100);
+  }, LOAD_TIMEOUT_MS);
 }
 
-function updateProgress(value) {
-  progressBar.style.width = value + '%';
-  progressPercent.textContent = Math.round(value) + '%';
+function stopTimers() {
+  if (progressAnimation) {
+    clearInterval(progressAnimation);
+    progressAnimation = null;
+  }
+  if (loadTimeout) {
+    clearTimeout(loadTimeout);
+    loadTimeout = null;
+  }
 }
 
 function completeProgress() {
-  if (progressInterval) {
-    clearInterval(progressInterval);
-    progressInterval = null;
-  }
+  if (loaded) return;
+  loaded = true;
+  stopTimers();
 
-  // 快速完成到 100%
-  progress = 100;
-  updateProgress(100);
+  progressBar.style.transition = 'width 0.3s ease';
+  progressBar.style.marginLeft = '0';
+  progressBar.style.width = '100%';
+  progressPercent.textContent = '';
 
-  // 延迟隐藏加载界面
   setTimeout(() => {
     loadingContainer.classList.add('hidden');
     webview.classList.add('loaded');
@@ -50,22 +71,21 @@ function completeProgress() {
 }
 
 function showError(message) {
-  if (progressInterval) {
-    clearInterval(progressInterval);
-    progressInterval = null;
-  }
+  stopTimers();
 
-  loadingText.textContent = '加载失败';
-  errorMessage.textContent = message || '请检查网络连接';
+  loadingText.textContent = 'Load Failed';
+  errorMessage.textContent = message || 'Please check your network connection';
   errorMessage.classList.add('show');
   retryBtn.classList.add('show');
+  progressBar.style.marginLeft = '0';
+  progressBar.style.width = '0%';
 }
 
 function loadSource(index) {
   currentSourceIndex = index;
   errorMessage.classList.remove('show');
   retryBtn.classList.remove('show');
-  loadingText.textContent = '正在加载 Mixbox Palette...';
+  loadingText.textContent = 'Loading Mixbox Palette...';
   startProgress();
   webview.src = SOURCES[index];
 }
@@ -73,10 +93,10 @@ function loadSource(index) {
 function tryNextSource() {
   const nextIndex = currentSourceIndex + 1;
   if (nextIndex < SOURCES.length) {
-    console.log(`⏭️ 尝试备用源: ${SOURCES[nextIndex]}`);
+    console.log(`⏭️ Trying fallback: ${SOURCES[nextIndex]}`);
     loadSource(nextIndex);
   } else {
-    showError("所有源均加载失败，请检查网络连接");
+    showError("All sources failed. Please check your network connection.");
   }
 }
 
@@ -84,7 +104,7 @@ function retry() {
   loadSource(0);
 }
 
-// ============ 颜色设置 ============
+// ============ Color Setting ============
 async function setForegroundColor(r, g, b) {
   try {
     await core.executeAsModal(async () => {
@@ -99,9 +119,9 @@ async function setForegroundColor(r, g, b) {
         }
       }], {});
     }, { commandName: "Set Foreground Color" });
-    console.log(`✅ 前景色: rgb(${r}, ${g}, ${b})`);
+    console.log(`✅ Foreground: rgb(${r}, ${g}, ${b})`);
   } catch (error) {
-    console.error("设置前景色失败:", error);
+    console.error("Failed to set foreground color:", error);
   }
 }
 
@@ -119,19 +139,25 @@ async function setBackgroundColor(r, g, b) {
         }
       }], {});
     }, { commandName: "Set Background Color" });
-    console.log(`✅ 背景色: rgb(${r}, ${g}, ${b})`);
+    console.log(`✅ Background: rgb(${r}, ${g}, ${b})`);
   } catch (error) {
-    console.error("设置背景色失败:", error);
+    console.error("Failed to set background color:", error);
   }
 }
 
-// ============ 消息监听 ============
+// ============ Message Listener ============
 window.addEventListener("message", async (e) => {
   if (!e.origin.includes("food211.github.io") && !e.origin.includes("mixbox-palette.pages.dev")) {
     return;
   }
 
   const { type, target, color } = e.data || {};
+
+  if (type === "loaded") {
+    console.log(`✅ Loaded from: ${SOURCES[currentSourceIndex]}`);
+    completeProgress();
+    return;
+  }
 
   if (type === "setColor" && color) {
     if (target === "foreground") {
@@ -142,9 +168,8 @@ window.addEventListener("message", async (e) => {
   }
 });
 
-// ============ 初始化 ============
+// ============ Initialization ============
 function init() {
-  // 获取 DOM 元素
   loadingContainer = document.getElementById('loadingContainer');
   progressBar = document.getElementById('progressBar');
   progressPercent = document.getElementById('progressPercent');
@@ -153,47 +178,41 @@ function init() {
   retryBtn = document.getElementById('retryBtn');
   webview = document.getElementById('mixboxWebview');
 
-  // 检查元素是否存在
   if (!webview) {
-    console.error("❌ WebView 元素未找到！");
+    console.error("❌ WebView element not found!");
     return;
   }
 
-  console.log("✅ DOM 元素已加载");
+  console.log("✅ DOM ready");
 
-  // 绑定重试按钮
   retryBtn.addEventListener('click', retry);
 
-  // 绑定 WebView 事件
   webview.addEventListener("loadstart", () => {
-    console.log("⏳ WebView 开始加载...", webview.src);
+    console.log("⏳ Loading:", webview.src);
   });
 
   webview.addEventListener("loadstop", () => {
-    console.log("✅ Mixbox Palette 已加载");
+    console.log(`✅ loadstop: ${SOURCES[currentSourceIndex]}`);
     completeProgress();
   });
 
   webview.addEventListener("loaderror", (e) => {
-    console.error(`❌ 源 ${SOURCES[currentSourceIndex]} 加载失败:`, e.message || e.code);
+    console.error(`❌ Load error [${SOURCES[currentSourceIndex]}]:`, e.message || e.code);
     tryNextSource();
   });
 
   webview.addEventListener("loadabort", () => {
-    console.error(`⚠️ 源 ${SOURCES[currentSourceIndex]} 加载被中止`);
+    console.error(`⚠️ Load aborted: ${SOURCES[currentSourceIndex]}`);
     tryNextSource();
   });
 
-  // 加载第一个源
   loadSource(0);
 }
 
-// ============ WebView 事件 ============
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", init);
 } else {
-  // DOM 已经加载完成
   init();
 }
 
-console.log("✅ UXP Host 脚本就绪");
+console.log("✅ UXP Host ready");

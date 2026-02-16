@@ -218,6 +218,11 @@ async function initApp() {
 
     // 10. 初始化语言切换
     initLangToggle();
+
+    // 11. 通知 UXP Host 加载完成
+    if (isInWebView()) {
+        window.uxpHost.postMessage({ type: "loaded" });
+    }
 }
 
 /**

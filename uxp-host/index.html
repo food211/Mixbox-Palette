@@ -123,13 +123,13 @@
   <!-- 加载进度条 -->
   <div id="loadingContainer">
     <div class="loading-icon">🎨</div>
-    <div class="loading-text" id="loadingText">正在加载 Mixbox Palette...</div>
+    <div class="loading-text" id="loadingText">Loading Mixbox Palette...</div>
     <div class="progress-container">
       <div class="progress-bar" id="progressBar"></div>
     </div>
     <div class="progress-percent" id="progressPercent">0%</div>
-    <div class="error-message" id="errorMessage">加载失败，请检查网络连接</div>
-    <button class="retry-btn" id="retryBtn">重试</button>
+    <div class="error-message" id="errorMessage">Load failed. Please check your network connection.</div>
+    <button class="retry-btn" id="retryBtn">Retry</button>
   </div>
 
   <!-- WebView -->
@@ -140,12 +140,6 @@
            uxpAllowInspector="true">
   </webview>
 
-  <script>
-    const SOURCES = [
-      "https://mixbox-palette.pages.dev/",
-      "https://food211.github.io/Mixbox-Palette/"
-    ];
-  </script>
   <script src="js/host.js"></script>
 </body>
 </html>
