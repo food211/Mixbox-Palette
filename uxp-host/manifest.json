@@ -23,14 +23,9 @@
         {
           "width": 23,
           "height": 23,
-          "path": "icons/icon.png",
-          "scale": [1]
-        },
-        {
-          "width": 23,
-          "height": 23,
-          "path": "icons/icon_2x.png",
-          "scale": [2]
+          "path": "icons/pluginIcon.png",
+          "scale": [1, 2],
+          "theme": ["darkest", "dark", "light", "lightest", "all"]
         }
       ]
     }
@@ -39,14 +34,9 @@
     {
       "width": 23,
       "height": 23,
-      "path": "icons/icon.png",
-      "scale": [1]
-    },
-    {
-      "width": 23,
-      "height": 23,
-      "path": "icons/icon_2x.png",
-      "scale": [2]
+      "path": "icons/pluginIcon.png",
+      "scale": [1, 2],
+      "theme": ["darkest", "dark", "light", "lightest", "all"]
     }
   ],
   "requiredPermissions": {
