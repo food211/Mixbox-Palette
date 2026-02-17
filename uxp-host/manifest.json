@@ -23,9 +23,16 @@
         {
           "width": 23,
           "height": 23,
-          "path": "icons/pluginIcon.png",
+          "path": "icons/darkicon.png",
           "scale": [1, 2],
-          "theme": ["darkest", "dark", "light", "lightest", "all"]
+          "theme": ["darkest", "dark"]
+        },
+        {
+          "width": 23,
+          "height": 23,
+          "path": "icons/lighticon.png",
+          "scale": [1, 2],
+          "theme": ["light", "lightest"]
         }
       ]
     }
@@ -34,9 +41,16 @@
     {
       "width": 23,
       "height": 23,
-      "path": "icons/pluginIcon.png",
+      "path": "icons/darkicon.png",
       "scale": [1, 2],
-      "theme": ["darkest", "dark", "light", "lightest", "all"]
+      "theme": ["darkest", "dark"]
+    },
+    {
+      "width": 23,
+      "height": 23,
+      "path": "icons/lighticon.png",
+      "scale": [1, 2],
+      "theme": ["light", "lightest"]
     }
   ],
   "requiredPermissions": {
