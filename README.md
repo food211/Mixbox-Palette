@@ -1,6 +1,6 @@
-# 🎨 Mixbox Watercolor Palette - Photoshop Plugin
+# 🎨 Mixbox Watercolor Palette for Adobe Photoshop
 
-A Photoshop UXP plugin for realistic watercolor mixing, powered by the [Mixbox](https://scrtwpns.com/mixbox/) physical color mixing algorithm.
+A UXP plugin for realistic watercolor mixing in Adobe Photoshop, powered by the [Mixbox](https://scrtwpns.com/mixbox/) physical color mixing algorithm.
 
 ![License](https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg)
 ![Mixbox](https://img.shields.io/badge/Powered%20by-Mixbox-blue)
@@ -44,10 +44,9 @@ The plugin loads from Cloudflare Pages (`mixbox-palette.pages.dev`) by default, 
 
 ## Installation
 
-### From Adobe Marketplace (Coming Soon)
-> The plugin is currently under review. It will be available on Adobe Marketplace once approved.
+### From Adobe Marketplace
 
-1. Search for "Mixbox Watercolor Palette" in Adobe Marketplace
+1. Visit [Mixbox Watercolor Palette on Adobe Marketplace](https://exchange.adobe.com/apps/cc/cc9344fb/mixbox-watercolor-palette)
 2. Install and open from Photoshop `Plugins` menu
 
 ### From Release (.ccx)
@@ -67,7 +66,7 @@ The plugin loads from Cloudflare Pages (`mixbox-palette.pages.dev`) by default, 
 2. **Pick a color** - Click a color swatch to set as foreground color
 3. **Adjust settings** - Brush size and paint concentration sliders
 4. **Paint** - Draw on the mixing canvas to blend colors
-5. **Use in Photoshop** - Selected colors sync to PS foreground/background automatically
+5. **Use in Photoshop** - Selected colors sync to Photoshop foreground/background automatically
 
 ### Eyedropper
 - Hold `Alt` key to enter eyedropper mode
@@ -87,6 +86,10 @@ The plugin loads from Cloudflare Pages (`mixbox-palette.pages.dev`) by default, 
 
 CC BY-NC 4.0 (Non-commercial use only) - Due to Mixbox library licensing.
 
+## Trademarks
+
+Adobe and Photoshop are either registered trademarks or trademarks of Adobe in the United States and/or other countries.
+
 ## Support
 
 - ⭐ Star this project
@@ -96,9 +99,9 @@ CC BY-NC 4.0 (Non-commercial use only) - Due to Mixbox library licensing.
 
 ---
 
-# 🎨 Mixbox 水彩调色板 - Photoshop 插件
+# 🎨 Mixbox 水彩调色板 - Adobe Photoshop 插件
 
-基于 [Mixbox](https://scrtwpns.com/mixbox/) 物理混色算法的 Photoshop UXP 调色板插件，模拟真实水彩颜料的混合效果。
+基于 [Mixbox](https://scrtwpns.com/mixbox/) 物理混色算法的 Adobe Photoshop UXP 调色板插件，模拟真实水彩颜料的混合效果。
 
 ## 功能特点
 
@@ -115,10 +118,9 @@ CC BY-NC 4.0 (Non-commercial use only) - Due to Mixbox library licensing.
 
 ## 安装
 
-### 通过 Adobe Marketplace（即将上线）
-> 插件正在审核中，审核通过后将上架 Adobe Marketplace。
+### 通过 Adobe Marketplace
 
-1. 在 Adobe Marketplace 搜索 "Mixbox Watercolor Palette"
+1. 访问 [Mixbox Watercolor Palette - Adobe Marketplace](https://exchange.adobe.com/apps/cc/cc9344fb/mixbox-watercolor-palette)
 2. 安装后从 Photoshop `插件` 菜单打开
 
 ### 从 Release 下载 (.ccx)
@@ -139,6 +141,10 @@ CC BY-NC 4.0 (Non-commercial use only) - Due to Mixbox library licensing.
 ## 许可证
 
 CC BY-NC 4.0（仅限非商业用途）- 受 Mixbox 库许可证限制。
+
+## 商标声明
+
+Adobe 和 Photoshop 是 Adobe 在美国和/或其他国家/地区的注册商标或商标。
 
 ## 赞助
 
