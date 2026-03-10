@@ -1373,10 +1373,8 @@ console.log('🚀 app.js 加载完成，调用 initApp() 初始化应用');
 
 // 接收来自 PS 的颜色变化（由 UXP host 推送）
 window.addEventListener("message", (e) => {
-  console.log("📨 WebView received message:", JSON.stringify(e.data));
   const { type, target, color } = e.data || {};
   if (type === "psColorChanged" && color) {
-    console.log(`🎨 psColorChanged → ${target}: ${color.hex}`);
     if (target === "foreground") {
       foregroundColor = color.hex;
       currentBrushColor = foregroundColor;
