@@ -139,13 +139,11 @@ async function sendColorToWebView(target, colorObj) {
   const g = Math.round(rgb.green);
   const b = Math.round(rgb.blue);
   const hex = rgbToHex(r, g, b);
-  console.log(`📤 sendColorToWebView → ${target}: rgb(${r},${g},${b}) ${hex}`);
   webview.postMessage({
     type: "psColorChanged",
     target,
     color: { r, g, b, hex }
   }, "*");
-  console.log(`✅ postMessage sent to webview`);
 }
 
 let colorEventsRegistered = false;
@@ -173,7 +171,6 @@ function listenPSColorEvents() {
   // "exchange" covers pressing X to swap fg/bg
   // "reset" covers pressing D to reset to black/white
   action.addNotificationListener(["set", "exchange", "reset"], async (event, descriptor) => {
-    console.log(`🔔 event: ${event}`, JSON.stringify(descriptor));
     try {
       // "set" 只在目标是颜色时处理，避免每次图层操作都触发
       if (event === "set") {
@@ -211,7 +208,7 @@ async function setForegroundColor(r, g, b) {
         to: { _obj: "RGBColor", red: r, green: g, blue: b }
       }], {});
     }, { commandName: "Set Foreground Color" });
-    console.log(`✅ Foreground: rgb(${r}, ${g}, ${b})`);
+
   } catch (error) {
     console.error("Failed to set foreground color:", error);
   } finally {
@@ -229,7 +226,7 @@ async function setBackgroundColor(r, g, b) {
         to: { _obj: "RGBColor", red: r, green: g, blue: b }
       }], {});
     }, { commandName: "Set Background Color" });
-    console.log(`✅ Background: rgb(${r}, ${g}, ${b})`);
+
   } catch (error) {
     console.error("Failed to set background color:", error);
   } finally {
