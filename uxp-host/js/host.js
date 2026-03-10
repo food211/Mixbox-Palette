@@ -104,44 +104,136 @@ function retry() {
   loadSource(0);
 }
 
+// ============ PS Color Event Listener ============
+function rgbToHex(r, g, b) {
+  return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
+}
+
+function hsbToRgb(h, s, b) {
+  s /= 100; b /= 100;
+  const k = (n) => (n + h / 60) % 6;
+  const f = (n) => b * (1 - s * Math.max(0, Math.min(k(n), 4 - k(n), 1)));
+  return {
+    red: Math.round(f(5) * 255),
+    green: Math.round(f(3) * 255),
+    blue: Math.round(f(1) * 255)
+  };
+}
+
+// 插件主动设色时暂时屏蔽回写，避免死循环
+let suppressPsEvent = false;
+
+async function sendColorToWebView(target, colorObj) {
+  if (suppressPsEvent) {
+    console.log(`⏭️ sendColorToWebView suppressed (${target})`);
+    return;
+  }
+  // PS 可能返回 HSB/Lab 等格式，统一转成 RGB
+  let rgb = colorObj;
+  if (colorObj._obj === "HSBColorClass") {
+    rgb = hsbToRgb(colorObj.hue?._value ?? colorObj.hue, colorObj.saturation, colorObj.brightness);
+  } else if (colorObj._obj !== "RGBColor") {
+    console.warn("⚠️ Unknown color format:", colorObj._obj, "- attempting direct use");
+  }
+  const r = Math.round(rgb.red);
+  const g = Math.round(rgb.green);
+  const b = Math.round(rgb.blue);
+  const hex = rgbToHex(r, g, b);
+  console.log(`📤 sendColorToWebView → ${target}: rgb(${r},${g},${b}) ${hex}`);
+  webview.postMessage({
+    type: "psColorChanged",
+    target,
+    color: { r, g, b, hex }
+  }, "*");
+  console.log(`✅ postMessage sent to webview`);
+}
+
+let colorEventsRegistered = false;
+
+function listenPSColorEvents() {
+  if (colorEventsRegistered) {
+    console.log("⚠️ listenPSColorEvents already registered, skipping");
+    return;
+  }
+  colorEventsRegistered = true;
+  console.log("🎧 Registering PS color event listeners...");
+
+  async function fetchAndSendBothColors() {
+    const result = await action.batchPlay([
+      { _obj: "get", _target: [{ _ref: "color", _property: "foregroundColor" }] },
+      { _obj: "get", _target: [{ _ref: "color", _property: "backgroundColor" }] }
+    ], { synchronousExecution: true });
+    const fg = result[0]?.foregroundColor;
+    const bg = result[1]?.backgroundColor;
+    if (fg) await sendColorToWebView("foreground", fg);
+    if (bg) await sendColorToWebView("background", bg);
+  }
+
+  // "set" covers color picker / swatches changes
+  // "exchange" covers pressing X to swap fg/bg
+  // "reset" covers pressing D to reset to black/white
+  action.addNotificationListener(["set", "exchange", "reset"], async (event, descriptor) => {
+    console.log(`🔔 event: ${event}`, JSON.stringify(descriptor));
+    try {
+      // "set" 只在目标是颜色时处理，避免每次图层操作都触发
+      if (event === "set") {
+        const prop = descriptor?._target?.[0]?._property;
+        if (prop !== "foregroundColor" && prop !== "backgroundColor") return;
+
+        const colorData = descriptor?.to;
+        if (!colorData) return;
+
+        if (prop === "foregroundColor") {
+          await sendColorToWebView("foreground", colorData);
+        } else {
+          await sendColorToWebView("background", colorData);
+        }
+      } else {
+        // exchange / reset 时两色都变，一并同步
+        await fetchAndSendBothColors();
+      }
+    } catch (e) {
+      console.error(`❌ ${event} handler error:`, e.message || e);
+    }
+  });
+
+  console.log("✅ PS color listeners registered");
+}
+
 // ============ Color Setting ============
 async function setForegroundColor(r, g, b) {
   try {
+    suppressPsEvent = true;
     await core.executeAsModal(async () => {
       await action.batchPlay([{
         _obj: "set",
         _target: [{ _ref: "color", _property: "foregroundColor" }],
-        to: {
-          _obj: "RGBColor",
-          red: r,
-          green: g,
-          blue: b
-        }
+        to: { _obj: "RGBColor", red: r, green: g, blue: b }
       }], {});
     }, { commandName: "Set Foreground Color" });
     console.log(`✅ Foreground: rgb(${r}, ${g}, ${b})`);
   } catch (error) {
     console.error("Failed to set foreground color:", error);
+  } finally {
+    suppressPsEvent = false;
   }
 }
 
 async function setBackgroundColor(r, g, b) {
   try {
+    suppressPsEvent = true;
     await core.executeAsModal(async () => {
       await action.batchPlay([{
         _obj: "set",
         _target: [{ _ref: "color", _property: "backgroundColor" }],
-        to: {
-          _obj: "RGBColor",
-          red: r,
-          green: g,
-          blue: b
-        }
+        to: { _obj: "RGBColor", red: r, green: g, blue: b }
       }], {});
     }, { commandName: "Set Background Color" });
     console.log(`✅ Background: rgb(${r}, ${g}, ${b})`);
   } catch (error) {
     console.error("Failed to set background color:", error);
+  } finally {
+    suppressPsEvent = false;
   }
 }
 
@@ -156,6 +248,7 @@ window.addEventListener("message", async (e) => {
   if (type === "loaded") {
     console.log(`✅ Loaded from: ${SOURCES[currentSourceIndex]}`);
     completeProgress();
+    listenPSColorEvents();
     return;
   }
 
@@ -194,6 +287,7 @@ function init() {
   webview.addEventListener("loadstop", () => {
     console.log(`✅ loadstop: ${SOURCES[currentSourceIndex]}`);
     completeProgress();
+    listenPSColorEvents();
   });
 
   webview.addEventListener("loaderror", (e) => {
