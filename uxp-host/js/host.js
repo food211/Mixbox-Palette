@@ -284,7 +284,6 @@ function init() {
   webview.addEventListener("loadstop", () => {
     console.log(`✅ loadstop: ${SOURCES[currentSourceIndex]}`);
     completeProgress();
-    listenPSColorEvents();
   });
 
   webview.addEventListener("loaderror", (e) => {
