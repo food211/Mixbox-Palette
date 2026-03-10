@@ -253,8 +253,11 @@ async function initCanvas() {
     // 根据环境选择合适的Painter实现
     console.log('🎨 初始化 Mixbox 引擎...');
     try {
-        // 检查全局对象是否可用
-        if (typeof MixboxWebGLPainter !== 'undefined' && isWebGLSupported()) {
+        // 检查全局对象是否可用（KMWebGLPainter 优先于 MixboxWebGLPainter）
+        if (typeof KMWebGLPainter !== 'undefined' && isWebGLSupported()) {
+            painter = new KMWebGLPainter(mixCanvas);
+            console.log('使用 KM 渲染器');
+        } else if (typeof MixboxWebGLPainter !== 'undefined' && isWebGLSupported()) {
             // 标准Web环境 - 使用WebGL实现
             painter = new MixboxWebGLPainter(mixCanvas);
             console.log('使用 WebGL 渲染器');
@@ -263,7 +266,7 @@ async function initCanvas() {
             painter = new MixboxCanvasPainter(mixCanvas);
             console.log('使用 Canvas 2D 渲染器');
         } else {
-            throw new Error('没有可用的渲染器，请确保已加载 mixbox-painter.js 或 mixbox-canvas-painter.js');
+            throw new Error('没有可用的渲染器，请确保已加载 km-painter.js、mixbox-painter.js 或 mixbox-canvas-painter.js');
         }
 
         await painter.init();
