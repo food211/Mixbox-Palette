@@ -1370,3 +1370,29 @@ function initLangToggle() {
 // 导出到全局
 window.initApp = initApp;
 console.log('🚀 app.js 加载完成，调用 initApp() 初始化应用');
+
+// 接收来自 PS 的颜色变化（由 UXP host 推送）
+function handlePsColorMessage(e) {
+  console.log("📨 WebView received message:", JSON.stringify(e.data));
+  const { type, target, color } = e.data || {};
+  if (type === "psColorChanged" && color) {
+    console.log(`🎨 psColorChanged → ${target}: ${color.hex}`);
+    if (target === "foreground") {
+      foregroundColor = color.hex;
+      currentBrushColor = foregroundColor;
+    } else if (target === "background") {
+      backgroundColor = color.hex;
+    }
+    // 先同步 lastSynced 状态，防止 updateColorDisplay 触发反向 setColor 造成死循环
+    lastSyncedFgColor = foregroundColor;
+    lastSyncedBgColor = backgroundColor;
+    updateColorDisplay();
+  }
+}
+
+// host → webview 方向用 window.uxpHost 监听；浏览器环境降级到 window
+if (typeof window.uxpHost !== 'undefined') {
+  window.uxpHost.addEventListener("message", handlePsColorMessage);
+} else {
+  window.addEventListener("message", handlePsColorMessage);
+}
