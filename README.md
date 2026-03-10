@@ -24,7 +24,7 @@ A UXP plugin for realistic watercolor mixing in Adobe Photoshop, powered by the 
 - **Eyedropper** - `Alt + Left Click` for foreground, `Alt + Right Click` for background
 - **Undo/Redo** - Up to 50 steps of history
 - **Auto-save** - Canvas, settings, and history automatically preserved
-- **Auto color sync** - Foreground/background color changes sync to Photoshop automatically
+- **Bidirectional color sync** - Colors sync both ways: plugin selections update Photoshop, and Photoshop color changes (color picker, swatches, X to swap, D to reset) update the plugin
 
 ### Multilingual
 - English and Chinese (中文) supported
@@ -66,7 +66,7 @@ The plugin loads from Cloudflare Pages (`mixbox-palette.pages.dev`) by default, 
 2. **Pick a color** - Click a color swatch to set as foreground color
 3. **Adjust settings** - Brush size and paint concentration sliders
 4. **Paint** - Draw on the mixing canvas to blend colors
-5. **Use in Photoshop** - Selected colors sync to Photoshop foreground/background automatically
+5. **Use in Photoshop** - Selected colors sync to Photoshop foreground/background automatically; conversely, changing colors in Photoshop (via color picker, swatches, or keyboard shortcuts) updates the plugin palette
 
 ### Eyedropper
 - Hold `Alt` key to enter eyedropper mode
@@ -113,7 +113,7 @@ Adobe and Photoshop are either registered trademarks or trademarks of Adobe in t
 - **吸管工具** - Alt + 左键/右键取色
 - **50 步撤销/重做**
 - **自动保存** - 画布、历史记录和设置自动保存
-- **前景色/背景色自动同步** - 颜色变化自动同步到 Photoshop
+- **双向颜色同步** - 插件选色自动同步到 Photoshop；反之，在 PS 中更改颜色（拾色器、色板、X 键交换、D 键复位）也会同步更新插件
 - **中英文双语** - 自动跟随系统语言，支持手动切换
 
 ## 安装
