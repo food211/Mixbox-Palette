@@ -1372,7 +1372,7 @@ window.initApp = initApp;
 console.log('🚀 app.js 加载完成，调用 initApp() 初始化应用');
 
 // 接收来自 PS 的颜色变化（由 UXP host 推送）
-function handlePsColorMessage(e) {
+window.addEventListener("message", (e) => {
   console.log("📨 WebView received message:", JSON.stringify(e.data));
   const { type, target, color } = e.data || {};
   if (type === "psColorChanged" && color) {
@@ -1388,11 +1388,4 @@ function handlePsColorMessage(e) {
     lastSyncedBgColor = backgroundColor;
     updateColorDisplay();
   }
-}
-
-// host → webview 方向用 window.uxpHost 监听；浏览器环境降级到 window
-if (typeof window.uxpHost !== 'undefined') {
-  window.uxpHost.addEventListener("message", handlePsColorMessage);
-} else {
-  window.addEventListener("message", handlePsColorMessage);
-}
+});
