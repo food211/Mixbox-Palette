@@ -139,6 +139,60 @@ const MAX_HISTORY = 50;
 // 当前笔画路径
 let currentStroke = null;  // { type: 'brush'|'smudge'|'clear', points: [], color, brushSize, brushType, ... }
 
+// 混色引擎: 'mixbox' (默认) 或 'km'
+let currentEngine = 'mixbox';
+
+/**
+ * 根据引擎类型创建 Painter
+ */
+function createPainter(engine, canvas) {
+    if (engine === 'km' && typeof KMWebGLPainter !== 'undefined' && isWebGLSupported()) {
+        console.log('使用 KM 渲染器');
+        return new KMWebGLPainter(canvas);
+    } else if (typeof MixboxWebGLPainter !== 'undefined' && isWebGLSupported()) {
+        console.log('使用 Mixbox 渲染器');
+        return new MixboxWebGLPainter(canvas);
+    } else if (typeof MixboxCanvasPainter !== 'undefined') {
+        console.log('使用 Canvas 2D 渲染器');
+        return new MixboxCanvasPainter(canvas);
+    }
+    throw new Error('没有可用的渲染器');
+}
+
+/**
+ * 切换混色引擎并用历史重绘画布
+ */
+async function switchEngine(engine) {
+    if (engine === currentEngine) return;
+    const oldMixStrength = painter ? painter.getMixStrength() : 0.3;
+
+    painter = createPainter(engine, mixCanvas);
+    await painter.init();
+    painter.setMixStrength(oldMixStrength);
+    currentEngine = engine;
+    localStorage.setItem('mixbox_engine', engine);
+
+    // 用历史记录重绘画布
+    painter.clear({ r: 0.973, g: 0.973, b: 0.961 });
+    for (let i = 0; i <= historyStep; i++) {
+        const action = history[i];
+        if (!action) continue;
+        if (action.type === 'init') continue;
+        else if (action.type === 'clear') painter.clear({ r: 0.973, g: 0.973, b: 0.961 });
+        else if (action.type === 'brush') replayBrushStroke(action);
+        else if (action.type === 'smudge') replaySmudgeStroke(action);
+    }
+    painter.readToCanvas2D();
+
+    // 更新按钮文字
+    const engineBtn = document.getElementById('engineBtn');
+    if (engineBtn) {
+        engineBtn.textContent = engine === 'km' ? 'KM' : 'MB';
+        engineBtn.classList.toggle('active', engine === 'km');
+    }
+    console.log('✅ 引擎已切换为:', engine);
+}
+
 // DOM元素
 const colorPicker = document.getElementById('colorPicker');
 const mixCanvas = document.getElementById('mixCanvas');
@@ -250,23 +304,14 @@ async function initCanvas() {
         return;
     }
 
-    // 根据环境选择合适的Painter实现
-    console.log('🎨 初始化 Mixbox 引擎...');
+    // 初始化混色引擎
+    const savedEngine = localStorage.getItem('mixbox_engine') || 'mixbox';
+    console.log('🎨 初始化混色引擎...', savedEngine);
     try {
-        // 检查全局对象是否可用
-        if (typeof MixboxWebGLPainter !== 'undefined' && isWebGLSupported()) {
-            // 标准Web环境 - 使用WebGL实现
-            painter = new MixboxWebGLPainter(mixCanvas);
-            console.log('使用 WebGL 渲染器');
-        } else if (typeof MixboxCanvasPainter !== 'undefined') {
-            // 使用Canvas 2D实现
-            painter = new MixboxCanvasPainter(mixCanvas);
-            console.log('使用 Canvas 2D 渲染器');
-        } else {
-            throw new Error('没有可用的渲染器，请确保已加载 mixbox-painter.js 或 mixbox-canvas-painter.js');
-        }
+        painter = createPainter(savedEngine, mixCanvas);
 
         await painter.init();
+        currentEngine = savedEngine;
 
         // 尝试加载保存的历史记录
         const savedHistory = paletteStorage.loadHistory();
@@ -307,9 +352,9 @@ async function initCanvas() {
         updateColorDisplay();
         updateBrushPreview();
 
-        console.log('✅ Mixbox 引擎初始化完成');
+        console.log('✅ 混色引擎初始化完成:', currentEngine);
     } catch (error) {
-        console.error('初始化 Mixbox 引擎失败:', error);
+        console.error('初始化混色引擎失败:', error);
         alert('无法初始化绘图引擎，请检查浏览器兼容性。错误: ' + error.message);
     }
 }
@@ -543,6 +588,17 @@ function bindEvents() {
         }
     });
     
+    // 引擎切换按钮
+    const engineBtn = document.getElementById('engineBtn');
+    if (engineBtn) {
+        engineBtn.textContent = currentEngine === 'km' ? 'KM' : 'MB';
+        engineBtn.classList.toggle('active', currentEngine === 'km');
+        engineBtn.addEventListener('click', () => {
+            const nextEngine = currentEngine === 'mixbox' ? 'km' : 'mixbox';
+            switchEngine(nextEngine);
+        });
+    }
+
     // 打开笔刷选择器
     brushPreviewBtn.addEventListener('click', () => {
         brushModal.classList.add('active');
@@ -1259,7 +1315,7 @@ function smudgeAtPoint(x, y, dx, dy) {
     // 4. 采样目标位置的颜色
     const targetColor = pickColor(Math.floor(targetX), Math.floor(targetY));
     
-    // 5. 混合两个颜色（使用 Mixbox）
+    // 5. 混合两个颜色
     const sourceRGB = hexToRgb(sourceColor);
     const targetRGB = hexToRgb(targetColor);
     
