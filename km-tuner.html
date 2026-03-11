@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>KM 混色对比工具</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #1a1a1a; color: #ddd; font-family: sans-serif; padding: 20px; }
+  h1 { font-size: 16px; margin-bottom: 16px; color: #fff; }
+
+  .controls {
+    display: flex; align-items: center; gap: 20px;
+    background: #2a2a2a; padding: 12px 16px; border-radius: 6px;
+    margin-bottom: 20px; flex-wrap: wrap;
+  }
+  .controls label { font-size: 13px; display: flex; align-items: center; gap: 8px; }
+  .controls input[type=color] { width: 48px; height: 32px; border: none; cursor: pointer; border-radius: 4px; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 80px 1fr 1fr 1fr 1fr;
+    gap: 2px;
+  }
+  .grid-header {
+    display: contents;
+  }
+  .grid-header > div {
+    text-align: center; font-size: 12px; padding: 6px 4px;
+    background: #2a2a2a; border-radius: 4px 4px 0 0; color: #aaa;
+  }
+  .grid-header > div:first-child { background: transparent; }
+
+  .row { display: contents; }
+  .row-label {
+    display: flex; align-items: center;
+    font-size: 11px; color: #888; padding-right: 8px;
+    white-space: nowrap;
+  }
+  .cell { background: #111; }
+  canvas { display: block; width: 100%; height: 40px; }
+
+  .section-gap { height: 12px; grid-column: 1 / -1; }
+
+  .note { font-size: 11px; color: #666; margin-top: 16px; }
+  .badge {
+    display: inline-block; font-size: 10px; padding: 2px 6px;
+    border-radius: 3px; margin-left: 4px; vertical-align: middle;
+  }
+  .badge-gamma { background: #1a4a2a; color: #4dbb6a; }
+  .badge-direct { background: #3a2a1a; color: #bb8844; }
+  .badge-linear { background: #2a2a3a; color: #6688bb; }
+  .badge-mixbox { background: #3a1a3a; color: #bb66bb; }
+</style>
+</head>
+<body>
+<h1>KM 混色对比工具
+  <span class="badge badge-linear">Linear RGB</span>
+  <span class="badge badge-direct">KM Direct</span>
+  <span class="badge badge-gamma">KM Gamma ✓</span>
+  <span class="badge badge-mixbox">Mixbox</span>
+</h1>
+
+<div class="controls">
+  <label>颜色 A <input type="color" id="colorA" value="#ff0000"></label>
+  <label>颜色 B <input type="color" id="colorB" value="#0000ff"></label>
+  <label style="margin-left:auto; font-size:12px; color:#666;">
+    渐变宽度每像素对应 t = 0→1，左=纯A，右=纯B
+  </label>
+</div>
+
+<div class="grid" id="grid">
+  <div class="grid-header">
+    <div></div>
+    <div>Linear RGB <span class="badge badge-linear">参考</span></div>
+    <div>KM Direct <span class="badge badge-direct">无Gamma</span></div>
+    <div>KM Gamma <span class="badge badge-gamma">推荐</span></div>
+    <div>Mixbox <span class="badge badge-mixbox">LUT</span></div>
+  </div>
+
+  <!-- 自定义颜色行 -->
+  <div class="row-label" id="customLabel">自定义</div>
+  <div class="cell"><canvas id="c_custom_linear"  height="40"></canvas></div>
+  <div class="cell"><canvas id="c_custom_direct"  height="40"></canvas></div>
+  <div class="cell"><canvas id="c_custom_gamma"   height="40"></canvas></div>
+  <div class="cell"><canvas id="c_custom_mixbox"  height="40"></canvas></div>
+
+  <div class="section-gap"></div>
+
+  <!-- 固定测试色对 -->
+  <div class="row-label">红 + 蓝<br><small style="color:#555">期望：紫</small></div>
+  <div class="cell"><canvas id="c_rb_linear"  height="40"></canvas></div>
+  <div class="cell"><canvas id="c_rb_direct"  height="40"></canvas></div>
+  <div class="cell"><canvas id="c_rb_gamma"   height="40"></canvas></div>
+  <div class="cell"><canvas id="c_rb_mixbox"  height="40"></canvas></div>
+
+  <div class="row-label">蓝 + 黄<br><small style="color:#555">期望：绿</small></div>
+  <div class="cell"><canvas id="c_by_linear"  height="40"></canvas></div>
+  <div class="cell"><canvas id="c_by_direct"  height="40"></canvas></div>
+  <div class="cell"><canvas id="c_by_gamma"   height="40"></canvas></div>
+  <div class="cell"><canvas id="c_by_mixbox"  height="40"></canvas></div>
+
+  <div class="row-label">红 + 黄<br><small style="color:#555">期望：橙</small></div>
+  <div class="cell"><canvas id="c_ry_linear"  height="40"></canvas></div>
+  <div class="cell"><canvas id="c_ry_direct"  height="40"></canvas></div>
+  <div class="cell"><canvas id="c_ry_gamma"   height="40"></canvas></div>
+  <div class="cell"><canvas id="c_ry_mixbox"  height="40"></canvas></div>
+
+  <div class="row-label">黑 + 白<br><small style="color:#555">期望：中灰</small></div>
+  <div class="cell"><canvas id="c_bw_linear"  height="40"></canvas></div>
+  <div class="cell"><canvas id="c_bw_direct"  height="40"></canvas></div>
+  <div class="cell"><canvas id="c_bw_gamma"   height="40"></canvas></div>
+  <div class="cell"><canvas id="c_bw_mixbox"  height="40"></canvas></div>
+
+  <div class="row-label">青 + 品红<br><small style="color:#555">差异最大</small></div>
+  <div class="cell"><canvas id="c_cm_linear"  height="40"></canvas></div>
+  <div class="cell"><canvas id="c_cm_direct"  height="40"></canvas></div>
+  <div class="cell"><canvas id="c_cm_gamma"   height="40"></canvas></div>
+  <div class="cell"><canvas id="c_cm_mixbox"  height="40"></canvas></div>
+</div>
+
+<p class="note">
+  需要本地服务器（或直接从根目录打开）才能加载 mixbox.js。<br>
+  KM Gamma = sRGB → 线性光 → KM混色 → sRGB，比直接 KM 更接近物理颜料混色效果。
+</p>
+
+<script src="js/mixbox.js"></script>
+<script>
+// ============ 混色算法（CPU 实现，用于 Canvas 2D 渲染）============
+
+function linearMix(r1, g1, b1, r2, g2, b2, t) {
+  return [r1 + (r2 - r1) * t, g1 + (g2 - g1) * t, b1 + (b2 - b1) * t];
+}
+
+function rgbToKS(r) {
+  const c = Math.max(0.001, Math.min(0.999, r));
+  return (1 - c) * (1 - c) / (2 * c);
+}
+
+function ksToRGB(k) {
+  return 1 + k - Math.sqrt(k * k + 2 * k);
+}
+
+function kmMixDirect(r1, g1, b1, r2, g2, b2, t) {
+  const ks1 = [rgbToKS(r1), rgbToKS(g1), rgbToKS(b1)];
+  const ks2 = [rgbToKS(r2), rgbToKS(g2), rgbToKS(b2)];
+  const ksMix = ks1.map((k, i) => k + (ks2[i] - k) * t);
+  return ksMix.map(ksToRGB);
+}
+
+function linearize(v) { return Math.pow(Math.max(0, v), 2.2); }
+function delinearize(v) { return Math.pow(Math.max(0, v), 1 / 2.2); }
+function luminance(r, g, b) { return 0.2126 * r + 0.7152 * g + 0.0722 * b; }
+
+function kmMixGamma(r1, g1, b1, r2, g2, b2, t) {
+  const l1 = [linearize(r1), linearize(g1), linearize(b1)];
+  const l2 = [linearize(r2), linearize(g2), linearize(b2)];
+  const ks1 = l1.map(rgbToKS);
+  const ks2 = l2.map(rgbToKS);
+  const ksMix = ks1.map((k, i) => k + (ks2[i] - k) * t);
+  let [mr, mg, mb] = ksMix.map(ksToRGB);
+
+  // 亮度补偿：0.75 = 更靠近线性插值亮度，整体更亮
+  const kmLum  = luminance(mr, mg, mb);
+  const linLum = luminance(l1[0]+(l2[0]-l1[0])*t, l1[1]+(l2[1]-l1[1])*t, l1[2]+(l2[2]-l1[2])*t);
+  const targetLum = kmLum * 0.25 + linLum * 0.75;
+  if (kmLum > 0.001) { const s = targetLum / kmLum; mr *= s; mg *= s; mb *= s; }
+
+  // 饱和度 boost（中间区域）：0.6 = 更鲜艳的中间色，接近 Mixbox 效果
+  const mid = 1.0 - Math.abs(t * 2 - 1);
+  const boost = 1.0 + 0.6 * Math.pow(Math.max(0, Math.min(1, mid)), 1);
+  const lum = luminance(mr, mg, mb);
+  mr = lum + (mr - lum) * boost;
+  mg = lum + (mg - lum) * boost;
+  mb = lum + (mb - lum) * boost;
+
+  return [delinearize(Math.max(0,Math.min(1,mr))), delinearize(Math.max(0,Math.min(1,mg))), delinearize(Math.max(0,Math.min(1,mb)))];
+}
+
+// ============ Mixbox 混色（依赖 mixbox.js）============
+
+function mixboxMix(r1, g1, b1, r2, g2, b2, t) {
+  if (typeof mixbox === 'undefined') return linearMix(r1, g1, b1, r2, g2, b2, t);
+  const c1 = [Math.round(r1*255), Math.round(g1*255), Math.round(b1*255)];
+  const c2 = [Math.round(r2*255), Math.round(g2*255), Math.round(b2*255)];
+  const result = mixbox.lerp(c1, c2, t);
+  return [result[0]/255, result[1]/255, result[2]/255];
+}
+
+// ============ 渐变条渲染 ============
+
+function drawGradient(canvasEl, r1, g1, b1, r2, g2, b2, mixFn) {
+  const w = canvasEl.width = canvasEl.offsetWidth || 300;
+  const h = canvasEl.height = 40;
+  const ctx = canvasEl.getContext('2d');
+  const img = ctx.createImageData(w, h);
+
+  for (let x = 0; x < w; x++) {
+    const t = x / (w - 1);
+    let rgb;
+    if (mixFn === 'linear') {
+      rgb = linearMix(r1, g1, b1, r2, g2, b2, t);
+    } else if (mixFn === 'direct') {
+      rgb = kmMixDirect(r1, g1, b1, r2, g2, b2, t);
+    } else if (mixFn === 'mixbox') {
+      rgb = mixboxMix(r1, g1, b1, r2, g2, b2, t);
+    } else {
+      rgb = kmMixGamma(r1, g1, b1, r2, g2, b2, t);
+    }
+
+    const r = Math.round(Math.max(0, Math.min(1, rgb[0])) * 255);
+    const g = Math.round(Math.max(0, Math.min(1, rgb[1])) * 255);
+    const b = Math.round(Math.max(0, Math.min(1, rgb[2])) * 255);
+
+    for (let y = 0; y < h; y++) {
+      const idx = (y * w + x) * 4;
+      img.data[idx]     = r;
+      img.data[idx + 1] = g;
+      img.data[idx + 2] = b;
+      img.data[idx + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+function hexToRGB01(hex) {
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  return [r, g, b];
+}
+
+// ============ 固定测试色对 ============
+
+const testPairs = [
+  { id: 'rb', a: '#ff0000', b: '#0000ff' },
+  { id: 'by', a: '#0000ff', b: '#ffff00' },
+  { id: 'ry', a: '#ff0000', b: '#ffff00' },
+  { id: 'bw', a: '#000000', b: '#ffffff' },
+  { id: 'cm', a: '#00ffff', b: '#ff00ff' },
+];
+
+function renderAll() {
+  // 自定义色对
+  const hexA = document.getElementById('colorA').value;
+  const hexB = document.getElementById('colorB').value;
+  const [r1, g1, b1] = hexToRGB01(hexA);
+  const [r2, g2, b2] = hexToRGB01(hexB);
+
+  document.getElementById('customLabel').textContent = '自定义';
+
+  drawGradient(document.getElementById('c_custom_linear'),  r1, g1, b1, r2, g2, b2, 'linear');
+  drawGradient(document.getElementById('c_custom_direct'),  r1, g1, b1, r2, g2, b2, 'direct');
+  drawGradient(document.getElementById('c_custom_gamma'),   r1, g1, b1, r2, g2, b2, 'gamma');
+  drawGradient(document.getElementById('c_custom_mixbox'),  r1, g1, b1, r2, g2, b2, 'mixbox');
+
+  // 固定测试色对
+  for (const pair of testPairs) {
+    const [ar, ag, ab] = hexToRGB01(pair.a);
+    const [br, bg, bb] = hexToRGB01(pair.b);
+    drawGradient(document.getElementById(`c_${pair.id}_linear`),  ar, ag, ab, br, bg, bb, 'linear');
+    drawGradient(document.getElementById(`c_${pair.id}_direct`),  ar, ag, ab, br, bg, bb, 'direct');
+    drawGradient(document.getElementById(`c_${pair.id}_gamma`),   ar, ag, ab, br, bg, bb, 'gamma');
+    drawGradient(document.getElementById(`c_${pair.id}_mixbox`),  ar, ag, ab, br, bg, bb, 'mixbox');
+  }
+}
+
+document.getElementById('colorA').addEventListener('input', renderAll);
+document.getElementById('colorB').addEventListener('input', renderAll);
+
+// 等待布局完成后渲染（offsetWidth 需要布局）
+requestAnimationFrame(() => requestAnimationFrame(renderAll));
+</script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 {
   "id": "cc9344fb",
-  "name": "Mixbox Palette",
+  "name": "KM Watercolor Palette",
   "version": "1.0.2",
   "main": "index.html",
   "host": [
@@ -14,7 +14,7 @@
     {
       "type": "panel",
       "id": "mixboxpalette",
-      "label": "Mixbox Palette",
+      "label": "KM Watercolor Palette",
       "minimumSize": { "width": 400, "height": 600 },
       "maximumSize": { "width": 2000, "height": 2000 },
       "preferredDockedSize": { "width": 400, "height": 600 },
