@@ -89,7 +89,7 @@ class KMWebGLPainter {
     compileShaders() {
         const gl = this.gl;
 
-        // 顶点着色器（与 mixbox-painter.js 相同）
+        // 顶点着色器
         const vsSource = `
         attribute vec2 a_position;
         attribute vec2 a_texCoord;
@@ -148,17 +148,15 @@ class KMWebGLPainter {
             return mix(vec3(lum), c, factor);
         }
 
-        // ============ Latent-style KM 混色 ============
-        // 模仿 Mixbox 的架构：在有界空间插值 + 残差补偿
-        // Mixbox: rgb→latent(c0~c3, dr,dg,db), 在latent线性插值, latent→rgb
-        // KM版: rgb→reflectance, 线性插值得基础色, KM提供色相校正(减色混合特征)
+        // ============ KM 混色 ============
+        // 在有界空间插值 + KM 色相校正
 
         // 核心混色：反射率空间插值 + KM 色相校正
         vec3 km_mix_latent(vec3 c1, vec3 c2, float t) {
             vec3 l1 = pow(max(c1, vec3(0.0)), vec3(2.2));
             vec3 l2 = pow(max(c2, vec3(0.0)), vec3(2.2));
 
-            // 1) 基础：线性光空间直接插值（和 Mixbox latent 类似，有界 0~1）
+            // 1) 基础：线性光空间直接插值（有界 0~1）
             vec3 lin_result = mix(l1, l2, t);
 
             // 2) KM 色相校正：用 K/S 算出减色混合的色相偏移
@@ -174,7 +172,7 @@ class KMWebGLPainter {
             float kmWeight = 0.5;
             vec3 blended = mix(lin_result, km_result, kmWeight);
 
-            // 4) 饱和度 boost（中间区域，模仿 Mixbox 的鲜艳中间色）
+            // 4) 饱和度 boost（中间区域，保持鲜艳中间色）
             float mid = 1.0 - abs(t * 2.0 - 1.0);
             float boost = 1.0 + 0.6 * smoothstep(0.0, 1.0, mid);
             vec3 saturated = adjust_saturation(blended, boost);
@@ -380,7 +378,7 @@ class KMWebGLPainter {
             gl.bindTexture(gl.TEXTURE_2D, null);
         }
 
-        // 绑定纹理（比 mixbox-painter 少一个 LUT 纹理，单元从 0 开始）
+        // 绑定纹理
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, this.textures.canvas);
         gl.uniform1i(this.locations.u_canvasTexture, 0);
