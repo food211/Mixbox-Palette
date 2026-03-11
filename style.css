@@ -148,14 +148,16 @@ h1 {
     color: #b0b0b0;
 }
 
-/* 语言切换按钮 */
+/* 语言切换 & 引擎切换按钮 */
 .lang-selector {
     position: absolute;
     top: 0;
     left: 0;
+    display: flex;
+    gap: 4px;
 }
 
-.lang-btn {
+.lang-btn, .engine-btn {
     background-color: #404040;
     color: #ffffff;
     border: none;
@@ -167,9 +169,14 @@ h1 {
     transition: opacity 0.2s, background-color 0.2s;
 }
 
-.lang-btn:hover {
+.lang-btn:hover, .engine-btn:hover {
     background-color: #505050;
     opacity: 1;
+}
+
+.engine-btn.active {
+    background-color: #2196F3;
+    opacity: 0.9;
 }
 
 /* 缩放选择器样式 */

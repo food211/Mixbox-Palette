@@ -39,6 +39,8 @@ const I18N = {
             paletteName_schminckeHoradam: 'Schmincke Horadam 16',
             paletteName_kuretakeGansai: 'Kuretake Gansai 16',
 
+            switchEngine: 'Switch Mixing Engine (Mixbox / KM)',
+
             // 笔刷名称
             brush_circle: 'Circle',
             brush_soft: 'Soft',
@@ -77,6 +79,8 @@ const I18N = {
             paletteName_digitalArtist: '数字艺术家调色板',
             paletteName_schminckeHoradam: '施美尔 Horadam 16色',
             paletteName_kuretakeGansai: '吴竹 Gansai 16色',
+
+            switchEngine: '切换混色引擎 (Mixbox / KM)',
 
             brush_circle: '圆形',
             brush_soft: '柔边',

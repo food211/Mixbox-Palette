@@ -1,7 +1,7 @@
 /**
- * Service Worker - Mixbox Palette 离线缓存
+ * Service Worker - KM Watercolor Palette 离线缓存
  */
-const CACHE_NAME = 'mixbox-palette-v2';
+const CACHE_NAME = 'km-palette-v2';
 const CACHE_URLS = [
   './',
   './index.html',
@@ -10,6 +10,7 @@ const CACHE_URLS = [
   './js/app.js',
   './js/mixbox.js',
   './js/mixbox-painter.js',
+  './js/km-painter.js',
   './js/brush-manager.js',
   './js/palette-storage.js',
   './icons/icon.png'

@@ -11,6 +11,7 @@
             <!-- 语言切换 - 左上角 -->
             <div class="lang-selector">
                 <button id="langBtn" class="lang-btn">EN</button>
+                <button id="engineBtn" class="engine-btn" data-i18n-title="switchEngine" title="Switch Mixing Engine">MB</button>
             </div>
             <!-- 缩放控制 - 右上角 -->
             <div class="zoom-selector">
@@ -142,17 +143,19 @@
             // 首先加载 i18n
             await loadScript('js/i18n.js');
 
-            // 加载基础的 mixbox.js
-            await loadScript('js/mixbox.js');
-            console.log('✅ mixbox.js 已加载');
-            
-            // 根据环境选择合适的渲染器
+            // 加载混色引擎
             if (isWebGLSupported()) {
-                console.log('WebGL 可用，使用 WebGL 渲染器');
+                // 加载 Mixbox（默认引擎）
+                await loadScript('js/mixbox.js');
+                console.log('✅ mixbox.js 已加载');
                 await loadScript('js/mixbox-painter.js');
                 console.log('✅ mixbox-painter.js 已加载');
+                // 加载 KM（可选引擎）
+                await loadScript('js/km-painter.js');
+                console.log('✅ km-painter.js 已加载');
             } else {
-                console.log('WebGL 不可用，使用 Canvas 2D 渲染器');
+                // WebGL 不可用时用 Canvas 2D 回退
+                await loadScript('js/mixbox.js');
                 await loadScript('js/mixbox-canvas-painter.js');
                 console.log('✅ mixbox-canvas-painter.js 已加载');
             }
