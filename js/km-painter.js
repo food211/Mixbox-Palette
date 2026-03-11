@@ -176,12 +176,12 @@ class KMWebGLPainter {
             float kmWeight = 0.5;
             vec3 blended = mix(lin_result, km_result, kmWeight);
 
-            // 4) 饱和度 boost（中间区域，保持鲜艳中间色）
-            float mid = 1.0 - abs(t * 2.0 - 1.0);
-            float boost = 1.0 + 0.6 * smoothstep(0.0, 1.0, mid);
-            vec3 saturated = adjust_saturation(blended, boost);
+            // // 4) 饱和度 boost（中间区域，保持鲜艳中间色）
+            // float mid = 1.0 - abs(t * 2.0 - 1.0);
+            // float boost = 1.0 + 0.6 * smoothstep(0.0, 1.0, mid);
+            // vec3 saturated = adjust_saturation(blended, boost);
 
-            return pow(clamp(saturated, 0.0, 1.0), vec3(1.0 / 2.2));
+            return pow(clamp(blended, 0.0, 1.0), vec3(1.0 / 2.2));
         }
 
         // 直接 KM 混色（无 Gamma，备用）— 也改用几何平均
@@ -207,8 +207,9 @@ class KMWebGLPainter {
 
             float distToCenter = length(v_canvasCoord - u_currentPosition);
             float radialFalloff = 1.0 - smoothstep(0.0, u_brushRadius, distToCenter);
+            float centerBoost = pow(radialFalloff, 0.5);
 
-            float mixAmount = radialFalloff * brushAlpha * u_baseMixStrength;
+            float mixAmount = centerBoost * brushAlpha * u_baseMixStrength;
 
             vec3 mixedColor;
             if (u_gammaCorrect > 0.5) {
