@@ -1,6 +1,10 @@
 /**
- * KM 混色引擎
+ * KM 混色引擎 (Kubelka-Munk Mixing Engine)
  * 使用 Kubelka-Munk 物理公式进行颜料混色，无需 LUT
+ *
+ * Copyright (C) 2026 food211
+ * License: GPL-3.0 (https://www.gnu.org/licenses/gpl-3.0.html)
+ * Repository: https://github.com/food211/Mixbox-Palette
  */
 class KMWebGLPainter {
     constructor(canvas) {

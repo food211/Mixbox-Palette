@@ -3,6 +3,7 @@
 A UXP plugin for realistic watercolor mixing in Adobe Photoshop, with dual mixing engines.
 
 ![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg)
+![Mixbox License](https://img.shields.io/badge/Mixbox-CC%20BY--NC%204.0-lightgrey.svg)
 
 ## Features
 
@@ -92,7 +93,12 @@ The plugin loads from Cloudflare Pages (`mixbox-palette.pages.dev`) by default, 
 
 ## License
 
-GPL v3 - See [LICENSE](LICENSE) for details.
+This project contains code under two licenses:
+
+- **Original code** (KM engine, UI, etc.) — [GPL-3.0](LICENSE)
+- **Mixbox library** (`js/mixbox.js`) — [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) (non-commercial use only, by Secret Weapons)
+
+When using the Mixbox engine, the CC BY-NC 4.0 restriction applies to the overall use. The KM engine has no such restriction.
 
 ## Trademarks
 
@@ -151,7 +157,12 @@ Adobe Photoshop UXP 调色板插件，内置双混色引擎，模拟真实水彩
 
 ## 许可证
 
-GPL v3 - 详见 [LICENSE](LICENSE) 文件。
+本项目包含两种许可证的代码：
+
+- **自研代码**（KM 引擎、UI 等）— [GPL-3.0](LICENSE)
+- **Mixbox 库**（`js/mixbox.js`）— [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/)（仅限非商业用途，由 Secret Weapons 提供）
+
+使用 Mixbox 引擎时，整体使用受 CC BY-NC 4.0 限制；KM 引擎无此限制。
 
 ## 商标声明
 
