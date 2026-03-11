@@ -20,7 +20,7 @@ The plugin offers two physical color mixing engines, switchable via the **MB/KM*
 
 Both engines produce realistic subtractive color mixing (e.g., yellow + blue = green). You can switch between them at any time - the canvas is automatically repainted using your stroke history.
 
-To compare both engines side by side, try the [KM Tuner](km-tuner.html) tool included in this repository.
+To compare both engines side by side, try the [KM Tuner](https://food211.github.io/Mixbox-Palette/km-tuner.html) tool included in this repository.
 
 ### Realistic Mixing
 - **Adjustable paint concentration** (1-50%) - Control color opacity and blending strength
@@ -117,7 +117,7 @@ Adobe Photoshop UXP 调色板插件，内置双混色引擎，模拟真实水彩
 - **双混色引擎** - 左上角 MB/KM 按钮可随时切换：
   - **Mixbox (MB)** - 默认引擎，基于 [Mixbox](https://scrtwpns.com/mixbox/) LUT 算法（CC BY-NC 4.0）
   - **KM** - 自研引擎，基于 Kubelka-Munk 物理公式，无外部依赖（GPL v3）
-  - 切换引擎后画布会自动用笔画历史重绘，可使用 [KM Tuner](km-tuner.html) 工具对比两种引擎的混色效果
+  - 切换引擎后画布会自动用笔画历史重绘，可使用 [KM Tuner](https://food211.github.io/Mixbox-Palette/km-tuner.html) 工具对比两种引擎的混色效果
 - **可调节颜料浓度** (1-50%)
 - **6 种笔刷预设** - 圆形、柔和、水彩、飞溅、平头、干笔
 - **涂抹工具** - 在画布上直接混合颜色
