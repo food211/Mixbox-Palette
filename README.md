@@ -1,9 +1,8 @@
-# 🎨 Mixbox Watercolor Palette for Adobe Photoshop
+# 🎨 Mixbox Palette for Adobe Photoshop
 
-A UXP plugin for realistic watercolor mixing in Adobe Photoshop, powered by the [Mixbox](https://scrtwpns.com/mixbox/) physical color mixing algorithm.
+A UXP plugin for realistic watercolor mixing in Adobe Photoshop, with dual mixing engines.
 
-![License](https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg)
-![Mixbox](https://img.shields.io/badge/Powered%20by-Mixbox-blue)
+![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg)
 
 ## Features
 
@@ -13,8 +12,17 @@ A UXP plugin for realistic watercolor mixing in Adobe Photoshop, powered by the 
 - **Kuretake Gansai 16** - Traditional Japanese watercolors
 - **Digital Artist Palette** - Common colors for digital painting
 
+### Dual Mixing Engines
+The plugin offers two physical color mixing engines, switchable via the **MB/KM** button in the top-left corner:
+
+- **Mixbox (MB)** - Default engine. Uses the [Mixbox](https://scrtwpns.com/mixbox/) LUT-based algorithm for high-quality pigment mixing. Licensed under CC BY-NC 4.0.
+- **KM** - Self-implemented engine based on Kubelka-Munk physical theory. No external dependencies, no LUT. GPL v3 licensed.
+
+Both engines produce realistic subtractive color mixing (e.g., yellow + blue = green). You can switch between them at any time - the canvas is automatically repainted using your stroke history.
+
+To compare both engines side by side, try the [KM Tuner](https://food211.github.io/Mixbox-Palette/km-tuner.html) tool included in this repository.
+
 ### Realistic Mixing
-- **Physical color mixing** - Mixbox algorithm simulates real pigment blending
 - **Adjustable paint concentration** (1-50%) - Control color opacity and blending strength
 - **Brush size control** (2-50px)
 - **6 brush presets** - Circle, Soft, Watercolor, Splatter, Flat, Dry
@@ -46,7 +54,7 @@ The plugin loads from Cloudflare Pages (`mixbox-palette.pages.dev`) by default, 
 
 ### From Adobe Marketplace
 
-1. Visit [Mixbox Watercolor Palette on Adobe Marketplace](https://exchange.adobe.com/apps/cc/cc9344fb/mixbox-watercolor-palette)
+1. Visit [KM Watercolor Palette on Adobe Marketplace](https://exchange.adobe.com/apps/cc/cc9344fb/mixbox-watercolor-palette)
 2. Install and open from Photoshop `Plugins` menu
 
 ### From Release (.ccx)
@@ -75,7 +83,7 @@ The plugin loads from Cloudflare Pages (`mixbox-palette.pages.dev`) by default, 
 
 ## Tech Stack
 
-- **Mixing Engine**: [Mixbox](https://scrtwpns.com/mixbox/) - Physical pigment mixing algorithm
+- **Mixing Engines**: Mixbox (LUT-based, CC BY-NC 4.0) + Kubelka-Munk (self-implemented, GPL v3)
 - **Rendering**: WebGL + Canvas 2D dual-buffer
 - **Platform**: Adobe UXP + WebView
 - **Hosting**: Cloudflare Pages (primary) / GitHub Pages (fallback)
@@ -84,7 +92,7 @@ The plugin loads from Cloudflare Pages (`mixbox-palette.pages.dev`) by default, 
 
 ## License
 
-CC BY-NC 4.0 (Non-commercial use only) - Due to Mixbox library licensing.
+GPL v3 - See [LICENSE](LICENSE) for details.
 
 ## Trademarks
 
@@ -99,14 +107,17 @@ Adobe and Photoshop are either registered trademarks or trademarks of Adobe in t
 
 ---
 
-# 🎨 Mixbox 水彩调色板 - Adobe Photoshop 插件
+# 🎨 Mixbox 调色板 - Adobe Photoshop 插件
 
-基于 [Mixbox](https://scrtwpns.com/mixbox/) 物理混色算法的 Adobe Photoshop UXP 调色板插件，模拟真实水彩颜料的混合效果。
+Adobe Photoshop UXP 调色板插件，内置双混色引擎，模拟真实水彩颜料的混合效果。
 
 ## 功能特点
 
 - **4 套专业调色盘预设** - 温莎牛顿 Cotman、施美尔 Horadam、吴竹 Gansai、数字艺术家
-- **物理级混色** - 基于 Mixbox 算法，模拟真实水彩颜料混合
+- **双混色引擎** - 左上角 MB/KM 按钮可随时切换：
+  - **Mixbox (MB)** - 默认引擎，基于 [Mixbox](https://scrtwpns.com/mixbox/) LUT 算法（CC BY-NC 4.0）
+  - **KM** - 自研引擎，基于 Kubelka-Munk 物理公式，无外部依赖（GPL v3）
+  - 切换引擎后画布会自动用笔画历史重绘，可使用 [KM Tuner](https://food211.github.io/Mixbox-Palette/km-tuner.html) 工具对比两种引擎的混色效果
 - **可调节颜料浓度** (1-50%)
 - **6 种笔刷预设** - 圆形、柔和、水彩、飞溅、平头、干笔
 - **涂抹工具** - 在画布上直接混合颜色
@@ -120,7 +131,7 @@ Adobe and Photoshop are either registered trademarks or trademarks of Adobe in t
 
 ### 通过 Adobe Marketplace
 
-1. 访问 [Mixbox Watercolor Palette - Adobe Marketplace](https://exchange.adobe.com/apps/cc/cc9344fb/mixbox-watercolor-palette)
+1. 访问 [KM Watercolor Palette - Adobe Marketplace](https://exchange.adobe.com/apps/cc/cc9344fb/mixbox-watercolor-palette)
 2. 安装后从 Photoshop `插件` 菜单打开
 
 ### 从 Release 下载 (.ccx)
@@ -140,7 +151,7 @@ Adobe and Photoshop are either registered trademarks or trademarks of Adobe in t
 
 ## 许可证
 
-CC BY-NC 4.0（仅限非商业用途）- 受 Mixbox 库许可证限制。
+GPL v3 - 详见 [LICENSE](LICENSE) 文件。
 
 ## 商标声明
 
