@@ -85,7 +85,7 @@ function loadSource(index) {
   currentSourceIndex = index;
   errorMessage.classList.remove('show');
   retryBtn.classList.remove('show');
-  loadingText.textContent = 'Loading Mixbox Palette...';
+  loadingText.textContent = 'Loading KM Watercolor Palette...';
   startProgress();
   webview.src = SOURCES[index];
 }
