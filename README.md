@@ -104,6 +104,10 @@ When using the Mixbox engine, the CC BY-NC 4.0 restriction applies to the overal
 
 Adobe and Photoshop are either registered trademarks or trademarks of Adobe in the United States and/or other countries.
 
+## Changelog
+
+See [Changelog](https://food211.github.io/Mixbox-Palette/changelog.html) for version history.
+
 ## Support
 
 - ⭐ Star this project
@@ -167,6 +171,10 @@ Adobe Photoshop UXP 调色板插件，内置双混色引擎，模拟真实水彩
 ## 商标声明
 
 Adobe 和 Photoshop 是 Adobe 在美国和/或其他国家/地区的注册商标或商标。
+
+## 更新日志
+
+查看 [更新日志](https://food211.github.io/Mixbox-Palette/changelog.html) 了解版本历史。
 
 ## 赞助
 

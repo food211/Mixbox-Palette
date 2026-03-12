@@ -630,3 +630,80 @@ h1 {
 .upload-btn:hover {
     background-color: #1976D2;
 }
+
+/* ============ 更新提示弹窗 ============ */
+.update-modal-content {
+    max-width: 420px;
+    max-height: 70vh;
+}
+
+.update-modal-body {
+    font-size: 13px;
+    line-height: 1.6;
+    color: #c8c8c8;
+    max-height: 240px;
+    overflow-y: auto;
+    margin-bottom: 10px;
+}
+
+.update-modal-body .update-section-title {
+    font-size: 12px;
+    font-weight: bold;
+    color: #888;
+    margin: 8px 0 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.update-modal-body .update-item {
+    margin: 3px 0;
+    padding-left: 4px;
+}
+
+.update-changelog-link {
+    display: block;
+    font-size: 12px;
+    color: #5b9bd5;
+    text-decoration: none;
+    margin-bottom: 14px;
+}
+
+.update-changelog-link:hover {
+    text-decoration: underline;
+}
+
+.update-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.update-btn-later,
+.update-btn-dismiss {
+    background: none;
+    border: 1px solid #555;
+    color: #b0b0b0;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.update-btn-later:hover,
+.update-btn-dismiss:hover {
+    background-color: #3c3c3c;
+}
+
+.update-btn-refresh {
+    background-color: #2196F3;
+    border: none;
+    color: white;
+    padding: 6px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.update-btn-refresh:hover {
+    background-color: #1976D2;
+}

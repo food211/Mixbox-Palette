@@ -99,6 +99,23 @@
         </div>
     </div>
 
+    <!-- 更新提示弹窗 -->
+    <div class="brush-selector-modal" id="updateModal">
+        <div class="brush-selector-content update-modal-content">
+            <div class="brush-selector-header">
+                <h3 id="updateModalTitle"></h3>
+                <button class="close-btn" id="updateCloseBtn">×</button>
+            </div>
+            <div id="updateModalBody" class="update-modal-body"></div>
+            <a id="updateChangelogLink" href="#" target="_blank" class="update-changelog-link"></a>
+            <div class="update-modal-actions">
+                <button id="updateLaterBtn" class="update-btn-later"></button>
+                <button id="updateDismissBtn" class="update-btn-dismiss"></button>
+                <button id="updateRefreshBtn" class="update-btn-refresh"></button>
+            </div>
+        </div>
+    </div>
+
     <!-- 笔刷选择器弹窗 -->
     <div class="brush-selector-modal" id="brushModal">
         <div class="brush-selector-content">
@@ -171,9 +188,15 @@
             await loadScript('js/app.js');
             console.log('✅ app.js 已加载');
 
+            // 加载更新检测模块
+            await loadScript('js/updater.js');
+
             // 重要：手动调用 app.js 中的 initApp 函数
             console.log('🚀 正在初始化应用...');
             window.initApp();
+
+            // 延迟检测更新（避免阻塞启动）
+            setTimeout(() => Updater.check(), 3000);
             
         } catch (error) {
             console.error('初始化失败:', error);
