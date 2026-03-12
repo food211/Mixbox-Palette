@@ -1,5 +1,24 @@
 # 更新日志 / Changelog
 
+== V1.0.3 ==
+[ZH]
+### 新增
+- **背景色绘制支持** — 选中背景色目标时，笔刷现在使用背景色绘制
+
+### 改进
+- 修复颜色切换（X 键）和复位（D 键）后颜色同步不稳定的问题，改为延迟读取确保 PS 完成更新
+- 修复从 PS 获取绿色通道时偶发读取错误字段（`grain` 字段兼容处理）
+- 优化获取 PS 颜色的 batchPlay 请求格式，提高兼容性
+
+[EN]
+### New Features
+- **Background color painting** — Brush now uses the background color when background target is selected
+
+### Improvements
+- Fixed unstable color sync after X (swap) / D (reset) color events — now uses a short delay to ensure PS finishes updating
+- Fixed occasional wrong field read for green channel (`grain` field compatibility)
+- Updated batchPlay query format for fetching PS colors for better compatibility
+
 == V1.0.2 ==
 [ZH]
 ### 新增
