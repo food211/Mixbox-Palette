@@ -117,8 +117,9 @@ let currentPalette = 'winsorNewtonCotman';
 let colors = palettePresets[currentPalette].colors;
 
 // 当前状态
-let foregroundColor = colors[0].hex;
-let backgroundColor = colors[15].hex;
+// WebView 环境下颜色由 PS 推送，不设初始值；浏览器直接预览时使用调色板第一色
+let foregroundColor = isInWebView() ? null : colors[0].hex;
+let backgroundColor = isInWebView() ? null : colors[15].hex;
 let currentBrushColor = foregroundColor;
 let brushSize = 15;
 let isDrawing = false;
@@ -231,9 +232,12 @@ async function initApp() {
     if (savedPalette && palettePresets[savedPalette]) {
         currentPalette = savedPalette;
         colors = palettePresets[currentPalette].colors;
-        foregroundColor = colors[0].hex;
-        backgroundColor = colors[15].hex;
-        currentBrushColor = foregroundColor;
+        // WebView 下颜色由 PS 推送，不重置
+        if (!isInWebView()) {
+            foregroundColor = colors[0].hex;
+            backgroundColor = colors[15].hex;
+            currentBrushColor = foregroundColor;
+        }
         console.log('✅ 已加载保存的调色盘预设:', palettePresets[currentPalette].name);
     }
     
@@ -421,10 +425,12 @@ function switchPalette(paletteKey) {
         currentPalette = paletteKey;
         colors = palettePresets[paletteKey].colors;
         
-        // 更新前景色和背景色
-        foregroundColor = colors[0].hex;
-        backgroundColor = colors[15].hex;
-        currentBrushColor = foregroundColor;
+        // WebView 环境下颜色由 PS 管理，切换调色板时不重置颜色
+        if (!isInWebView()) {
+            foregroundColor = colors[0].hex;
+            backgroundColor = colors[15].hex;
+            currentBrushColor = foregroundColor;
+        }
         
         // 更新UI
         updateColorPicker();
@@ -891,8 +897,8 @@ let lastSyncedBgColor = null;
  * 更新颜色显示，并在颜色变化时自动同步到 PS
  */
 function updateColorDisplay() {
-    fgColorBox.style.backgroundColor = foregroundColor;
-    bgColorBox.style.backgroundColor = backgroundColor;
+    if (foregroundColor) fgColorBox.style.backgroundColor = foregroundColor;
+    if (backgroundColor) bgColorBox.style.backgroundColor = backgroundColor;
     document.querySelectorAll('.color-circle').forEach(circle => {
         const color = circle.dataset.color;
         circle.classList.toggle('selected-fg', color === foregroundColor);
