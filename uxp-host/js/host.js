@@ -136,7 +136,7 @@ async function sendColorToWebView(target, colorObj) {
     console.warn("⚠️ Unknown color format:", colorObj._obj, "- attempting direct use");
   }
   const r = Math.round(rgb.red);
-  const g = Math.round(rgb.green);
+  const g = Math.round(rgb.grain ?? rgb.green);
   const b = Math.round(rgb.blue);
   const hex = rgbToHex(r, g, b);
   webview.postMessage({
@@ -154,7 +154,7 @@ function toRgb(colorObj) {
   if (colorObj._obj === "HSBColorClass") {
     rgb = hsbToRgb(colorObj.hue?._value ?? colorObj.hue, colorObj.saturation, colorObj.brightness);
   }
-  const r = Math.round(rgb.red), g = Math.round(rgb.green), b = Math.round(rgb.blue);
+  const r = Math.round(rgb.red), g = Math.round(rgb.grain ?? rgb.green), b = Math.round(rgb.blue);
   return { r, g, b, hex: rgbToHex(r, g, b) };
 }
 
@@ -163,19 +163,17 @@ async function fetchAndSendBothColors() {
     let fg, bg;
     await core.executeAsModal(async () => {
       const result = await action.batchPlay([
-        { _obj: "get", _target: [{ _ref: "color", _property: "foregroundColor" }] },
-        { _obj: "get", _target: [{ _ref: "color", _property: "backgroundColor" }] }
+        { _obj: "get", _target: [{ _property: "foregroundColor" }, { _ref: "application", _enum: "ordinal", _value: "targetEnum" }] },
+        { _obj: "get", _target: [{ _property: "backgroundColor" }, { _ref: "application", _enum: "ordinal", _value: "targetEnum" }] }
       ], {});
       fg = result[0]?.foregroundColor;
       bg = result[1]?.backgroundColor;
     }, { commandName: "Get PS Colors" });
-    console.log(`📤 psInitColors → fg:`, JSON.stringify(fg), `bg:`, JSON.stringify(bg));
     const msg = {
       type: "psInitColors",
       foreground: toRgb(fg),
       background: toRgb(bg)
     };
-    console.log(`📤 posting message:`, JSON.stringify(msg));
     webview.postMessage(msg, "*");
   } catch (e) {
     console.error("❌ fetchAndSendBothColors failed:", e.message || e);
@@ -211,9 +209,8 @@ function listenPSColorEvents() {
           await sendColorToWebView("background", colorData);
         }
       } else {
-        // exchange / reset 时两色都变，一并同步
-        console.log(`  calling fetchAndSendBothColors for ${event}`);
-        await fetchAndSendBothColors();
+        // exchange / reset 时两色都变，延迟读取确保 PS 已完成颜色更新
+        setTimeout(() => fetchAndSendBothColors(), 100);
       }
     } catch (e) {
       console.error(`❌ ${event} handler error:`, e.message || e);
