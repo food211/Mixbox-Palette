@@ -13,6 +13,7 @@ const CACHE_URLS = [
   './js/km-painter.js',
   './js/brush-manager.js',
   './js/palette-storage.js',
+  './js/updater.js',
   './icons/icon.png'
 ];
 

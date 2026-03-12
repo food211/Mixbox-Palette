@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Changelog — Mixbox Palette</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        body {
+            min-height: 100vh;
+            padding: 24px 16px 48px;
+            box-sizing: border-box;
+        }
+        .changelog-wrap {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .changelog-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #3c3c3c;
+        }
+        .changelog-header h1 {
+            font-size: 18px;
+            color: #e0e0e0;
+            margin: 0;
+        }
+        .cl-version-block { margin-bottom: 28px; }
+        .cl-version-title {
+            font-size: 15px;
+            font-weight: bold;
+            color: #e0e0e0;
+            margin: 0 0 12px;
+            padding: 6px 10px;
+            background: #2c2c2c;
+            border-radius: 4px;
+            border-left: 3px solid #2196F3;
+        }
+        .cl-section-title {
+            font-size: 11px;
+            font-weight: bold;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin: 10px 0 4px;
+        }
+        .cl-item {
+            font-size: 13px;
+            color: #c8c8c8;
+            line-height: 1.6;
+            margin: 3px 0;
+            padding-left: 4px;
+        }
+        .cl-item a { color: #5b9bd5; text-decoration: none; }
+        .cl-item a:hover { text-decoration: underline; }
+        .cl-lang-toggle { display: flex; gap: 6px; }
+        .cl-lang-btn {
+            background: none;
+            border: 1px solid #555;
+            color: #b0b0b0;
+            padding: 3px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .cl-lang-btn.active {
+            background: #2196F3;
+            border-color: #2196F3;
+            color: #fff;
+        }
+        .cl-loading { color: #888; font-size: 13px; text-align: center; padding: 40px 0; }
+        .cl-error { color: #e57373; font-size: 13px; text-align: center; padding: 40px 0; }
+    </style>
+</head>
+<body>
+    <div class="changelog-wrap">
+        <div class="changelog-header">
+            <h1 id="clTitle">📋 Changelog</h1>
+            <div class="cl-lang-toggle">
+                <button class="cl-lang-btn" id="clLangZH">中</button>
+                <button class="cl-lang-btn" id="clLangEN">EN</button>
+            </div>
+        </div>
+        <div id="clContent" class="cl-loading">Loading…</div>
+    </div>
+
+    <script src="js/i18n.js"></script>
+    <script>
+        const CHANGELOG_URL = 'https://raw.githubusercontent.com/food211/Mixbox-Palette/main/CHANGELOG.md';
+
+        function parseAllVersions(text) {
+            const parts = text.split(/^== (V[\d.]+) ==$/m);
+            const versions = [];
+            for (let i = 1; i < parts.length; i += 2) {
+                const version = parts[i].trim();
+                const body = parts[i + 1] || '';
+                const zhMatch = body.match(/\[ZH\]([\s\S]*?)(?=\[EN\]|$)/);
+                const enMatch = body.match(/\[EN\]([\s\S]*?)(?=\[ZH\]|== |$)/);
+                versions.push({
+                    version,
+                    zh: zhMatch ? zhMatch[1].trim() : '',
+                    en: enMatch ? enMatch[1].trim() : '',
+                });
+            }
+            return versions;
+        }
+
+        function mdToHtml(md) {
+            return md.split('\n').map(line => {
+                line = line
+                    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" target="_blank">$1</a>');
+                if (/^###\s+/.test(line))
+                    return '<p class="cl-section-title">' + line.replace(/^###\s+/, '') + '</p>';
+                if (/^-\s+/.test(line))
+                    return '<p class="cl-item">• ' + line.replace(/^-\s+/, '') + '</p>';
+                if (line.trim())
+                    return '<p class="cl-item">' + line + '</p>';
+                return '';
+            }).filter(Boolean).join('');
+        }
+
+        function renderVersions(versions, lang) {
+            if (!versions.length) return '<div class="cl-error">No changelog data found.</div>';
+            return versions.map(v => {
+                const content = lang === 'zh' ? (v.zh || v.en) : (v.en || v.zh);
+                return '<div class="cl-version-block">'
+                    + '<p class="cl-version-title">' + v.version + '</p>'
+                    + mdToHtml(content)
+                    + '</div>';
+            }).join('');
+        }
+
+        I18N.init();
+        let currentLang = I18N.getLang();
+        let allVersions = [];
+
+        function applyLang(lang) {
+            currentLang = lang;
+            document.getElementById('clLangZH').classList.toggle('active', lang === 'zh');
+            document.getElementById('clLangEN').classList.toggle('active', lang === 'en');
+            document.getElementById('clTitle').textContent = lang === 'zh' ? '📋 更新日志' : '📋 Changelog';
+            document.getElementById('clContent').innerHTML = renderVersions(allVersions, lang);
+        }
+
+        document.getElementById('clLangZH').addEventListener('click', () => applyLang('zh'));
+        document.getElementById('clLangEN').addEventListener('click', () => applyLang('en'));
+
+        fetch(CHANGELOG_URL, { cache: 'no-store' })
+            .then(r => r.ok ? r.text() : Promise.reject(r.status))
+            .then(text => {
+                allVersions = parseAllVersions(text);
+                applyLang(currentLang);
+            })
+            .catch(() => {
+                document.getElementById('clContent').innerHTML =
+                    '<div class="cl-error">Failed to load changelog. Please check your connection.</div>';
+            });
+    </script>
+</body>
+</html>
