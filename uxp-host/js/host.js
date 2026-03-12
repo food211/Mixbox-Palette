@@ -148,15 +148,35 @@ async function sendColorToWebView(target, colorObj) {
 
 let colorEventsRegistered = false;
 
+function toRgb(colorObj) {
+  if (!colorObj) return null;
+  let rgb = colorObj;
+  if (colorObj._obj === "HSBColorClass") {
+    rgb = hsbToRgb(colorObj.hue?._value ?? colorObj.hue, colorObj.saturation, colorObj.brightness);
+  }
+  const r = Math.round(rgb.red), g = Math.round(rgb.green), b = Math.round(rgb.blue);
+  return { r, g, b, hex: rgbToHex(r, g, b) };
+}
+
 async function fetchAndSendBothColors() {
-  const result = await action.batchPlay([
-    { _obj: "get", _target: [{ _ref: "color", _property: "foregroundColor" }] },
-    { _obj: "get", _target: [{ _ref: "color", _property: "backgroundColor" }] }
-  ], { synchronousExecution: true });
-  const fg = result[0]?.foregroundColor;
-  const bg = result[1]?.backgroundColor;
-  if (fg) await sendColorToWebView("foreground", fg);
-  if (bg) await sendColorToWebView("background", bg);
+  try {
+    let fg, bg;
+    await core.executeAsModal(async () => {
+      const result = await action.batchPlay([
+        { _obj: "get", _target: [{ _ref: "color", _property: "foregroundColor" }] },
+        { _obj: "get", _target: [{ _ref: "color", _property: "backgroundColor" }] }
+      ], {});
+      fg = result[0]?.foregroundColor;
+      bg = result[1]?.backgroundColor;
+    }, { commandName: "Get PS Colors" });
+    webview.postMessage({
+      type: "psInitColors",
+      foreground: toRgb(fg),
+      background: toRgb(bg)
+    }, "*");
+  } catch (e) {
+    console.error("❌ fetchAndSendBothColors failed:", e.message || e);
+  }
 }
 
 function listenPSColorEvents() {
@@ -246,8 +266,6 @@ window.addEventListener("message", async (e) => {
     console.log(`✅ Loaded from: ${SOURCES[currentSourceIndex]}`);
     completeProgress();
     listenPSColorEvents();
-    // 立即同步 PS 当前颜色到插件，避免显示硬编码默认色
-    fetchAndSendBothColors().catch(err => console.error("❌ Initial color sync failed:", err));
     return;
   }
 
