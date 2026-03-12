@@ -148,6 +148,17 @@ async function sendColorToWebView(target, colorObj) {
 
 let colorEventsRegistered = false;
 
+async function fetchAndSendBothColors() {
+  const result = await action.batchPlay([
+    { _obj: "get", _target: [{ _ref: "color", _property: "foregroundColor" }] },
+    { _obj: "get", _target: [{ _ref: "color", _property: "backgroundColor" }] }
+  ], { synchronousExecution: true });
+  const fg = result[0]?.foregroundColor;
+  const bg = result[1]?.backgroundColor;
+  if (fg) await sendColorToWebView("foreground", fg);
+  if (bg) await sendColorToWebView("background", bg);
+}
+
 function listenPSColorEvents() {
   if (colorEventsRegistered) {
     console.log("⚠️ listenPSColorEvents already registered, skipping");
@@ -155,17 +166,6 @@ function listenPSColorEvents() {
   }
   colorEventsRegistered = true;
   console.log("🎧 Registering PS color event listeners...");
-
-  async function fetchAndSendBothColors() {
-    const result = await action.batchPlay([
-      { _obj: "get", _target: [{ _ref: "color", _property: "foregroundColor" }] },
-      { _obj: "get", _target: [{ _ref: "color", _property: "backgroundColor" }] }
-    ], { synchronousExecution: true });
-    const fg = result[0]?.foregroundColor;
-    const bg = result[1]?.backgroundColor;
-    if (fg) await sendColorToWebView("foreground", fg);
-    if (bg) await sendColorToWebView("background", bg);
-  }
 
   // "set" covers color picker / swatches changes
   // "exchange" covers pressing X to swap fg/bg
@@ -246,6 +246,8 @@ window.addEventListener("message", async (e) => {
     console.log(`✅ Loaded from: ${SOURCES[currentSourceIndex]}`);
     completeProgress();
     listenPSColorEvents();
+    // 立即同步 PS 当前颜色到插件，避免显示硬编码默认色
+    fetchAndSendBothColors().catch(err => console.error("❌ Initial color sync failed:", err));
     return;
   }
 
