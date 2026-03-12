@@ -655,7 +655,7 @@ function bindEvents() {
             mixCanvas.classList.add('eyedropper');
             mixCanvas.classList.remove('brush');
             updateStatus('eyedropper-fg');
-            
+
             // 按下 Alt 键时高亮吸管按钮
             const eyedropperBtn = document.getElementById('eyedropperBtn');
             if (eyedropperBtn) {
