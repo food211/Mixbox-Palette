@@ -6,6 +6,7 @@ const Updater = {
     CHANGELOG_URL: 'https://raw.githubusercontent.com/food211/Mixbox-Palette/main/CHANGELOG.md',
     CHANGELOG_PAGE: 'https://food211.github.io/Mixbox-Palette/changelog.html',
     STORAGE_KEY: 'mixbox_dismissed_update',
+    CURRENT_VERSION: 'V1.0.2',
 
     /** 解析 CHANGELOG.md 文本，返回最新版本 { version, contentZH, contentEN } */
     _parseChangelog(text) {
@@ -58,6 +59,8 @@ const Updater = {
             const parsed = this._parseChangelog(text);
             if (!parsed) return;
 
+            if (parsed.version === this.CURRENT_VERSION) return;
+
             const dismissed = localStorage.getItem(this.STORAGE_KEY);
             if (dismissed === parsed.version) return;
 
@@ -99,7 +102,10 @@ const Updater = {
             localStorage.setItem(this.STORAGE_KEY, version);
             modal.classList.remove('active');
         };
-        refreshBtn.onclick = () => location.reload(true);
+        refreshBtn.onclick = () => {
+            localStorage.setItem(this.STORAGE_KEY, version);
+            location.reload(true);
+        };
 
         modal.classList.add('active');
     },
