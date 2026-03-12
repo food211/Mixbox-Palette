@@ -459,14 +459,20 @@ h1 {
     width: 20px;
     height: 20px;
     border-radius: 4px;
+    cursor: pointer;
 }
 
 .color-box.foreground {
-    border: 2px solid #fff; 
+    border: 2px solid #fff;
 }
 
 .color-box.background {
-    border: 2px dashed #fff; 
+    border: 2px dashed #fff;
+}
+
+.color-box.active-target {
+    outline: 2px solid #6afe6f;
+    outline-offset: 2px;
 }
 
 .mix-area {

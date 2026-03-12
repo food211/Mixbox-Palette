@@ -169,11 +169,14 @@ async function fetchAndSendBothColors() {
       fg = result[0]?.foregroundColor;
       bg = result[1]?.backgroundColor;
     }, { commandName: "Get PS Colors" });
-    webview.postMessage({
+    console.log(`📤 psInitColors → fg:`, JSON.stringify(fg), `bg:`, JSON.stringify(bg));
+    const msg = {
       type: "psInitColors",
       foreground: toRgb(fg),
       background: toRgb(bg)
-    }, "*");
+    };
+    console.log(`📤 posting message:`, JSON.stringify(msg));
+    webview.postMessage(msg, "*");
   } catch (e) {
     console.error("❌ fetchAndSendBothColors failed:", e.message || e);
   }
@@ -191,10 +194,12 @@ function listenPSColorEvents() {
   // "exchange" covers pressing X to swap fg/bg
   // "reset" covers pressing D to reset to black/white
   action.addNotificationListener(["set", "exchange", "reset"], async (event, descriptor) => {
+    console.log(`🔔 PS event: ${event}`, JSON.stringify(descriptor).slice(0, 200));
     try {
       // "set" 只在目标是颜色时处理，避免每次图层操作都触发
       if (event === "set") {
         const prop = descriptor?._target?.[0]?._property;
+        console.log(`  set target prop: ${prop}`);
         if (prop !== "foregroundColor" && prop !== "backgroundColor") return;
 
         const colorData = descriptor?.to;
@@ -207,6 +212,7 @@ function listenPSColorEvents() {
         }
       } else {
         // exchange / reset 时两色都变，一并同步
+        console.log(`  calling fetchAndSendBothColors for ${event}`);
         await fetchAndSendBothColors();
       }
     } catch (e) {

@@ -3,14 +3,15 @@
  * 负责保存和加载画布状态、调色盘预设、笔刷设置和历史记录
  */
 class PaletteStorage {
-    constructor(key = 'mixbox_canvas_v1', paletteKey = 'mixbox_palette_preset', brushKey = 'mixbox_brush_settings', historyKey = 'mixbox_history') {
+    constructor(key = 'mixbox_canvas_v1', paletteKey = 'mixbox_palette_preset', brushKey = 'mixbox_brush_settings', historyKey = 'mixbox_history', settingsKey = 'mixbox_app_settings') {
         this.key = key;
         this.paletteKey = paletteKey;
         this.brushKey = brushKey;
         this.historyKey = historyKey;
+        this.settingsKey = settingsKey;
         this.autoSaveTimer = null;
     }
-    
+
     /**
      * 保存画布内容
      */
@@ -24,7 +25,7 @@ class PaletteStorage {
             return false;
         }
     }
-    
+
     /**
      * 加载画布内容
      */
@@ -40,51 +41,46 @@ class PaletteStorage {
         }
         return null;
     }
-    
+
     /**
      * 保存调色盘预设
      */
     savePalettePreset(presetName) {
         try {
             localStorage.setItem(this.paletteKey, presetName);
-            console.log('💾 调色盘预设已保存:', presetName);
             return true;
         } catch (e) {
             console.error('调色盘预设保存失败:', e);
             return false;
         }
     }
-    
+
     /**
      * 加载调色盘预设
      */
     loadPalettePreset() {
         try {
             const savedPreset = localStorage.getItem(this.paletteKey);
-            if (savedPreset) {
-                console.log('✅ 加载已保存的调色盘预设:', savedPreset);
-                return savedPreset;
-            }
+            if (savedPreset) return savedPreset;
         } catch (e) {
             console.error('调色盘预设加载失败:', e);
         }
         return null;
     }
-    
+
     /**
-     * 保存笔刷设置
+     * 保存笔刷设置（旧接口，内部合并到 appSettings）
      */
     saveBrushSettings(settings) {
         try {
             localStorage.setItem(this.brushKey, JSON.stringify(settings));
-            console.log('💾 笔刷设置已保存');
             return true;
         } catch (e) {
             console.error('笔刷设置保存失败:', e);
             return false;
         }
     }
-    
+
     /**
      * 加载笔刷设置
      */
@@ -102,13 +98,41 @@ class PaletteStorage {
     }
 
     /**
+     * 保存应用全局设置（颜色、混合强度等）
+     * settings: { foregroundColor, backgroundColor, brushMixStrength,
+     *             smudgeBrushSize, smudgeStrength }
+     */
+    saveAppSettings(settings) {
+        try {
+            const existing = this.loadAppSettings() || {};
+            localStorage.setItem(this.settingsKey, JSON.stringify({ ...existing, ...settings }));
+            return true;
+        } catch (e) {
+            console.error('应用设置保存失败:', e);
+            return false;
+        }
+    }
+
+    /**
+     * 加载应用全局设置
+     */
+    loadAppSettings() {
+        try {
+            const saved = localStorage.getItem(this.settingsKey);
+            if (saved) return JSON.parse(saved);
+        } catch (e) {
+            console.error('应用设置加载失败:', e);
+        }
+        return null;
+    }
+
+    /**
      * 保存历史记录
      */
     saveHistory(historyData, historyStep) {
         try {
             const data = JSON.stringify({ history: historyData, step: historyStep });
             localStorage.setItem(this.historyKey, data);
-            console.log('💾 历史记录已保存');
             return true;
         } catch (e) {
             console.error('历史记录保存失败:', e);
@@ -132,7 +156,7 @@ class PaletteStorage {
         }
         return null;
     }
-    
+
     /**
      * 自动保存（防抖）
      */
@@ -142,7 +166,7 @@ class PaletteStorage {
             this.save(canvasDataURL);
         }, delay);
     }
-    
+
     /**
      * 保存全部数据（画布、调色盘预设和笔刷设置）
      */
@@ -153,7 +177,7 @@ class PaletteStorage {
             this.saveBrushSettings(brushSettings);
         }
     }
-    
+
     /**
      * 自动保存全部数据（防抖）
      */
@@ -163,7 +187,7 @@ class PaletteStorage {
             this.saveAll(canvasDataURL, palettePreset, brushSettings);
         }, delay);
     }
-    
+
     /**
      * 清除
      */
@@ -171,7 +195,7 @@ class PaletteStorage {
         localStorage.removeItem(this.key);
         console.log('🗑️ 画布已清除');
     }
-    
+
     /**
      * 清除全部数据
      */
@@ -180,6 +204,7 @@ class PaletteStorage {
         localStorage.removeItem(this.paletteKey);
         localStorage.removeItem(this.brushKey);
         localStorage.removeItem(this.historyKey);
-        console.log('🗑️ 画布、调色盘预设、笔刷设置和历史记录已清除');
+        localStorage.removeItem(this.settingsKey);
+        console.log('🗑️ 所有数据已清除');
     }
 }
