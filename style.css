@@ -649,10 +649,13 @@ h1 {
 .update-modal-body .update-section-title {
     font-size: 12px;
     font-weight: bold;
-    color: #888;
     margin: 8px 0 4px;
     text-transform: uppercase;
     letter-spacing: 0.05em;
+    background: #383838;
+    padding: 2px 6px;
+    border-radius: 3px;
+    display: inline-block;
 }
 
 .update-modal-body .update-item {

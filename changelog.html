@@ -42,10 +42,13 @@
         .cl-section-title {
             font-size: 11px;
             font-weight: bold;
-            color: #888;
             text-transform: uppercase;
             letter-spacing: 0.06em;
             margin: 10px 0 4px;
+            background: #383838;
+            padding: 2px 6px;
+            border-radius: 3px;
+            display: inline-block;
         }
         .cl-item {
             font-size: 13px;
@@ -113,8 +116,12 @@
                 line = line
                     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
                     .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" target="_blank">$1</a>');
-                if (/^###\s+/.test(line))
-                    return '<p class="cl-section-title">' + line.replace(/^###\s+/, '') + '</p>';
+                if (/^###\s+/.test(line)) {
+                    const title = line.replace(/^###\s+/, '');
+                    const isImprovement = /improv|改进/i.test(title);
+                    const color = isImprovement ? '#7a9ab5' : '#7a9e8a';
+                    return '<p class="cl-section-title" style="color:' + color + '">' + title + '</p>';
+                }
                 if (/^-\s+/.test(line))
                     return '<p class="cl-item">• ' + line.replace(/^-\s+/, '') + '</p>';
                 if (line.trim())
