@@ -120,6 +120,7 @@ let colors = palettePresets[currentPalette].colors;
 let foregroundColor = '#000000';
 let backgroundColor = '#ffffff';
 let currentBrushColor = foregroundColor;
+let activeColorTarget = 'foreground'; // 'foreground' 或 'background'
 let brushSize = 15;
 let isDrawing = false;
 let isEyedropperMode = false;
@@ -237,27 +238,47 @@ async function initApp() {
     // 4. 加载保存的笔刷设置
     const savedBrushSettings = paletteStorage.loadBrushSettings();
     if (savedBrushSettings) {
-        // 恢复笔刷类型
         if (savedBrushSettings.brushType) {
             currentBrush.type = savedBrushSettings.brushType;
         }
-        
-        // 恢复笔刷大小
         if (savedBrushSettings.brushSize) {
             brushSize = savedBrushSettings.brushSize;
             if (brushSizeInput) brushSizeInput.value = brushSize;
             if (brushSizeValue) brushSizeValue.textContent = brushSize;
         }
-        
+        if (savedBrushSettings.mixStrength != null) {
+            if (brushMixSlider) brushMixSlider.value = savedBrushSettings.mixStrength;
+            if (brushMixValue) brushMixValue.textContent = savedBrushSettings.mixStrength;
+        }
         console.log('✅ 已加载保存的笔刷设置');
+    }
+
+    // 4b. 加载保存的应用设置（颜色、涂抹工具参数等）
+    const savedAppSettings = paletteStorage.loadAppSettings();
+    if (savedAppSettings) {
+        if (savedAppSettings.foregroundColor) {
+            foregroundColor = savedAppSettings.foregroundColor;
+            currentBrushColor = foregroundColor;
+        }
+        if (savedAppSettings.backgroundColor) {
+            backgroundColor = savedAppSettings.backgroundColor;
+        }
+        if (savedAppSettings.smudgeBrushSize != null) smudgeBrushSize = savedAppSettings.smudgeBrushSize;
+        if (savedAppSettings.smudgeStrength != null) smudgeStrength = savedAppSettings.smudgeStrength;
+        console.log('✅ 已加载保存的应用设置');
     }
 
     // 5. 初始化画布
     await initCanvas();
-    
+
+    // 5b. 画布初始化完成后将保存的混合强度应用到 painter
+    if (savedBrushSettings && savedBrushSettings.mixStrength != null && painter) {
+        painter.setMixStrength(savedBrushSettings.mixStrength / 100);
+    }
+
     // 6. 初始化UI
     initUI();
-    
+
     // 7. 绑定事件
     bindEvents();
     
@@ -277,15 +298,14 @@ async function initApp() {
 }
 
 /**
- * 保存笔刷设置
+ * 保存笔刷工具设置（笔刷类型、笔刷大小、混合强度）
  */
 function saveBrushSettings() {
-    const settings = {
+    paletteStorage.saveBrushSettings({
         brushType: currentBrush.type,
         brushSize: brushSize,
-    };
-    
-    paletteStorage.saveBrushSettings(settings);
+        mixStrength: parseInt(brushMixValue.textContent),
+    });
 }
 
 /**
@@ -454,17 +474,20 @@ function updateColorPicker() {
         
         circle.addEventListener('click', (e) => {
             e.preventDefault();
-            foregroundColor = colorObj.hex;
-            currentBrushColor = foregroundColor;
-            updateColorDisplay();
-            
-            // 选择颜色后自动关闭涂抹模式
-            if (currentTool === 'smudge') {
-                const smudgeBtn = document.getElementById('smudgeBtn');
-                smudgeBtn.click();  // 触发切换回笔刷模式
+            if (activeColorTarget === 'background') {
+                backgroundColor = colorObj.hex;
+            } else {
+                foregroundColor = colorObj.hex;
+                currentBrushColor = foregroundColor;
+                // 选择颜色后自动关闭涂抹模式
+                if (currentTool === 'smudge') {
+                    const smudgeBtn = document.getElementById('smudgeBtn');
+                    smudgeBtn.click();
+                }
             }
+            updateColorDisplay();
         });
-        
+
         colorPicker.appendChild(circle);
     });
 }
@@ -473,6 +496,16 @@ function updateColorPicker() {
  * 绑定事件
  */
 function bindEvents() {
+    // 前景/背景色块点击切换激活目标
+    fgColorBox.addEventListener('click', () => {
+        activeColorTarget = 'foreground';
+        updateColorDisplay();
+    });
+    bgColorBox.addEventListener('click', () => {
+        activeColorTarget = 'background';
+        updateColorDisplay();
+    });
+
     // 笔刷大小控制
     brushSizeInput.addEventListener('input', (e) => {
         brushSize = parseInt(e.target.value);
@@ -483,13 +516,10 @@ function bindEvents() {
     brushMixSlider.addEventListener('input', (e) => {
         const value = parseInt(e.target.value);
         brushMixValue.textContent = value;
-        
         if (painter && painter.setMixStrength) {
-            // 将 1-100 的范围转换为 0.01-1.0 的混合强度
-            const mixStrength = value / 100;  // 1% -> 0.01, 100% -> 1.0
-            painter.setMixStrength(mixStrength);
-            console.log(`混合强度: ${value}% (${mixStrength.toFixed(2)})`);
+            painter.setMixStrength(value / 100);
         }
+        saveBrushSettings();
     });
     
     // 清空按钮
@@ -506,9 +536,7 @@ function bindEvents() {
         history = [];
         historyStep = -1;
         saveState();  // 重新初始化历史
-
-        // 清除保存的画布（修改为清除所有数据）
-        paletteStorage.clearAll();
+        paletteStorage.saveHistory(history, historyStep);
     });
     
     // 撤销/重做
@@ -519,45 +547,44 @@ function bindEvents() {
     const smudgeBtn = document.getElementById('smudgeBtn');
     smudgeBtn.addEventListener('click', () => {
         if (currentTool === 'brush') {
-            // 切换到涂抹工具
-            currentTool = 'smudge';
-            smudgeBtn.classList.add('active');
-            
-            // 临时保存当前笔刷设置
+            // 切换到涂抹工具：先保存当前笔刷设置
+            saveBrushSettings();
             savedBrushSettings = {
                 size: brushSize,
                 mixStrength: parseInt(brushMixValue.textContent)
             };
-            
-            // 加载涂抹工具设置
+            currentTool = 'smudge';
+            smudgeBtn.classList.add('active');
+
+            // 读取保存的涂抹工具设置
+            const savedApp = paletteStorage.loadAppSettings();
+            if (savedApp && savedApp.smudgeBrushSize != null) smudgeBrushSize = savedApp.smudgeBrushSize;
+            if (savedApp && savedApp.smudgeStrength != null) smudgeStrength = savedApp.smudgeStrength;
+
             brushSize = smudgeBrushSize;
             brushSizeInput.value = smudgeBrushSize;
             brushSizeValue.textContent = smudgeBrushSize;
-            
             brushMixSlider.value = smudgeStrength;
             brushMixValue.textContent = smudgeStrength;
-            
             console.log('✅ 切换到涂抹工具');
         } else {
-            // 切换回笔刷工具
-            currentTool = 'brush';
-            smudgeBtn.classList.remove('active');
-            
-            // 保存涂抹工具设置
+            // 切换回笔刷工具：保存涂抹工具设置
             smudgeBrushSize = brushSize;
             smudgeStrength = parseInt(brushMixValue.textContent);
-            
-            // 恢复之前保存的笔刷设置
+            paletteStorage.saveAppSettings({ smudgeBrushSize, smudgeStrength });
+
+            currentTool = 'brush';
+            smudgeBtn.classList.remove('active');
+
+            // 恢复笔刷工具设置
             if (savedBrushSettings) {
                 brushSize = savedBrushSettings.size;
                 brushSizeInput.value = savedBrushSettings.size;
                 brushSizeValue.textContent = savedBrushSettings.size;
-                
                 brushMixSlider.value = savedBrushSettings.mixStrength;
                 brushMixValue.textContent = savedBrushSettings.mixStrength;
                 painter.setMixStrength(savedBrushSettings.mixStrength / 100);
             }
-            
             console.log('✅ 切换回笔刷工具');
         }
     });
@@ -885,20 +912,28 @@ let lastSyncedBgColor = null;
 function updateColorDisplay() {
     if (foregroundColor) fgColorBox.style.backgroundColor = foregroundColor;
     if (backgroundColor) bgColorBox.style.backgroundColor = backgroundColor;
+    fgColorBox.classList.toggle('active-target', activeColorTarget === 'foreground');
+    bgColorBox.classList.toggle('active-target', activeColorTarget === 'background');
     document.querySelectorAll('.color-circle').forEach(circle => {
         const color = circle.dataset.color;
         circle.classList.toggle('selected-fg', color === foregroundColor);
         circle.classList.toggle('selected-bg', color === backgroundColor);
     });
 
-    // 检测颜色变化并自动同步到 PS
+    // 检测颜色变化，自动同步到 PS 并持久化保存
+    let colorChanged = false;
     if (foregroundColor !== lastSyncedFgColor) {
         lastSyncedFgColor = foregroundColor;
         sendColorToPS('foreground', foregroundColor);
+        colorChanged = true;
     }
     if (backgroundColor !== lastSyncedBgColor) {
         lastSyncedBgColor = backgroundColor;
         sendColorToPS('background', backgroundColor);
+        colorChanged = true;
+    }
+    if (colorChanged && paletteStorage) {
+        paletteStorage.saveAppSettings({ foregroundColor, backgroundColor });
     }
 }
 
@@ -1126,59 +1161,10 @@ function replaySmudgeSegment(x1, y1, x2, y2, size, brushType, strength) {
 }
 
 /**
- * 持久化存储当前画布（异步，不阻塞撤销/重做）
+ * 保存历史记录（用于撤销/重做恢复）
  */
-async function saveCanvasToStorage() {
-    try {
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = mixCanvas.width;
-        tempCanvas.height = mixCanvas.height;
-        const tempCtx = tempCanvas.getContext('2d');
-        
-        if (!tempCtx) {
-            console.error('无法创建临时 canvas 上下文');
-            return;
-        }
-        
-        // 从主 canvas 复制当前内容
-        tempCtx.drawImage(mixCanvas, 0, 0);
-        
-        // 转换为 Data URL（兼容 UXP）
-        let dataURL;
-        if (isAdobeUXP && tempCanvas.toBlob) {
-            // UXP 环境：使用 toBlob
-            dataURL = await new Promise((resolve, reject) => {
-                tempCanvas.toBlob((blob) => {
-                    if (!blob) {
-                        reject(new Error('toBlob 失败'));
-                        return;
-                    }
-                    const reader = new FileReader();
-                    reader.onloadend = () => resolve(reader.result);
-                    reader.onerror = reject;
-                    reader.readAsDataURL(blob);
-                }, 'image/png');
-            });
-        } else if (tempCanvas.toDataURL) {
-            // 标准浏览器环境
-            dataURL = tempCanvas.toDataURL('image/png');
-        } else {
-            console.warn('当前环境不支持 canvas 导出');
-            return;
-        }
-        
-        const brushSettings = {
-            brushType: currentBrush.type,
-            brushSize: brushSize,
-        };
-
-        paletteStorage.autoSaveAll(dataURL, currentPalette, brushSettings);
-
-        // 同时保存历史记录
-        paletteStorage.saveHistory(history, historyStep);
-    } catch (error) {
-        console.error('保存画布失败:', error);
-    }
+function saveCanvasToStorage() {
+    paletteStorage.saveHistory(history, historyStep);
 }
 
 /**
@@ -1421,7 +1407,8 @@ console.log('🚀 app.js 加载完成，调用 initApp() 初始化应用');
 
 // 接收来自 PS 的颜色变化（由 UXP host 推送）
 window.addEventListener("message", (e) => {
-  const { type, target, color } = e.data || {};
+  console.log("📨 message received:", JSON.stringify(e.data).slice(0, 200));
+  const { type, target, color, foreground, background } = e.data || {};
 
   if (type === "psColorChanged" && color) {
     if (target === "foreground") {
@@ -1431,6 +1418,18 @@ window.addEventListener("message", (e) => {
       backgroundColor = color.hex;
     }
     // 先同步 lastSynced 状态，防止 updateColorDisplay 触发反向 setColor 造成死循环
+    lastSyncedFgColor = foregroundColor;
+    lastSyncedBgColor = backgroundColor;
+    updateColorDisplay();
+  } else if (type === "psInitColors") {
+    // D/X 键等同时改变前景/背景色时同步
+    if (foreground) {
+      foregroundColor = foreground.hex;
+      currentBrushColor = foregroundColor;
+    }
+    if (background) {
+      backgroundColor = background.hex;
+    }
     lastSyncedFgColor = foregroundColor;
     lastSyncedBgColor = backgroundColor;
     updateColorDisplay();
