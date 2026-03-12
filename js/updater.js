@@ -33,7 +33,10 @@ const Updater = {
                     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
                     .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" target="_blank">$1</a>');
                 if (/^###\s+/.test(line)) {
-                    return '<p class="update-section-title">' + line.replace(/^###\s+/, '') + '</p>';
+                    const title = line.replace(/^###\s+/, '');
+                    const isImprovement = /improv|改进/i.test(title);
+                    const color = isImprovement ? '#7a9ab5' : '#7a9e8a';
+                    return '<p class="update-section-title" style="color:' + color + '">' + title + '</p>';
                 }
                 if (/^-\s+/.test(line)) {
                     return '<p class="update-item">• ' + line.replace(/^-\s+/, '') + '</p>';
