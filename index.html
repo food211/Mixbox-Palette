@@ -95,7 +95,7 @@
             <p>• <span data-i18n="inst4"><strong>Alt + Right Click canvas</strong> → Pick as background</span></p>
             <p>• <span data-i18n="inst5">Click ↶ Undo / ↷ Redo</span></p>
             <p id="statusText" data-i18n="statusDraw">• Mode: <strong>Draw</strong></p>
-            <p class="github-link">GitHub: <a href="https://github.com/food211/mixbox-palette" target="_blank">github.com/food211/mixbox-palette</a></p>
+            <p class="github-link">GitHub: <a href="https://github.com/food211/mixbox-palette" target="_blank">github.com/food211/mixbox-palette</a> <span id="versionLabel" style="opacity:0.45;font-size:0.85em;margin-left:6px;"></span></p>
         </div>
     </div>
 
@@ -190,6 +190,12 @@
 
             // 加载更新检测模块
             await loadScript('js/updater.js');
+
+            // 显示版本号
+            const versionLabel = document.getElementById('versionLabel');
+            if (versionLabel && typeof Updater !== 'undefined') {
+                versionLabel.textContent = Updater.CURRENT_VERSION;
+            }
 
             // 重要：手动调用 app.js 中的 initApp 函数
             console.log('🚀 正在初始化应用...');
