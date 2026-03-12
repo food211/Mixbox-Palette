@@ -694,13 +694,19 @@ function bindEvents() {
             // 吸管模式下阻止默认行为，但不立即取色
             e.preventDefault();
             return;
-        } else if (currentTool === 'brush') {
+        }
+
+        if (e.button !== 0) return; // 只处理左键
+
+        if (currentTool === 'brush') {
             // 笔刷工具模式
             isDrawing = true;
             strokeStarted = true;
 
+            const strokeColor = activeColorTarget === 'background' ? backgroundColor : currentBrushColor;
+
             // 开始新笔画
-            beginStroke('brush', currentBrushColor);
+            beginStroke('brush', strokeColor);
 
             // 检查是否需要插值（连续点击场景）
             if (lastX !== 0 || lastY !== 0) {  // 不是第一次点击
@@ -716,17 +722,17 @@ function bindEvents() {
                         const ratio = i / steps;
                         const interpX = lastX + (x - lastX) * ratio;
                         const interpY = lastY + (y - lastY) * ratio;
-                        drawBrush(interpX, interpY, currentBrushColor);
+                        drawBrush(interpX, interpY, strokeColor);
                         addStrokePoint(interpX, interpY);
                     }
                 } else {
                     // 距离太远或太近，直接绘制
-                    drawBrush(x, y, currentBrushColor);
+                    drawBrush(x, y, strokeColor);
                     addStrokePoint(x, y);
                 }
             } else {
                 // 第一次点击，直接绘制
-                drawBrush(x, y, currentBrushColor);
+                drawBrush(x, y, strokeColor);
                 addStrokePoint(x, y);
             }
 
@@ -756,6 +762,7 @@ function bindEvents() {
             if (currentTool === 'brush') {
                 // 笔刷工具模式
                 const distance = Math.sqrt(Math.pow(x - lastX, 2) + Math.pow(y - lastY, 2));
+                const activeColor = currentStroke ? currentStroke.color : currentBrushColor;
 
                 if (distance >= minDistance) {
                     const steps = Math.floor(distance / minDistance);
@@ -765,11 +772,11 @@ function bindEvents() {
                             const ratio = i / steps;
                             const interpX = lastX + (x - lastX) * ratio;
                             const interpY = lastY + (y - lastY) * ratio;
-                            drawBrush(interpX, interpY, currentBrushColor);
+                            drawBrush(interpX, interpY, activeColor);
                             addStrokePoint(interpX, interpY);
                         }
                     } else {
-                        drawBrush(x, y, currentBrushColor);
+                        drawBrush(x, y, activeColor);
                         addStrokePoint(x, y);
                     }
 
@@ -841,11 +848,11 @@ function bindEvents() {
             endStroke();
         }
     });
-    
+
     mixCanvas.addEventListener('contextmenu', (e) => {
         e.preventDefault();
     });
-    
+
     mixCanvas.classList.add('brush');
 }
 
@@ -1437,6 +1444,6 @@ window.addEventListener("message", (e) => {
 });
 
 // 禁用整个页面的右键菜单（WebView 环境下避免弹出浏览器原生菜单）
-if (isInWebView()) {
-  document.addEventListener('contextmenu', (e) => e.preventDefault());
-}
+// if (isInWebView()) {
+//   document.addEventListener('contextmenu', (e) => e.preventDefault());
+// }
