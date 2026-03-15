@@ -16,7 +16,7 @@ let loadTimeout = null;
 let currentSourceIndex = 0;
 let loaded = false;
 
-const LOAD_TIMEOUT_MS = 10000; // 10s timeout
+const LOAD_TIMEOUT_MS = 5000; // 5s timeout
 
 // Indeterminate progress animation
 function startProgress() {
@@ -104,6 +104,7 @@ function tryNextSource() {
 function retry() {
   loadSource(0);
 }
+
 
 // ============ PS Color Event Listener ============
 function rgbToHex(r, g, b) {
@@ -320,8 +321,8 @@ function init() {
   });
 
   webview.addEventListener("loadstop", () => {
-    console.log(`✅ loadstop: ${SOURCES[currentSourceIndex]}`);
-    completeProgress();
+    console.log(`✅ loadstop: ${webview.src}`);
+    // completeProgress 由 WebView 端 app.js 发送 "loaded" 消息触发
   });
 
   webview.addEventListener("loaderror", (e) => {
