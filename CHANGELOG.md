@@ -1,5 +1,16 @@
 # 更新日志 / Changelog
 
+== V1.0.3b ==
+[ZH]
+### 改进
+- GitHub 链接改为图标按钮，界面更简洁
+- 版本号改为可点击按钮，跳转至更新日志
+
+[EN]
+### Improvements
+- Replaced GitHub text link with icon button for cleaner UI
+- Version label is now a clickable button linking to changelog
+
 == V1.0.3 ==
 [ZH]
 ### 新增

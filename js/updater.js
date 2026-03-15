@@ -6,7 +6,7 @@ const Updater = {
     CHANGELOG_URL: 'https://raw.githubusercontent.com/food211/Mixbox-Palette/main/CHANGELOG.md',
     CHANGELOG_PAGE: 'https://food211.github.io/Mixbox-Palette/changelog.html',
     STORAGE_KEY: 'mixbox_dismissed_update',
-    CURRENT_VERSION: 'V1.0.3',
+    CURRENT_VERSION: 'V1.0.3b',
 
     /** 解析 CHANGELOG.md 文本，返回最新版本 { version, contentZH, contentEN } */
     _parseChangelog(text) {
