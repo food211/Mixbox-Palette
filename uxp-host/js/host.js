@@ -2,7 +2,7 @@
  * UXP Host - Loading progress + color bridge
  */
 const { action, core } = require("photoshop");
-const { shell } = require("uxp");
+const shell = require("uxp").shell;
 
 // ============ Global Variables ============
 const SOURCES = [
