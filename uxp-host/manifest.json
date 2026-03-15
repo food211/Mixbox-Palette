@@ -67,12 +67,9 @@
         "https://food211.github.io",
         "https://mixbox-palette.pages.dev"
       ]
-    }
-  },
-  "permissions": {
+    },
     "launchProcess": {
-      "schemes": ["https"],
-      "extensions": []
+      "schemes": ["https"]
     }
   }
 }
