@@ -2,6 +2,7 @@
  * UXP Host - Loading progress + color bridge
  */
 const { action, core } = require("photoshop");
+const { shell } = require("uxp");
 
 // ============ Global Variables ============
 const SOURCES = [
@@ -259,16 +260,30 @@ async function setBackgroundColor(r, g, b) {
 
 // ============ Message Listener ============
 window.addEventListener("message", async (e) => {
+  console.log('[host] message received, origin:', e.origin, 'data:', JSON.stringify(e.data).slice(0, 200));
   if (!e.origin.includes("food211.github.io") && !e.origin.includes("mixbox-palette.pages.dev")) {
+    console.log('[host] origin rejected');
     return;
   }
 
   const { type, target, color } = e.data || {};
+  console.log('[host] message type:', type);
 
   if (type === "loaded") {
     console.log(`✅ Loaded from: ${SOURCES[currentSourceIndex]}`);
     completeProgress();
     listenPSColorEvents();
+    return;
+  }
+
+  if (type === "openURL" && e.data.url) {
+    console.log('[host] openURL:', e.data.url);
+    try {
+      shell.openExternal(e.data.url);
+      console.log('[host] openExternal called successfully');
+    } catch (err) {
+      console.error('[host] openExternal failed:', err.message || err);
+    }
     return;
   }
 
