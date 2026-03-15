@@ -10,7 +10,7 @@ const Updater = {
 
     /** 解析 CHANGELOG.md 文本，返回最新版本 { version, contentZH, contentEN } */
     _parseChangelog(text) {
-        const parts = text.split(/^== (V[\d.]+) ==$/m);
+        const parts = text.split(/^== (V[\d.]+[a-z]?) ==$/m);
         if (parts.length < 3) return null;
 
         const version = parts[1].trim();
@@ -67,6 +67,26 @@ const Updater = {
             this._showModal(parsed);
         } catch (e) {
             // 网络失败静默处理
+        }
+    },
+
+    /** 用户点击版本号时调用：有更新则弹更新提示，否则打开 changelog */
+    async checkAndShow() {
+        try {
+            const res = await fetch(this.CHANGELOG_URL, { cache: 'no-store' });
+            if (!res.ok) {
+                window.open(this.CHANGELOG_PAGE, '_blank');
+                return;
+            }
+            const text = await res.text();
+            const parsed = this._parseChangelog(text);
+            if (!parsed || parsed.version === this.CURRENT_VERSION) {
+                window.open(this.CHANGELOG_PAGE, '_blank');
+                return;
+            }
+            this._showModal(parsed);
+        } catch (e) {
+            window.open(this.CHANGELOG_PAGE, '_blank');
         }
     },
 
