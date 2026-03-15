@@ -1,7 +1,7 @@
 /**
  * Service Worker - KM Watercolor Palette 离线缓存
  */
-const CACHE_NAME = 'km-palette-v7';
+const CACHE_NAME = 'km-palette-v8';
 const CACHE_URLS = [
   './',
   './index.html',
@@ -66,8 +66,8 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.match(event.request)
       .then((cachedResponse) => {
-        if (cachedResponse) {
-          // 有缓存，返回缓存并在后台更新
+        if (cachedResponse && !cachedResponse.redirected) {
+          // 有缓存且非重定向，返回缓存并在后台更新
           console.log('[SW] 从缓存返回:', event.request.url);
 
           // 后台更新缓存 (Stale-While-Revalidate)
@@ -83,7 +83,7 @@ self.addEventListener('fetch', (event) => {
           return cachedResponse;
         }
 
-        // 无缓存，从网络获取
+        // 无缓存或缓存是重定向响应，从网络获取
         console.log('[SW] 从网络获取:', event.request.url);
         return fetch(event.request, { redirect: 'follow' })
           .then((networkResponse) => {
