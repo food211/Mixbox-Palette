@@ -130,10 +130,16 @@ const Updater = {
             const icon = document.createElement('div');
             icon.style.cssText = 'font-size:48px;margin-bottom:20px;';
             icon.textContent = '🎨';
+            const isZH_ = (typeof I18N !== 'undefined') && I18N.getLang() === 'zh';
+            const baseText = isZH_ ? '正在更新，请稍候' : 'Updating, please wait';
             const text = document.createElement('div');
             text.style.cssText = 'color:#e0e0e0;font-size:14px;';
-            const isZH_ = (typeof I18N !== 'undefined') && I18N.getLang() === 'zh';
-            text.textContent = isZH_ ? '正在更新，请稍候...' : 'Updating, please wait...';
+            text.textContent = baseText;
+            const dots = document.createElement('span');
+            dots.textContent = '';
+            text.appendChild(dots);
+            let dotCount = 0;
+            setInterval(() => { dotCount = (dotCount + 1) % 4; dots.textContent = '.'.repeat(dotCount); }, 400);
             overlay.appendChild(icon);
             overlay.appendChild(text);
             document.body.appendChild(overlay);
