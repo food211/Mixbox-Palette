@@ -95,7 +95,7 @@
         const CHANGELOG_URL = 'https://raw.githubusercontent.com/food211/Mixbox-Palette/main/CHANGELOG.md';
 
         function parseAllVersions(text) {
-            const parts = text.split(/^== (V[\d.]+) ==$/m);
+            const parts = text.split(/^== (V[\d.]+[a-z]?) ==$/m);
             const versions = [];
             for (let i = 1; i < parts.length; i += 2) {
                 const version = parts[i].trim();
