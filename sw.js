@@ -1,7 +1,7 @@
 /**
  * Service Worker - KM Watercolor Palette 离线缓存
  */
-const CACHE_NAME = 'km-palette-v6';
+const CACHE_NAME = 'km-palette-v7';
 const CACHE_URLS = [
   './',
   './index.html',
@@ -71,9 +71,9 @@ self.addEventListener('fetch', (event) => {
           console.log('[SW] 从缓存返回:', event.request.url);
 
           // 后台更新缓存 (Stale-While-Revalidate)
-          fetch(event.request)
+          fetch(event.request, { redirect: 'follow' })
             .then((networkResponse) => {
-              if (networkResponse && networkResponse.status === 200) {
+              if (networkResponse && networkResponse.status === 200 && !networkResponse.redirected) {
                 caches.open(CACHE_NAME)
                   .then((cache) => cache.put(event.request, networkResponse));
               }
@@ -85,10 +85,10 @@ self.addEventListener('fetch', (event) => {
 
         // 无缓存，从网络获取
         console.log('[SW] 从网络获取:', event.request.url);
-        return fetch(event.request)
+        return fetch(event.request, { redirect: 'follow' })
           .then((networkResponse) => {
-            // 缓存新资源
-            if (networkResponse && networkResponse.status === 200) {
+            // 缓存新资源（不缓存重定向响应）
+            if (networkResponse && networkResponse.status === 200 && !networkResponse.redirected) {
               const responseClone = networkResponse.clone();
               caches.open(CACHE_NAME)
                 .then((cache) => cache.put(event.request, responseClone));
