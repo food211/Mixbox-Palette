@@ -124,7 +124,31 @@ const Updater = {
         };
         refreshBtn.onclick = () => {
             localStorage.setItem(this.STORAGE_KEY, version);
-            location.reload(true);
+            // 显示 loading 遮罩
+            const overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#2b2b2b;display:flex;flex-direction:column;justify-content:center;align-items:center;z-index:10000;';
+            const icon = document.createElement('div');
+            icon.style.cssText = 'font-size:48px;margin-bottom:20px;';
+            icon.textContent = '🎨';
+            const text = document.createElement('div');
+            text.style.cssText = 'color:#e0e0e0;font-size:14px;';
+            const isZH_ = (typeof I18N !== 'undefined') && I18N.getLang() === 'zh';
+            text.textContent = isZH_ ? '正在更新，请稍候...' : 'Updating, please wait...';
+            overlay.appendChild(icon);
+            overlay.appendChild(text);
+            document.body.appendChild(overlay);
+            // 先注销 SW 再刷新，确保加载最新资源
+            if (navigator.serviceWorker) {
+                navigator.serviceWorker.getRegistrations().then(regs => {
+                    Promise.all(regs.map(r => r.unregister())).then(() => {
+                        caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).finally(() => {
+                            location.reload(true);
+                        });
+                    });
+                });
+            } else {
+                location.reload(true);
+            }
         };
 
         modal.classList.add('active');
