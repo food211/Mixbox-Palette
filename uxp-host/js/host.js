@@ -86,7 +86,7 @@ function loadSource(index) {
   currentSourceIndex = index;
   errorMessage.classList.remove('show');
   retryBtn.classList.remove('show');
-  loadingText.textContent = 'Loading KM Watercolor Palette...';
+  loadingText.textContent = 'Loading Mixbox Palette...';
   startProgress();
   webview.src = SOURCES[index];
 }
@@ -279,8 +279,8 @@ window.addEventListener("message", async (e) => {
   if (type === "openURL" && e.data.url) {
     console.log('[host] openURL:', e.data.url);
     try {
-      shell.openExternal(e.data.url);
-      console.log('[host] openExternal called successfully');
+      const result = await shell.openExternal(e.data.url, "Opening link from Mixbox Palette");
+      console.log('[host] openExternal result:', result);
     } catch (err) {
       console.error('[host] openExternal failed:', err.message || err);
     }
