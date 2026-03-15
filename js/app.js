@@ -18,6 +18,16 @@ function sendColorToPS(target, hexColor) {
     });
   }
 }
+// 在外部浏览器中打开链接（兼容 UXP WebView 和普通浏览器）
+function openExternalURL(url) {
+  console.log('[openExternalURL] url:', url, 'isWebView:', isInWebView());
+  if (isInWebView()) {
+    console.log('[openExternalURL] posting message to uxpHost');
+    window.uxpHost.postMessage({ type: "openURL", url });
+  } else {
+    window.open(url, '_blank');
+  }
+}
 // ============ WebView 通信结束 ============
 
 // 颜料预设

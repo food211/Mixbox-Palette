@@ -75,18 +75,18 @@ const Updater = {
         try {
             const res = await fetch(this.CHANGELOG_URL, { cache: 'no-store' });
             if (!res.ok) {
-                window.open(this.CHANGELOG_PAGE, '_blank');
+                openExternalURL(this.CHANGELOG_PAGE);
                 return;
             }
             const text = await res.text();
             const parsed = this._parseChangelog(text);
             if (!parsed || parsed.version === this.CURRENT_VERSION) {
-                window.open(this.CHANGELOG_PAGE, '_blank');
+                openExternalURL(this.CHANGELOG_PAGE);
                 return;
             }
             this._showModal(parsed);
         } catch (e) {
-            window.open(this.CHANGELOG_PAGE, '_blank');
+            openExternalURL(this.CHANGELOG_PAGE);
         }
     },
 
