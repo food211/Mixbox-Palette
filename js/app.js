@@ -1438,6 +1438,7 @@ window.addEventListener("message", (e) => {
     lastSyncedFgColor = foregroundColor;
     lastSyncedBgColor = backgroundColor;
     updateColorDisplay();
+    if (paletteStorage) paletteStorage.saveAppSettings({ foregroundColor, backgroundColor });
   } else if (type === "psInitColors") {
     // D/X 键等同时改变前景/背景色时同步
     if (foreground) {
@@ -1450,6 +1451,7 @@ window.addEventListener("message", (e) => {
     lastSyncedFgColor = foregroundColor;
     lastSyncedBgColor = backgroundColor;
     updateColorDisplay();
+    if (paletteStorage) paletteStorage.saveAppSettings({ foregroundColor, backgroundColor });
   }
 });
 
