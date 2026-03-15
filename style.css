@@ -51,12 +51,31 @@ h1 {
 }
 
 .github-link a {
-    color: #64B5F6;
+    color: #888;
     text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    transition: color 0.2s;
 }
 
 .github-link a:hover {
-    text-decoration: underline;
+    color: #64B5F6;
+}
+
+.version-link {
+    background-color: #404040;
+    color: #b0b0b0 !important;
+    padding: 4px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    opacity: 0.6;
+    margin-left: 6px;
+}
+
+.version-link:hover {
+    background-color: #505050;
+    color: #64B5F6 !important;
+    opacity: 1;
 }
 
 
