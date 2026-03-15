@@ -1,5 +1,20 @@
 # 更新日志 / Changelog
 
+== V1.0.4 ==
+[ZH]
+### 改进
+- **双源竞速加载** — 启动时自动探测最快可用源，加速插件加载
+- 拆分页面架构，index.html 改为竞速跳转页，主界面迁移至 app.html
+- 修复 Cloudflare Pages 308 重定向导致 Service Worker 缓存异常的问题
+- 修复 UXP 宿主加载竞速页时误触发 loaderror 切换备用源的问题
+
+[EN]
+### Improvements
+- **Dual-source race loading** — Automatically probes the fastest available source on startup for faster loading
+- Split page architecture: index.html is now a race-redirect page, main UI moved to app.html
+- Fixed Cloudflare Pages 308 redirect causing Service Worker cache errors
+- Fixed UXP host incorrectly triggering loaderror when loading the race page
+
 == V1.0.3b ==
 [ZH]
 ### 改进
