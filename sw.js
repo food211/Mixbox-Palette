@@ -1,7 +1,7 @@
 /**
  * Service Worker - KM Watercolor Palette 离线缓存
  */
-const CACHE_NAME = 'km-palette-v10';
+const CACHE_NAME = 'km-palette-v11';
 const CACHE_URLS = [
   './app.html',
   './style.css',
@@ -12,8 +12,7 @@ const CACHE_URLS = [
   './js/km-painter.js',
   './js/brush-manager.js',
   './js/palette-storage.js',
-  './js/updater.js',
-  './icons/icon.png'
+  './js/updater.js'
 ];
 
 // 安装 - 预缓存资源
