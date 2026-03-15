@@ -5,6 +5,7 @@ const CACHE_NAME = 'km-palette-v6';
 const CACHE_URLS = [
   './',
   './index.html',
+  './app.html',
   './style.css',
   './js/i18n.js',
   './js/app.js',

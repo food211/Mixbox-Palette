@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Mixbox Palette</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body oncontextmenu="return false">
+    <div class="container">
+        <div class="header-container">
+            <!-- 语言切换 - 左上角 -->
+            <div class="lang-selector">
+                <button id="langBtn" class="lang-btn">EN</button>
+                <button id="engineBtn" class="engine-btn" data-i18n-title="switchEngine" title="Switch Mixing Engine">MB</button>
+            </div>
+            <!-- 缩放控制 - 右上角 -->
+            <div class="zoom-selector">
+                <button id="zoomBtn" class="zoom-btn">100%</button>
+                <div id="zoomDropdown" class="zoom-dropdown">
+                    <div class="zoom-option" data-zoom="0.6">60%</div>
+                    <div class="zoom-option" data-zoom="0.7">70%</div>
+                    <div class="zoom-option" data-zoom="0.8">80%</div>
+                    <div class="zoom-option" data-zoom="0.9">90%</div>
+                    <div class="zoom-option" data-zoom="1.0">100%</div>
+                    <div class="zoom-option" data-zoom="1.1">110%</div>
+                    <div class="zoom-option" data-zoom="1.2">120%</div>
+                </div>
+            </div>
+
+            <h1 data-i18n="title">🎨 Mixbox Palette</h1>
+            <div class="palette-info"></div>
+            <div class="header-controls">
+                <div class="palette-selector">
+                    <button id="paletteBtn" class="palette-btn" data-i18n="switchPalette">Palette</button>
+                    <div id="paletteDropdown" class="palette-dropdown"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 16 色选择器 -->
+        <div class="color-picker" id="colorPicker"></div>
+        
+        <!-- 控制按钮 -->
+        <div class="controls">
+            <button id="clearBtn" class="clear" data-i18n="clear">Clear</button>
+            <div class="brush-size">
+                <label data-i18n="brushSize">Brush Size</label>
+                <input type="range" id="brushSize" min="2" max="50" value="15">
+                <span id="brushSizeValue">15</span>px
+            </div>
+            <div class="brush-size">
+                <label data-i18n="paintConcentration">Concentration</label>
+                <input type="range" id="brushMix" min="1" max="50" value="30">
+                <span id="brushMixStrength">30</span>%
+            </div>
+            <div class="brush-preview-btn" id="brushPreviewBtn" data-i18n-title="selectBrush" title="Select Brush">
+                <canvas id="brushPreviewCanvas" width="28" height="28"></canvas>
+            </div>
+            <div class="history-buttons">
+                <button id="undoBtn" data-i18n-title="undo" title="Undo" disabled>↶</button>
+                <button id="redoBtn" data-i18n-title="redo" title="Redo" disabled>↷</button>
+            </div>
+            <div class="tool-buttons">
+                <button id="smudgeBtn" class="tool-btn" data-i18n-title="smudgeTool" title="Smudge Tool">🖌️</button>
+                <button id="eyedropperBtn" class="tool-btn" data-i18n-title="eyedropperTool" title="Eyedropper (Alt)">💧</button>
+            </div>
+        </div>
+        
+        <!-- 混色区 -->
+        <div class="mix-area-container">
+            <div class="mix-area-header">
+                <h3 data-i18n="mixArea">Mixing Area</h3>
+                <div class="color-indicators">
+                    <div class="color-indicator">
+                        <div class="color-box foreground" id="fgColorBox"></div>
+                        <span data-i18n="foreground">Foreground</span>
+                    </div>
+                    <div class="color-indicator">
+                        <div class="color-box background" id="bgColorBox"></div>
+                        <span data-i18n="background">Background</span>
+                    </div>
+                </div>
+            </div>
+            <div class="mix-area">
+                <canvas id="mixCanvas" width="550" height="400"></canvas>
+            </div>
+        </div>
+        
+        <!-- 信息显示 -->
+        <div class="info">
+            <p><strong data-i18n="instructions">Instructions:</strong></p>
+            <p>• <span data-i18n="inst1"><strong>Click paint</strong> → Select color and paint on canvas</span></p>
+            <p>• <span data-i18n="inst2"><strong>Click brush icon</strong> → Select brush</span></p>
+            <p>• <span data-i18n="inst3"><strong>Alt + Left Click canvas</strong> → Pick as foreground</span></p>
+            <p>• <span data-i18n="inst4"><strong>Alt + Right Click canvas</strong> → Pick as background</span></p>
+            <p>• <span data-i18n="inst5">Click ↶ Undo / ↷ Redo</span></p>
+            <p id="statusText" data-i18n="statusDraw">• Mode: <strong>Draw</strong></p>
+            <p class="github-link"><a href="javascript:void(0)" onclick="openExternalURL('https://github.com/food211/mixbox-palette')" title="GitHub"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a> <a href="javascript:void(0)" id="versionLabel" class="version-link"></a></p>
+        </div>
+    </div>
+
+    <!-- 更新提示弹窗 -->
+    <div class="brush-selector-modal" id="updateModal">
+        <div class="brush-selector-content update-modal-content">
+            <div class="brush-selector-header">
+                <h3 id="updateModalTitle"></h3>
+                <button class="close-btn" id="updateCloseBtn">×</button>
+            </div>
+            <div id="updateModalBody" class="update-modal-body"></div>
+            <a id="updateChangelogLink" href="#" target="_blank" class="update-changelog-link"></a>
+            <div class="update-modal-actions">
+                <button id="updateLaterBtn" class="update-btn-later"></button>
+                <button id="updateDismissBtn" class="update-btn-dismiss"></button>
+                <button id="updateRefreshBtn" class="update-btn-refresh"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 笔刷选择器弹窗 -->
+    <div class="brush-selector-modal" id="brushModal">
+        <div class="brush-selector-content">
+            <div class="brush-selector-header">
+                <h3 data-i18n="selectBrushModal">Select Brush</h3>
+                <button class="close-btn" id="closeModalBtn">×</button>
+            </div>
+            <div class="brush-grid" id="brushGrid"></div>
+        </div>
+    </div>
+
+<!-- 脚本加载 -->
+<script>
+    // 创建script标签加载适当的库
+    function loadScript(src) {
+        return new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = src;
+            script.onload = () => resolve();
+            script.onerror = () => {
+                console.error(`Failed to load script: ${src}`);
+                reject(new Error(`Failed to load script: ${src}`));
+            };
+            document.head.appendChild(script);
+        });
+    }
+    
+    // 检测WebGL支持
+    function isWebGLSupported() {
+        try {
+            const canvas = document.createElement('canvas');
+            return !!(window.WebGLRenderingContext && 
+                (canvas.getContext('webgl') || canvas.getContext('experimental-webgl')));
+        } catch(e) {
+            return false;
+        }
+    }
+    
+    // 初始化应用
+    async function loadAppScripts() {
+        try {
+            // 首先加载 i18n
+            await loadScript('js/i18n.js');
+
+            // 加载混色引擎
+            if (isWebGLSupported()) {
+                // 加载 Mixbox（默认引擎）
+                await loadScript('js/mixbox.js');
+                console.log('✅ mixbox.js 已加载');
+                await loadScript('js/mixbox-painter.js');
+                console.log('✅ mixbox-painter.js 已加载');
+                // 加载 KM（可选引擎）
+                await loadScript('js/km-painter.js');
+                console.log('✅ km-painter.js 已加载');
+            } else {
+                // WebGL 不可用时用 Canvas 2D 回退
+                await loadScript('js/mixbox.js');
+                await loadScript('js/mixbox-canvas-painter.js');
+                console.log('✅ mixbox-canvas-painter.js 已加载');
+            }
+            
+            // 加载其他依赖
+            await Promise.all([
+                loadScript('js/brush-manager.js'),
+                loadScript('js/palette-storage.js')
+            ]);
+            console.log('✅ 其他依赖已加载');
+            
+            // 最后加载应用主逻辑
+            await loadScript('js/app.js');
+            console.log('✅ app.js 已加载');
+
+            // 加载更新检测模块
+            await loadScript('js/updater.js');
+
+            // 显示版本号
+            const versionLabel = document.getElementById('versionLabel');
+            if (versionLabel && typeof Updater !== 'undefined') {
+                versionLabel.textContent = Updater.CURRENT_VERSION;
+                versionLabel.addEventListener('click', () => Updater.checkAndShow());
+            }
+
+            // 重要：手动调用 app.js 中的 initApp 函数
+            console.log('🚀 正在初始化应用...');
+            window.initApp();
+
+            // 延迟检测更新（避免阻塞启动）
+            setTimeout(() => Updater.check(), 3000);
+            
+        } catch (error) {
+            console.error('初始化失败:', error);
+            alert('加载应用程序时出错，请检查控制台获取详细信息。');
+        }
+    }
+    
+    // 页面加载完成后加载脚本
+    window.addEventListener('DOMContentLoaded', loadAppScripts);
+
+    // 注册 Service Worker
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js')
+                .then((registration) => {
+                    console.log('✅ Service Worker 注册成功:', registration.scope);
+                })
+                .catch((error) => {
+                    console.log('❌ Service Worker 注册失败:', error);
+                });
+        });
+    }
+</script>
+</body>
+</html>
