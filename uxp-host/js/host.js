@@ -6,8 +6,8 @@ const shell = require("uxp").shell;
 
 // ============ Global Variables ============
 const SOURCES = [
-  "https://mixbox-palette.pages.dev/",
-  "https://food211.github.io/Mixbox-Palette/"
+  "https://mixbox-palette.pages.dev/app",
+  "https://food211.github.io/Mixbox-Palette/app.html"
 ];
 
 let loadingContainer, progressBar, progressPercent, loadingText, errorMessage, retryBtn, webview;
