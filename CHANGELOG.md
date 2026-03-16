@@ -46,9 +46,8 @@
 - Updated batchPlay query format for fetching PS colors for better compatibility
 
 == V1.0.2 ==
-> ⚠️ 此版本已下架 / This version has been deprecated
-
 [ZH]
+- ⚠️ **此版本不再兼容，已下架**
 ### 新增
 - 支持从 Photoshop 获取颜色（双向颜色同步）
 - 在 PS 中更改前景色/背景色（拾色器、色板、X 键交换、D 键复位）会自动同步到插件
@@ -62,6 +61,7 @@
 - 新增引擎切换相关的中英文界面文案
 
 [EN]
+- ⚠️ **This version is no longer compatible and has been delisted**
 ### New Features
 - Bidirectional color sync with Photoshop — changing foreground/background color in PS (color picker, swatches, X to swap, D to reset) now updates the plugin automatically
 - **Dual mixing engines** — Added a self-implemented KM engine based on Kubelka-Munk physical optics theory as an alternative to Mixbox
@@ -74,22 +74,21 @@
 - Added bilingual (EN/ZH) UI labels for engine toggle
 
 == V1.0.1 ==
-> ⚠️ 此版本已下架 / This version has been deprecated
-
 [ZH]
+- ⚠️ **此版本不再兼容，已下架**
 - 多语言支持（中文/英文，自动跟随系统语言）
 - 双源加载（Cloudflare Pages 优先，GitHub Pages 备用）
 - Bug 修复与图标更新
 
 [EN]
+- ⚠️ **This version is no longer compatible and has been delisted**
 - Multilingual support (English / Chinese, auto-detects system language)
 - Dual-source loading (Cloudflare Pages primary, GitHub Pages fallback)
 - Bug fixes and icon updates
 
 == V1.0.0 ==
-> ⚠️ 此版本已下架 / This version has been deprecated
-
 [ZH]
+- ⚠️ **此版本不再兼容，已下架**
 - 首次发布
 - 4 套专业调色盘预设
 - Mixbox 物理混色引擎
@@ -99,6 +98,7 @@
 - 自动保存
 
 [EN]
+- ⚠️ **This version is no longer compatible and has been delisted**
 - Initial release
 - 4 professional palette presets
 - Mixbox physical color mixing engine
