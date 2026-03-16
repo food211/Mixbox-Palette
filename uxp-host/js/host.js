@@ -5,16 +5,18 @@ const { action, core } = require("photoshop");
 const shell = require("uxp").shell;
 
 // ============ Global Variables ============
+const HOST_VERSION = "1.0.4";
 const SOURCES = [
-  "https://mixbox-palette.pages.dev/app",
-  "https://food211.github.io/Mixbox-Palette/app.html"
-];
+  "https://mixbox-palette.pages.dev/",
+  "https://food211.github.io/Mixbox-Palette/"
+].map(url => url + '?host=' + HOST_VERSION);
 
 let loadingContainer, progressBar, progressPercent, loadingText, errorMessage, retryBtn, webview;
 let progressAnimation = null;
 let loadTimeout = null;
 let currentSourceIndex = 0;
 let loaded = false;
+let firstLoadStopped = false; // 竞速页 loadstop 后忽略后续 loaderror
 
 const LOAD_TIMEOUT_MS = 5000; // 5s timeout
 
@@ -84,6 +86,7 @@ function showError(message) {
 
 function loadSource(index) {
   currentSourceIndex = index;
+  firstLoadStopped = false;
   errorMessage.classList.remove('show');
   retryBtn.classList.remove('show');
   loadingText.textContent = 'Loading Mixbox Palette...';
@@ -322,15 +325,24 @@ function init() {
 
   webview.addEventListener("loadstop", () => {
     console.log(`✅ loadstop: ${webview.src}`);
+    firstLoadStopped = true;
     // completeProgress 由 WebView 端 app.js 发送 "loaded" 消息触发
   });
 
   webview.addEventListener("loaderror", (e) => {
+    if (firstLoadStopped) {
+      console.log(`⏭️ loaderror ignored (page navigating): ${e.message || e.code}`);
+      return;
+    }
     console.error(`❌ Load error [${SOURCES[currentSourceIndex]}]:`, e.message || e.code);
     tryNextSource();
   });
 
   webview.addEventListener("loadabort", () => {
+    if (firstLoadStopped) {
+      console.log(`⏭️ loadabort ignored (page navigating)`);
+      return;
+    }
     console.error(`⚠️ Load aborted: ${SOURCES[currentSourceIndex]}`);
     tryNextSource();
   });

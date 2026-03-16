@@ -18,6 +18,10 @@ const PROBE_FILE = "js/updater.js";
 const TIMEOUT_MS = 4000;
 
 async function race() {
+    // 透传 URL 参数（如 ?host=1.0.4）到 app.html
+    const params = new URLSearchParams(window.location.search);
+    const suffix = params.toString() ? '?' + params.toString() : '';
+
     try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -33,10 +37,10 @@ async function race() {
         );
 
         clearTimeout(timeout);
-        window.location.replace(SOURCES[fastest] + "app.html");
+        window.location.replace(SOURCES[fastest] + "app.html" + suffix);
     } catch (e) {
         // All failed, fallback to first source
-        window.location.replace(SOURCES[0] + "app.html");
+        window.location.replace(SOURCES[0] + "app.html" + suffix);
     }
 }
 
