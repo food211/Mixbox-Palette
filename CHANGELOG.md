@@ -46,6 +46,8 @@
 - Updated batchPlay query format for fetching PS colors for better compatibility
 
 == V1.0.2 ==
+> ⚠️ 此版本已下架 / This version has been deprecated
+
 [ZH]
 ### 新增
 - 支持从 Photoshop 获取颜色（双向颜色同步）
@@ -72,6 +74,8 @@
 - Added bilingual (EN/ZH) UI labels for engine toggle
 
 == V1.0.1 ==
+> ⚠️ 此版本已下架 / This version has been deprecated
+
 [ZH]
 - 多语言支持（中文/英文，自动跟随系统语言）
 - 双源加载（Cloudflare Pages 优先，GitHub Pages 备用）
@@ -83,6 +87,8 @@
 - Bug fixes and icon updates
 
 == V1.0.0 ==
+> ⚠️ 此版本已下架 / This version has been deprecated
+
 [ZH]
 - 首次发布
 - 4 套专业调色盘预设
