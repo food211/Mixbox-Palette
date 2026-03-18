@@ -2,6 +2,16 @@
 // 远端要求的最低宿主版本（宿主版本低于此值时提示用户更新插件）
 const MIN_HOST_VERSION = '1.0.4';
 
+// 自定义提示弹窗（替代 alert）
+function showAlert(message) {
+  const modal = document.getElementById('alertModal');
+  const text = document.getElementById('alertModalText');
+  const okBtn = document.getElementById('alertModalOkBtn');
+  text.textContent = message;
+  modal.classList.add('active');
+  okBtn.onclick = () => modal.classList.remove('active');
+}
+
 // 检测是否在 UXP WebView 环境中
 function isInWebView() {
   return typeof window.uxpHost !== 'undefined';
@@ -1651,7 +1661,7 @@ window.addEventListener("message", (e) => {
       console.log('[rectSelect] Transfer success');
     } else {
       const errorKey = e.data.error || 'rectSelectFailed';
-      alert(t(errorKey));
+      showAlert(t(errorKey));
     }
   }
 });
