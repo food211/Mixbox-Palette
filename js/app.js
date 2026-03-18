@@ -1151,15 +1151,13 @@ function extractAndSendPixels(sx, sy, sw, sh) {
     const imageData = ctx.getImageData(sx, sy, sw, sh);
     const data = imageData.data;
 
-    // 白色边缘平滑过渡：根据像素接近白色的程度渐变透明度
-    // RGB 最小值 >= 255 → 纯白完全透明，240~255 之间平滑过渡
-    const THRESHOLD = 240;
+    // 白色边缘平滑过渡：用与白色的欧氏距离决定透明度，各颜色通道表现一致
+    const DIST_THRESHOLD = 30; // 距离低于此值开始渐变透明
     for (let i = 0; i < data.length; i += 4) {
-        const minRGB = Math.min(data[i], data[i + 1], data[i + 2]);
-        if (minRGB >= 255) {
-            data[i + 3] = 0;
-        } else if (minRGB > THRESHOLD) {
-            data[i + 3] = Math.round(255 * (255 - minRGB) / (255 - THRESHOLD));
+        const dr = 255 - data[i], dg = 255 - data[i + 1], db = 255 - data[i + 2];
+        const dist = Math.sqrt(dr * dr + dg * dg + db * db);
+        if (dist < DIST_THRESHOLD) {
+            data[i + 3] = Math.round(255 * dist / DIST_THRESHOLD);
         }
     }
 
