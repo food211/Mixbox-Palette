@@ -362,7 +362,10 @@ async function initApp() {
 
     // 11. 通知 UXP Host 加载完成
     if (isInWebView()) {
-        window.uxpHost.postMessage({ type: "loaded" });
+        window.uxpHost.postMessage({
+            type: "loaded",
+            version: typeof Updater !== 'undefined' ? Updater.CURRENT_VERSION : 'unknown'
+        });
     }
 }
 
