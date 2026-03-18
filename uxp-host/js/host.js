@@ -331,10 +331,13 @@ async function handlePastePixels(data) {
     const token = await fs.createSessionToken(tempFile);
 
     await core.executeAsModal(async () => {
-      // 记录当前活动图层 ID
-      const targetLayerID = doc.activeLayers[0]?.id;
+      // 在活动图层上方创建新图层
+      await action.batchPlay([{
+        _obj: "make",
+        _target: [{ _ref: "layer" }]
+      }], {});
 
-      // 用 placeEvent 放置图片（会创建智能对象图层）
+      // 用 placeEvent 放置图片到新图层
       await action.batchPlay([{
         _obj: "placeEvent",
         null: { _path: token, _kind: "local" },
@@ -347,30 +350,38 @@ async function handlePastePixels(data) {
       const imgWidth = lb.right - lb.left;
       const imgHeight = lb.bottom - lb.top;
 
-      // 计算缩放：铺满选区（cover 模式，不留空白）
-      const scaleX = selWidth / imgWidth;
-      const scaleY = selHeight / imgHeight;
+      // 计算等比缩放适配选区
+      const scale = Math.min(selWidth / imgWidth, selHeight / imgHeight);
 
-      // 选区中心
+      // 计算偏移：将图层中心移到选区中心
       const selCenterX = selBounds.left + selWidth / 2;
       const selCenterY = selBounds.top + selHeight / 2;
-      // 当前图层中心
       const layerCenterX = (lb.left + lb.right) / 2;
       const layerCenterY = (lb.top + lb.bottom) / 2;
       const offsetX = selCenterX - layerCenterX;
       const offsetY = selCenterY - layerCenterY;
 
-      // 变换：缩放 + 移动到选区中心
+      console.log(`[paste] selBounds: ${JSON.stringify(selBounds)}, selSize: ${selWidth}x${selHeight}`);
+      console.log(`[paste] imgBounds: L${lb.left} T${lb.top} R${lb.right} B${lb.bottom}, imgSize: ${imgWidth}x${imgHeight}`);
+      console.log(`[paste] scale: ${scale}, offset: ${offsetX},${offsetY}`);
+
+      // 第一步：移动到选区中心
       await action.batchPlay([{
-        _obj: "transform",
-        freeTransformCenterState: { _enum: "quadCenterState", _value: "QCSAverage" },
-        offset: {
+        _obj: "move",
+        _target: [{ _ref: "layer", _enum: "ordinal", _value: "targetEnum" }],
+        to: {
           _obj: "offset",
           horizontal: { _unit: "pixelsUnit", _value: offsetX },
           vertical: { _unit: "pixelsUnit", _value: offsetY }
-        },
-        width: { _unit: "percentUnit", _value: scaleX * 100 },
-        height: { _unit: "percentUnit", _value: scaleY * 100 },
+        }
+      }], {});
+
+      // 第二步：以中心为锚点缩放
+      await action.batchPlay([{
+        _obj: "transform",
+        freeTransformCenterState: { _enum: "quadCenterState", _value: "QCSAverage" },
+        width: { _unit: "percentUnit", _value: scale * 100 },
+        height: { _unit: "percentUnit", _value: scale * 100 },
         interfaceIconFrameDimmed: { _enum: "interpolationType", _value: "bicubic" }
       }], {});
 
@@ -380,12 +391,10 @@ async function handlePastePixels(data) {
         _target: [{ _ref: "layer", _enum: "ordinal", _value: "targetEnum" }]
       }], {});
 
-      // 向下合并到目标图层
-      if (targetLayerID) {
-        await action.batchPlay([{
-          _obj: "mergeLayersNew"
-        }], {});
-      }
+      // 向下合并到原活动图层
+      await action.batchPlay([{
+        _obj: "mergeLayersNew"
+      }], {});
 
     }, { commandName: "Paste Pixels to Selection" });
 
@@ -410,7 +419,7 @@ window.addEventListener("message", async (e) => {
   console.log('[host] message type:', type);
 
   if (type === "loaded") {
-    console.log(`✅ Loaded from: ${SOURCES[currentSourceIndex]}`);
+    console.log(`✅ Remote loaded | version: ${e.data.version || 'unknown'} | cache: ${e.data.cache || 'unknown'} | source: ${SOURCES[currentSourceIndex]}`);
     completeProgress();
     listenPSColorEvents();
     return;
@@ -496,4 +505,4 @@ if (document.readyState === "loading") {
   init();
 }
 
-console.log("✅ UXP Host ready");
+console.log(`✅ UXP Host ready | host: ${HOST_VERSION} | sources: ${SOURCES[0]}`);
