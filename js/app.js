@@ -362,9 +362,15 @@ async function initApp() {
 
     // 11. 通知 UXP Host 加载完成
     if (isInWebView()) {
+        let cacheName = 'unknown';
+        try {
+            const keys = await caches.keys();
+            cacheName = keys.find(k => k.startsWith('km-palette')) || 'none';
+        } catch (e) {}
         window.uxpHost.postMessage({
             type: "loaded",
-            version: typeof Updater !== 'undefined' ? Updater.CURRENT_VERSION : 'unknown'
+            version: typeof Updater !== 'undefined' ? Updater.CURRENT_VERSION : 'unknown',
+            cache: cacheName
         });
     }
 }
