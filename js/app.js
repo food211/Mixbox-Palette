@@ -1152,7 +1152,7 @@ function extractAndSendPixels(sx, sy, sw, sh) {
     const data = imageData.data;
 
     // 白色边缘平滑过渡：用与白色的欧氏距离决定透明度，各颜色通道表现一致
-    const DIST_THRESHOLD = 30; // 距离低于此值开始渐变透明
+    const DIST_THRESHOLD = 60; // 距离低于此值开始渐变透明
     for (let i = 0; i < data.length; i += 4) {
         const dr = 255 - data[i], dg = 255 - data[i + 1], db = 255 - data[i + 2];
         const dist = Math.sqrt(dr * dr + dg * dg + db * db);
