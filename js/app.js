@@ -684,6 +684,9 @@ function bindEvents() {
     const selectOverlay = document.getElementById('selectOverlay');
     if (rectSelectBtn && selectOverlay) {
         const overlayCtx = selectOverlay.getContext('2d');
+        // 让 overlay 显示尺寸严格匹配 mixCanvas
+        selectOverlay.style.width = mixCanvas.offsetWidth + 'px';
+        selectOverlay.style.height = mixCanvas.offsetHeight + 'px';
 
         rectSelectBtn.addEventListener('click', () => {
             if (!isRectSelectMode) {
