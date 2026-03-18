@@ -697,9 +697,9 @@ function bindEvents() {
 
         selectOverlay.addEventListener('mousedown', (e) => {
             if (!isRectSelectMode || e.button !== 0) return;
-            const rect = selectOverlay.getBoundingClientRect();
-            const x = (e.clientX - rect.left) * (selectOverlay.width / rect.width);
-            const y = (e.clientY - rect.top) * (selectOverlay.height / rect.height);
+            const rect = mixCanvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) * (mixCanvas.width / rect.width);
+            const y = (e.clientY - rect.top) * (mixCanvas.height / rect.height);
             isRectSelecting = true;
             rectSelectStart = { x, y };
             overlayCtx.clearRect(0, 0, selectOverlay.width, selectOverlay.height);
@@ -707,9 +707,9 @@ function bindEvents() {
 
         selectOverlay.addEventListener('mousemove', (e) => {
             if (!isRectSelecting) return;
-            const rect = selectOverlay.getBoundingClientRect();
-            const x = (e.clientX - rect.left) * (selectOverlay.width / rect.width);
-            const y = (e.clientY - rect.top) * (selectOverlay.height / rect.height);
+            const rect = mixCanvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) * (mixCanvas.width / rect.width);
+            const y = (e.clientY - rect.top) * (mixCanvas.height / rect.height);
 
             const sx = Math.min(rectSelectStart.x, x);
             const sy = Math.min(rectSelectStart.y, y);
@@ -733,14 +733,14 @@ function bindEvents() {
             if (!isRectSelecting) return;
             isRectSelecting = false;
 
-            const rect = selectOverlay.getBoundingClientRect();
-            const x = (e.clientX - rect.left) * (selectOverlay.width / rect.width);
-            const y = (e.clientY - rect.top) * (selectOverlay.height / rect.height);
+            const rect = mixCanvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) * (mixCanvas.width / rect.width);
+            const y = (e.clientY - rect.top) * (mixCanvas.height / rect.height);
 
             const sx = Math.max(0, Math.floor(Math.min(rectSelectStart.x, x)));
             const sy = Math.max(0, Math.floor(Math.min(rectSelectStart.y, y)));
-            const sw = Math.min(selectOverlay.width - sx, Math.ceil(Math.abs(x - rectSelectStart.x)));
-            const sh = Math.min(selectOverlay.height - sy, Math.ceil(Math.abs(y - rectSelectStart.y)));
+            const sw = Math.min(mixCanvas.width - sx, Math.ceil(Math.abs(x - rectSelectStart.x)));
+            const sh = Math.min(mixCanvas.height - sy, Math.ceil(Math.abs(y - rectSelectStart.y)));
 
             if (sw < 2 || sh < 2) {
                 overlayCtx.clearRect(0, 0, selectOverlay.width, selectOverlay.height);
