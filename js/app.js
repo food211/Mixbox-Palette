@@ -687,18 +687,29 @@ function bindEvents() {
     
     // 矩形选取按钮
     const rectSelectBtn = document.getElementById('rectSelectBtn');
-    const selectOverlay = document.getElementById('selectOverlay');
-    if (rectSelectBtn && selectOverlay) {
+    // 动态创建 overlay canvas，尺寸完全复制 mixCanvas
+    const selectOverlay = document.createElement('canvas');
+    selectOverlay.id = 'selectOverlay';
+    selectOverlay.width = mixCanvas.width;
+    selectOverlay.height = mixCanvas.height;
+    const mixCanvasStyle = window.getComputedStyle(mixCanvas);
+    selectOverlay.style.position = 'absolute';
+    selectOverlay.style.top = '0';
+    selectOverlay.style.left = '0';
+    selectOverlay.style.width = mixCanvasStyle.width;
+    selectOverlay.style.height = mixCanvasStyle.height;
+    selectOverlay.style.pointerEvents = 'none';
+    selectOverlay.style.visibility = 'hidden';
+    mixCanvas.parentElement.appendChild(selectOverlay);
+    if (rectSelectBtn) {
         const overlayCtx = selectOverlay.getContext('2d');
-        // 让 overlay 显示尺寸严格匹配 mixCanvas
-        selectOverlay.style.width = mixCanvas.offsetWidth + 'px';
-        selectOverlay.style.height = mixCanvas.offsetHeight + 'px';
 
         rectSelectBtn.addEventListener('click', () => {
             if (!isRectSelectMode) {
                 isRectSelectMode = true;
                 rectSelectBtn.classList.add('active');
-                selectOverlay.classList.add('active');
+                selectOverlay.style.visibility = 'visible';
+                selectOverlay.style.pointerEvents = 'auto';
                 mixCanvas.classList.remove('brush');
                 mixCanvas.classList.add('rect-select');
                 updateStatus('rect-select');
@@ -1121,7 +1132,8 @@ function exitRectSelectMode() {
     const selectOverlay = document.getElementById('selectOverlay');
     if (rectSelectBtn) rectSelectBtn.classList.remove('active');
     if (selectOverlay) {
-        selectOverlay.classList.remove('active');
+        selectOverlay.style.visibility = 'hidden';
+        selectOverlay.style.pointerEvents = 'none';
         const overlayCtx = selectOverlay.getContext('2d');
         overlayCtx.clearRect(0, 0, selectOverlay.width, selectOverlay.height);
     }

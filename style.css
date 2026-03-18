@@ -537,21 +537,8 @@ h1 {
 }
 
 #mixCanvas.rect-select,
-#selectOverlay.active {
-    cursor: crosshair;
-}
-
 #selectOverlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    pointer-events: none;
-    display: none;
-}
-
-#selectOverlay.active {
-    display: block;
-    pointer-events: auto;
+    cursor: crosshair;
 }
 
 
