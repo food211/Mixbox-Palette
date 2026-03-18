@@ -1,5 +1,14 @@
 # 更新日志 / Changelog
 
+== V1.1.1 ==
+[ZH]
+### 改进
+- **工具图标优化** — 工具栏图标改为独立 SVG 文件引用，涂抹工具更换为调色盘图标
+
+[EN]
+### Improvements
+- **Tool icon update** — Toolbar icons extracted to standalone SVG files, smudge tool icon replaced with palette icon
+
 == V1.1.0 ==
 [ZH]
 ### 新功能
