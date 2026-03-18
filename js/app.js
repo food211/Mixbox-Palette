@@ -692,14 +692,7 @@ function bindEvents() {
     selectOverlay.id = 'selectOverlay';
     selectOverlay.width = mixCanvas.width;
     selectOverlay.height = mixCanvas.height;
-    const mixCanvasStyle = window.getComputedStyle(mixCanvas);
-    selectOverlay.style.position = 'absolute';
-    selectOverlay.style.top = '0';
-    selectOverlay.style.left = '0';
-    selectOverlay.style.width = mixCanvasStyle.width;
-    selectOverlay.style.height = mixCanvasStyle.height;
-    selectOverlay.style.pointerEvents = 'none';
-    selectOverlay.style.visibility = 'hidden';
+    selectOverlay.style.cssText = 'position:absolute;top:0;left:0;width:100%;pointer-events:none;visibility:hidden;cursor:crosshair;';
     mixCanvas.parentElement.appendChild(selectOverlay);
     if (rectSelectBtn) {
         const overlayCtx = selectOverlay.getContext('2d');
