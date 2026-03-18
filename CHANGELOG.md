@@ -1,5 +1,14 @@
 # 更新日志 / Changelog
 
+== V1.1.0 ==
+[ZH]
+### 新功能
+- **矩形选取传输至PS** — 在混色区框选颜色区域，自动传输到 Photoshop 活动图层的选区内，可配合混合器画笔采样使用
+
+[EN]
+### New Features
+- **Rect Select to PS** — Select a region from the mixing canvas and transfer pixels into the active layer's selection in Photoshop, useful for Mixer Brush sampling
+
 == V1.0.4 ==
 [ZH]
 ### 改进

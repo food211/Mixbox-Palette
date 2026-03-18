@@ -40,6 +40,13 @@ const I18N = {
             paletteName_kuretakeGansai: 'Kuretake Gansai 16',
 
             switchEngine: 'Switch Mixing Engine (Mixbox / KM)',
+            rectSelectTool: 'Select area to PS',
+            statusRectSelect: '• Mode: <strong style="color: #FF9800;">Rect Select → PS</strong>',
+            rectSelectNoSelection: 'No active selection in Photoshop. Please create a selection first.',
+            rectSelectNoDocument: 'No document open in Photoshop.',
+            rectSelectSuccess: 'Pixels transferred to Photoshop.',
+            rectSelectFailed: 'Failed to transfer pixels.',
+            rectSelectTransferring: 'Transferring...',
 
             // 笔刷名称
             brush_circle: 'Circle',
@@ -81,6 +88,13 @@ const I18N = {
             paletteName_kuretakeGansai: '吴竹 Gansai 16色',
 
             switchEngine: '切换混色引擎 (Mixbox / KM)',
+            rectSelectTool: '选区传输至PS',
+            statusRectSelect: '• 当前模式: <strong style="color: #FF9800;">矩形选取 → PS</strong>',
+            rectSelectNoSelection: 'Photoshop 中没有活动选区，请先创建选区。',
+            rectSelectNoDocument: 'Photoshop 中没有打开文档。',
+            rectSelectSuccess: '像素已传输至 Photoshop。',
+            rectSelectFailed: '传输失败。',
+            rectSelectTransferring: '传输中...',
 
             brush_circle: '圆形',
             brush_soft: '柔边',

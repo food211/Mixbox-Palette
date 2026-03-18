@@ -177,6 +177,11 @@ let isDrawing = false;
 let isEyedropperMode = false;
 let currentBrush = { type: 'watercolor', image: null };
 
+// 矩形选取模式
+let isRectSelectMode = false;
+let isRectSelecting = false;
+let rectSelectStart = null;  // { x, y }
+
 // 工具模式
 let currentTool = 'brush';  // 'brush' 或 'smudge'
 let smudgeStrength = 50;  // 涂抹强度 (0-100)
@@ -661,6 +666,86 @@ function bindEvents() {
         }
     });
     
+    // 矩形选取按钮
+    const rectSelectBtn = document.getElementById('rectSelectBtn');
+    const selectOverlay = document.getElementById('selectOverlay');
+    if (rectSelectBtn && selectOverlay) {
+        const overlayCtx = selectOverlay.getContext('2d');
+
+        rectSelectBtn.addEventListener('click', () => {
+            if (!isRectSelectMode) {
+                isRectSelectMode = true;
+                rectSelectBtn.classList.add('active');
+                selectOverlay.classList.add('active');
+                mixCanvas.classList.remove('brush');
+                mixCanvas.classList.add('rect-select');
+                updateStatus('rect-select');
+            } else {
+                exitRectSelectMode();
+            }
+        });
+
+        selectOverlay.addEventListener('mousedown', (e) => {
+            if (!isRectSelectMode || e.button !== 0) return;
+            const rect = selectOverlay.getBoundingClientRect();
+            const x = (e.clientX - rect.left) * (selectOverlay.width / rect.width);
+            const y = (e.clientY - rect.top) * (selectOverlay.height / rect.height);
+            isRectSelecting = true;
+            rectSelectStart = { x, y };
+            overlayCtx.clearRect(0, 0, selectOverlay.width, selectOverlay.height);
+        });
+
+        selectOverlay.addEventListener('mousemove', (e) => {
+            if (!isRectSelecting) return;
+            const rect = selectOverlay.getBoundingClientRect();
+            const x = (e.clientX - rect.left) * (selectOverlay.width / rect.width);
+            const y = (e.clientY - rect.top) * (selectOverlay.height / rect.height);
+
+            const sx = Math.min(rectSelectStart.x, x);
+            const sy = Math.min(rectSelectStart.y, y);
+            const sw = Math.abs(x - rectSelectStart.x);
+            const sh = Math.abs(y - rectSelectStart.y);
+
+            overlayCtx.clearRect(0, 0, selectOverlay.width, selectOverlay.height);
+            // 暗化选区外部
+            overlayCtx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+            overlayCtx.fillRect(0, 0, selectOverlay.width, selectOverlay.height);
+            overlayCtx.clearRect(sx, sy, sw, sh);
+            // 虚线边框
+            overlayCtx.strokeStyle = '#ffffff';
+            overlayCtx.lineWidth = 1;
+            overlayCtx.setLineDash([4, 4]);
+            overlayCtx.strokeRect(sx, sy, sw, sh);
+            overlayCtx.setLineDash([]);
+        });
+
+        selectOverlay.addEventListener('mouseup', (e) => {
+            if (!isRectSelecting) return;
+            isRectSelecting = false;
+
+            const rect = selectOverlay.getBoundingClientRect();
+            const x = (e.clientX - rect.left) * (selectOverlay.width / rect.width);
+            const y = (e.clientY - rect.top) * (selectOverlay.height / rect.height);
+
+            const sx = Math.max(0, Math.floor(Math.min(rectSelectStart.x, x)));
+            const sy = Math.max(0, Math.floor(Math.min(rectSelectStart.y, y)));
+            const sw = Math.min(selectOverlay.width - sx, Math.ceil(Math.abs(x - rectSelectStart.x)));
+            const sh = Math.min(selectOverlay.height - sy, Math.ceil(Math.abs(y - rectSelectStart.y)));
+
+            if (sw < 2 || sh < 2) {
+                overlayCtx.clearRect(0, 0, selectOverlay.width, selectOverlay.height);
+                return;
+            }
+
+            extractAndSendPixels(sx, sy, sw, sh);
+            // 短暂显示选区后清除
+            setTimeout(() => {
+                overlayCtx.clearRect(0, 0, selectOverlay.width, selectOverlay.height);
+                exitRectSelectMode();
+            }, 500);
+        });
+    }
+
     // 引擎切换按钮
     const engineBtn = document.getElementById('engineBtn');
     if (engineBtn) {
@@ -704,6 +789,11 @@ function bindEvents() {
     
     // 键盘事件
     document.addEventListener('keydown', (e) => {
+        // Escape 退出矩形选取模式
+        if (e.key === 'Escape' && isRectSelectMode) {
+            exitRectSelectMode();
+            return;
+        }
         if (e.altKey && !isEyedropperMode) {
             isEyedropperMode = true;
             mixCanvas.classList.add('eyedropper');
@@ -999,6 +1089,64 @@ function updateColorDisplay() {
 }
 
 /**
+ * 退出矩形选取模式
+ */
+function exitRectSelectMode() {
+    isRectSelectMode = false;
+    isRectSelecting = false;
+    rectSelectStart = null;
+    const rectSelectBtn = document.getElementById('rectSelectBtn');
+    const selectOverlay = document.getElementById('selectOverlay');
+    if (rectSelectBtn) rectSelectBtn.classList.remove('active');
+    if (selectOverlay) {
+        selectOverlay.classList.remove('active');
+        const overlayCtx = selectOverlay.getContext('2d');
+        overlayCtx.clearRect(0, 0, selectOverlay.width, selectOverlay.height);
+    }
+    mixCanvas.classList.remove('rect-select');
+    mixCanvas.classList.add('brush');
+    updateStatus('draw');
+}
+
+/**
+ * 从混色区提取像素并发送到 PS
+ */
+function extractAndSendPixels(sx, sy, sw, sh) {
+    if (!isInWebView()) {
+        console.log('[rectSelect] Not in WebView, skipping');
+        return;
+    }
+
+    // 从 2D context 提取像素
+    const imageData = ctx.getImageData(sx, sy, sw, sh);
+    const data = imageData.data;
+
+    // 白色阈值处理：RGB 都 > 250 → 透明
+    for (let i = 0; i < data.length; i += 4) {
+        if (data[i] > 250 && data[i + 1] > 250 && data[i + 2] > 250) {
+            data[i + 3] = 0; // alpha = 0
+        }
+    }
+
+    // 编码为 PNG base64
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = sw;
+    tempCanvas.height = sh;
+    const tempCtx = tempCanvas.getContext('2d');
+    tempCtx.putImageData(imageData, 0, 0);
+    const dataURL = tempCanvas.toDataURL('image/png');
+
+    // 发送到 UXP host
+    window.uxpHost.postMessage({
+        type: "pastePixels",
+        imageDataURL: dataURL,
+        width: sw,
+        height: sh
+    });
+    console.log(`[rectSelect] Sent ${sw}x${sh} pixels to PS`);
+}
+
+/**
  * 更新状态文本
  */
 function updateStatus(mode) {
@@ -1006,6 +1154,8 @@ function updateStatus(mode) {
         statusText.innerHTML = t('statusEyedropperFg');
     } else if (mode === 'eyedropper-bg') {
         statusText.innerHTML = t('statusEyedropperBg');
+    } else if (mode === 'rect-select') {
+        statusText.innerHTML = t('statusRectSelect');
     } else {
         statusText.innerHTML = t('statusDraw');
     }
@@ -1496,6 +1646,13 @@ window.addEventListener("message", (e) => {
     lastSyncedBgColor = backgroundColor;
     updateColorDisplay();
     if (paletteStorage) paletteStorage.saveAppSettings({ foregroundColor, backgroundColor });
+  } else if (type === "pastePixelsResult") {
+    if (e.data.success) {
+      console.log('[rectSelect] Transfer success');
+    } else {
+      const errorKey = e.data.error || 'rectSelectFailed';
+      alert(t(errorKey));
+    }
   }
 });
 
