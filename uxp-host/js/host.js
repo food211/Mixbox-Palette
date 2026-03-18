@@ -5,7 +5,7 @@ const { action, core } = require("photoshop");
 const shell = require("uxp").shell;
 
 // ============ Global Variables ============
-const HOST_VERSION = "1.0.4";
+const HOST_VERSION = "1.1.0";
 const SOURCES = [
   "https://mixbox-palette.pages.dev/",
   "https://food211.github.io/Mixbox-Palette/"
@@ -262,6 +262,142 @@ async function setBackgroundColor(r, g, b) {
   }
 }
 
+// ============ Paste Pixels Handler ============
+async function handlePastePixels(data) {
+  const app = require("photoshop").app;
+  const { storage } = require("uxp");
+  const fs = storage.localFileSystem;
+
+  function sendResult(success, error) {
+    webview.postMessage({ type: "pastePixelsResult", success, error }, "*");
+  }
+
+  try {
+    const doc = app.activeDocument;
+    if (!doc) {
+      sendResult(false, "rectSelectNoDocument");
+      return;
+    }
+
+    // 检查是否有活动选区
+    let selBounds = null;
+    await core.executeAsModal(async () => {
+      try {
+        const result = await action.batchPlay([{
+          _obj: "get",
+          _target: [
+            { _property: "selection" },
+            { _ref: "document", _enum: "ordinal", _value: "targetEnum" }
+          ]
+        }], {});
+        const sel = result[0]?.selection;
+        if (sel && sel.top !== undefined) {
+          selBounds = {
+            top: sel.top._value || sel.top,
+            left: sel.left._value || sel.left,
+            bottom: sel.bottom._value || sel.bottom,
+            right: sel.right._value || sel.right
+          };
+        }
+      } catch (err) {
+        // 没有选区时 batchPlay 可能抛错
+        console.log("No selection:", err.message);
+      }
+    }, { commandName: "Check Selection" });
+
+    if (!selBounds) {
+      sendResult(false, "rectSelectNoSelection");
+      return;
+    }
+
+    const selWidth = selBounds.right - selBounds.left;
+    const selHeight = selBounds.bottom - selBounds.top;
+    if (selWidth < 1 || selHeight < 1) {
+      sendResult(false, "rectSelectNoSelection");
+      return;
+    }
+
+    // 解码 base64 PNG 并写入临时文件
+    const base64Data = data.imageDataURL.replace(/^data:image\/png;base64,/, '');
+    const binaryString = atob(base64Data);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+
+    const tempFolder = await fs.getTemporaryFolder();
+    const tempFile = await tempFolder.createFile("mixbox_paste.png", { overwrite: true });
+    await tempFile.write(bytes.buffer);
+    const token = await fs.createSessionToken(tempFile);
+
+    await core.executeAsModal(async () => {
+      // 记录当前活动图层 ID
+      const targetLayerID = doc.activeLayers[0]?.id;
+
+      // 用 placeEvent 放置图片（会创建智能对象图层）
+      await action.batchPlay([{
+        _obj: "placeEvent",
+        null: { _path: token, _kind: "local" },
+        freeTransformCenterState: { _enum: "quadCenterState", _value: "QCSAverage" }
+      }], {});
+
+      // 获取放置图层的边界
+      const placedLayer = doc.activeLayers[0];
+      const lb = placedLayer.bounds;
+      const imgWidth = lb.right - lb.left;
+      const imgHeight = lb.bottom - lb.top;
+
+      // 计算缩放：铺满选区（cover 模式，不留空白）
+      const scaleX = selWidth / imgWidth;
+      const scaleY = selHeight / imgHeight;
+
+      // 选区中心
+      const selCenterX = selBounds.left + selWidth / 2;
+      const selCenterY = selBounds.top + selHeight / 2;
+      // 当前图层中心
+      const layerCenterX = (lb.left + lb.right) / 2;
+      const layerCenterY = (lb.top + lb.bottom) / 2;
+      const offsetX = selCenterX - layerCenterX;
+      const offsetY = selCenterY - layerCenterY;
+
+      // 变换：缩放 + 移动到选区中心
+      await action.batchPlay([{
+        _obj: "transform",
+        freeTransformCenterState: { _enum: "quadCenterState", _value: "QCSAverage" },
+        offset: {
+          _obj: "offset",
+          horizontal: { _unit: "pixelsUnit", _value: offsetX },
+          vertical: { _unit: "pixelsUnit", _value: offsetY }
+        },
+        width: { _unit: "percentUnit", _value: scaleX * 100 },
+        height: { _unit: "percentUnit", _value: scaleY * 100 },
+        interfaceIconFrameDimmed: { _enum: "interpolationType", _value: "bicubic" }
+      }], {});
+
+      // 栅格化智能对象
+      await action.batchPlay([{
+        _obj: "rasterizeLayer",
+        _target: [{ _ref: "layer", _enum: "ordinal", _value: "targetEnum" }]
+      }], {});
+
+      // 向下合并到目标图层
+      if (targetLayerID) {
+        await action.batchPlay([{
+          _obj: "mergeLayersNew"
+        }], {});
+      }
+
+    }, { commandName: "Paste Pixels to Selection" });
+
+    sendResult(true);
+    console.log("✅ Pixels pasted to selection");
+
+  } catch (err) {
+    console.error("❌ handlePastePixels failed:", err.message || err);
+    sendResult(false, "rectSelectFailed");
+  }
+}
+
 // ============ Message Listener ============
 window.addEventListener("message", async (e) => {
   console.log('[host] message received, origin:', e.origin, 'data:', JSON.stringify(e.data).slice(0, 200));
@@ -297,6 +433,10 @@ window.addEventListener("message", async (e) => {
     } else if (target === "background") {
       await setBackgroundColor(color.r, color.g, color.b);
     }
+  }
+
+  if (type === "pastePixels") {
+    await handlePastePixels(e.data);
   }
 });
 
