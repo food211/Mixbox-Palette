@@ -1,5 +1,20 @@
 # 更新日志 / Changelog
 
+== V1.1.2 ==
+[ZH]
+### 改进
+- **选区传输提示优化** — 选区传输的提示弹窗样式优化
+
+### 修复
+- 修复选区框显示异常
+
+[EN]
+### Improvements
+- **Selection transfer prompt** — Improved style of the selection transfer prompt dialog
+
+### Fixes
+- Fixed selection box display issues
+
 == V1.1.1 ==
 [ZH]
 ### 改进

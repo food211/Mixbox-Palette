@@ -2,6 +2,9 @@
 // 远端要求的最低宿主版本（宿主版本低于此值时提示用户更新插件）
 const MIN_HOST_VERSION = '1.0.4';
 
+// 画布背景色（模拟水彩纸的暖白色，RGB 约 248/248/245）
+const CANVAS_BG = { r: 1, g: 1, b: 1 };
+
 // 自定义提示弹窗（替代 alert）
 function showAlert(message) {
   const modal = document.getElementById('alertModal');
@@ -240,12 +243,12 @@ async function switchEngine(engine) {
     localStorage.setItem('mixbox_engine', engine);
 
     // 用历史记录重绘画布
-    painter.clear({ r: 0.973, g: 0.973, b: 0.961 });
+    painter.clear(CANVAS_BG);
     for (let i = 0; i <= historyStep; i++) {
         const action = history[i];
         if (!action) continue;
         if (action.type === 'init') continue;
-        else if (action.type === 'clear') painter.clear({ r: 0.973, g: 0.973, b: 0.961 });
+        else if (action.type === 'clear') painter.clear(CANVAS_BG);
         else if (action.type === 'brush') replayBrushStroke(action);
         else if (action.type === 'smudge') replaySmudgeStroke(action);
     }
@@ -417,7 +420,7 @@ async function initCanvas() {
             historyStep = savedHistory.step;
 
             // 清空画布后重绘所有笔画
-            painter.clear({ r: 0.973, g: 0.973, b: 0.961 });
+            painter.clear(CANVAS_BG);
 
             for (let i = 0; i <= historyStep; i++) {
                 const action = history[i];
@@ -426,7 +429,7 @@ async function initCanvas() {
                 if (action.type === 'init') {
                     continue;
                 } else if (action.type === 'clear') {
-                    painter.clear({ r: 0.973, g: 0.973, b: 0.961 });
+                    painter.clear(CANVAS_BG);
                 } else if (action.type === 'brush') {
                     replayBrushStroke(action);
                 } else if (action.type === 'smudge') {
@@ -439,7 +442,7 @@ async function initCanvas() {
             console.log('✅ 画布内容已通过历史记录恢复');
         } else {
             // 新建画布
-            painter.clear({ r: 0.973, g: 0.973, b: 0.961 });
+            painter.clear(CANVAS_BG);
             painter.readToCanvas2D();
             saveState();
         }
@@ -603,7 +606,7 @@ function bindEvents() {
     // 清空按钮
     clearBtn.addEventListener('click', () => {
         if (painter) {
-            painter.clear({ r: 0.973, g: 0.973, b: 0.961 });
+            painter.clear(CANVAS_BG);
             painter.readToCanvas2D();
         } else {
             ctx.fillStyle = '#F8F8F5';
@@ -1271,7 +1274,7 @@ function restoreState(step) {
     if (step < 0 || step >= history.length) return;
 
     // 1. 清空画布到初始状态
-    painter.clear({ r: 0.973, g: 0.973, b: 0.961 });
+    painter.clear(CANVAS_BG);
 
     // 2. 重绘从第一步到目标步骤的所有笔画
     for (let i = 0; i <= step; i++) {
@@ -1283,7 +1286,7 @@ function restoreState(step) {
             continue;
         } else if (action.type === 'clear') {
             // 清空操作
-            painter.clear({ r: 0.973, g: 0.973, b: 0.961 });
+            painter.clear(CANVAS_BG);
         } else if (action.type === 'brush') {
             // 重绘笔刷笔画
             replayBrushStroke(action);
