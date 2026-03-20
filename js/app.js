@@ -249,17 +249,8 @@ async function switchEngine(engine) {
     currentEngine = engine;
     localStorage.setItem('mixbox_engine', engine);
 
-    // 用历史记录重绘画布
-    painter.clear(CANVAS_BG);
-    for (let i = 0; i <= historyStep; i++) {
-        const action = history[i];
-        if (!action) continue;
-        if (action.type === 'init') continue;
-        else if (action.type === 'clear') painter.clear(CANVAS_BG);
-        else if (action.type === 'brush') replayBrushStroke(action);
-        else if (action.type === 'smudge') replaySmudgeStroke(action);
-    }
-    painter.readToCanvas2D();
+    // 将当前画布像素直接写入新引擎的 WebGL 纹理，无需重绘历史
+    painter.writeFromCanvas2D();
 
     // 更新按钮文字
     const engineBtn = document.getElementById('engineBtn');
