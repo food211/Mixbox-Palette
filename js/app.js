@@ -211,22 +211,30 @@ let currentStroke = null;  // { type: 'brush'|'smudge'|'clear', points: [], colo
 
 // 混色引擎: 'mixbox' (默认) 或 'km'
 let currentEngine = 'mixbox';
+const painters = {};  // 缓存已初始化的 painter 实例
 
 /**
- * 根据引擎类型创建 Painter
+ * 获取或创建 Painter（带缓存）
  */
-function createPainter(engine, canvas) {
+async function getOrCreatePainter(engine, canvas) {
+    if (painters[engine]) return painters[engine];
+
+    let p;
     if (engine === 'km' && typeof KMWebGLPainter !== 'undefined' && isWebGLSupported()) {
         console.log('使用 KM 渲染器');
-        return new KMWebGLPainter(canvas);
-    } else if (typeof MixboxWebGLPainter !== 'undefined' && isWebGLSupported()) {
+        p = new KMWebGLPainter(canvas);
+    } else if (engine === 'mixbox' && typeof MixboxWebGLPainter !== 'undefined' && isWebGLSupported()) {
         console.log('使用 Mixbox 渲染器');
-        return new MixboxWebGLPainter(canvas);
+        p = new MixboxWebGLPainter(canvas);
     } else if (typeof MixboxCanvasPainter !== 'undefined') {
         console.log('使用 Canvas 2D 渲染器');
-        return new MixboxCanvasPainter(canvas);
+        p = new MixboxCanvasPainter(canvas);
+    } else {
+        throw new Error('没有可用的渲染器');
     }
-    throw new Error('没有可用的渲染器');
+    await p.init();
+    painters[engine] = p;
+    return p;
 }
 
 /**
@@ -236,8 +244,7 @@ async function switchEngine(engine) {
     if (engine === currentEngine) return;
     const oldMixStrength = painter ? painter.getMixStrength() : 0.3;
 
-    painter = createPainter(engine, mixCanvas);
-    await painter.init();
+    painter = await getOrCreatePainter(engine, mixCanvas);
     painter.setMixStrength(oldMixStrength);
     currentEngine = engine;
     localStorage.setItem('mixbox_engine', engine);
@@ -406,9 +413,7 @@ async function initCanvas() {
     const savedEngine = localStorage.getItem('mixbox_engine') || 'mixbox';
     console.log('🎨 初始化混色引擎...', savedEngine);
     try {
-        painter = createPainter(savedEngine, mixCanvas);
-
-        await painter.init();
+        painter = await getOrCreatePainter(savedEngine, mixCanvas);
         currentEngine = savedEngine;
 
         // 尝试加载保存的历史记录
