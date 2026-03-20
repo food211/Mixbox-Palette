@@ -142,9 +142,8 @@ class MixboxWebGLPainter {
             
             float radialFalloff = 1.0 - smoothstep(0.0, brushRadius, distToCenter);
             
-            float mixAmount = radialFalloff * brushAlpha * u_baseMixStrength / u_brushRadius;
-            mixAmount = clamp(mixAmount, 0.0, 1.0);
-
+            float mixAmount = radialFalloff * brushAlpha * u_baseMixStrength;
+            
             vec3 mixedColor = mixbox_lerp(
                 canvasColor.rgb,
                 u_brushColor.rgb,
