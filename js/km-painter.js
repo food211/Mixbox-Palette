@@ -25,7 +25,6 @@ class KMWebGLPainter {
         this.currentBrushTexture = null;
 
         this.baseMixStrength = 0.2;
-        this.gammaCorrect = true; // 使用 Gamma 矫正 KM（更准确）
     }
 
     /**
@@ -40,15 +39,6 @@ class KMWebGLPainter {
      */
     getMixStrength() {
         return this.baseMixStrength;
-    }
-
-    /**
-     * 设置是否使用 Gamma 矫正（默认开启）
-     * true: Gamma 矫正 KM（更准确，推荐）
-     * false: 直接 KM（更快，效果稍差）
-     */
-    setGammaCorrect(enabled) {
-        this.gammaCorrect = enabled;
     }
 
     /**
@@ -126,69 +116,34 @@ class KMWebGLPainter {
         uniform vec2 u_currentPosition;
         uniform float u_brushRadius;
         uniform float u_baseMixStrength;
-        uniform float u_gammaCorrect;  // 1.0=使用Gamma矫正, 0.0=直接KM
-
-        // ============ Kubelka-Munk 核心公式 ============
-
-        // RGB(0~1) → K/S 吸收散射比（Saunderson 方程）
-        vec3 rgb_to_ks(vec3 rgb) {
-            vec3 r = clamp(rgb, 0.001, 0.999);
-            return (1.0 - r) * (1.0 - r) / (2.0 * r);
-        }
-
-        // K/S → 反射率 RGB（Saunderson 方程反解）
-        vec3 ks_to_rgb(vec3 ks) {
-            return 1.0 + ks - sqrt(ks * ks + 2.0 * ks);
-        }
-
-        // 感知亮度（BT.709）
-        float luminance(vec3 c) {
-            return dot(c, vec3(0.2126, 0.7152, 0.0722));
-        }
-
-        // 饱和度调整：保持亮度，缩放色度
-        vec3 adjust_saturation(vec3 c, float factor) {
-            float lum = luminance(c);
-            return mix(vec3(lum), c, factor);
-        }
-
         // ============ KM 混色 ============
-        // 在有界空间插值 + KM 色相校正
 
-        // 核心混色：反射率空间插值 + KM 色相校正
-        vec3 km_mix_latent(vec3 c1, vec3 c2, float t) {
-            vec3 l1 = pow(max(c1, vec3(0.0)), vec3(2.2));
-            vec3 l2 = pow(max(c2, vec3(0.0)), vec3(2.2));
-
-            // 1) 基础：线性光空间直接插值（有界 0~1）
-            vec3 lin_result = mix(l1, l2, t);
-
-            // 2) KM 色相校正：用 K/S 算出减色混合的色相偏移
-            //    在反射率空间（而非 K/S 空间）做几何平均插值
-            //    R_mix = R1^(1-t) * R2^t  (等价于 log 空间线性插值)
-            //    这比 K/S 线性插值更稳定，因为反射率始终在 0~1
-            vec3 r1 = clamp(l1, 0.001, 0.999);
-            vec3 r2 = clamp(l2, 0.001, 0.999);
-            vec3 km_result = pow(r1, vec3(1.0 - t)) * pow(r2, vec3(t));
-
-            // 3) 混合两者：KM 提供减色混合的色相特征，线性插值保证覆盖力
-            //    kmWeight 控制"颜料感"强度：0.5 = 平衡减色和覆盖
-            float kmWeight = 0.5;
-            vec3 blended = mix(lin_result, km_result, kmWeight);
-
-            // // 4) 饱和度 boost（中间区域，保持鲜艳中间色）
-            // float mid = 1.0 - abs(t * 2.0 - 1.0);
-            // float boost = 1.0 + 0.6 * smoothstep(0.0, 1.0, mid);
-            // vec3 saturated = adjust_saturation(blended, boost);
-
-            return pow(clamp(blended, 0.0, 1.0), vec3(1.0 / 2.2));
-        }
-
-        // 直接 KM 混色（无 Gamma，备用）— 也改用几何平均
+        // KM Direct: sRGB 空间几何平均
         vec3 km_mix_direct(vec3 c1, vec3 c2, float t) {
             vec3 r1 = clamp(c1, 0.001, 0.999);
             vec3 r2 = clamp(c2, 0.001, 0.999);
             return pow(r1, vec3(1.0 - t)) * pow(r2, vec3(t));
+        }
+
+        // KM Pure: KM Direct + Linear RGB 混合 + 蓝黄绿校正
+        vec3 km_mix(vec3 c1, vec3 c2, float t) {
+            vec3 d = km_mix_direct(c1, c2, t);
+            vec3 l = mix(c1, c2, t);
+
+            float satBoost = 0.6;
+            vec3 blended = mix(d, l, satBoost);
+
+            // 蓝黄绿校正
+            float blue1   = max(0.0, c1.b - max(c1.r, c1.g));
+            float yellow1 = max(0.0, min(c1.r, c1.g) - c1.b);
+            float blue2   = max(0.0, c2.b - max(c2.r, c2.g));
+            float yellow2 = max(0.0, min(c2.r, c2.g) - c2.b);
+
+            float crossSignal = max(blue1 * yellow2, blue2 * yellow1);
+            float midWeight = 4.0 * t * (1.0 - t);
+            blended.g = min(1.0, blended.g + crossSignal * midWeight * 0.35);
+
+            return blended;
         }
 
         // ============ 主程序 ============
@@ -211,14 +166,7 @@ class KMWebGLPainter {
 
             float mixAmount = centerBoost * brushAlpha * u_baseMixStrength;
 
-            vec3 mixedColor;
-            if (u_gammaCorrect > 0.5) {
-                mixedColor = km_mix_latent(canvasColor.rgb, u_brushColor.rgb, mixAmount);
-            } else {
-                mixedColor = km_mix_direct(canvasColor.rgb, u_brushColor.rgb, mixAmount);
-            }
-
-            gl_FragColor = vec4(mixedColor, 1.0);
+            gl_FragColor = vec4(km_mix(canvasColor.rgb, u_brushColor.rgb, mixAmount), 1.0);
         }
         `;
 
@@ -235,8 +183,7 @@ class KMWebGLPainter {
             u_brushColor:      gl.getUniformLocation(this.program, 'u_brushColor'),
             u_currentPosition: gl.getUniformLocation(this.program, 'u_currentPosition'),
             u_brushRadius:     gl.getUniformLocation(this.program, 'u_brushRadius'),
-            u_baseMixStrength: gl.getUniformLocation(this.program, 'u_baseMixStrength'),
-            u_gammaCorrect:    gl.getUniformLocation(this.program, 'u_gammaCorrect')
+            u_baseMixStrength: gl.getUniformLocation(this.program, 'u_baseMixStrength')
         };
     }
 
@@ -398,7 +345,6 @@ class KMWebGLPainter {
         gl.uniform2f(this.locations.u_currentPosition, x, y);
         gl.uniform1f(this.locations.u_brushRadius, size / 2);
         gl.uniform1f(this.locations.u_baseMixStrength, this.baseMixStrength);
-        gl.uniform1f(this.locations.u_gammaCorrect, this.gammaCorrect ? 1.0 : 0.0);
 
         // 更新几何体
         const halfSize = size / 2;
