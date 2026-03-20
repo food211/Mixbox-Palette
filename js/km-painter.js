@@ -209,8 +209,7 @@ class KMWebGLPainter {
             float radialFalloff = 1.0 - smoothstep(0.0, u_brushRadius, distToCenter);
             float centerBoost = pow(radialFalloff, 0.5);
 
-            float mixAmount = centerBoost * brushAlpha * u_baseMixStrength / u_brushRadius;
-            mixAmount = clamp(mixAmount, 0.0, 1.0);
+            float mixAmount = centerBoost * brushAlpha * u_baseMixStrength;
 
             vec3 mixedColor;
             if (u_gammaCorrect > 0.5) {
