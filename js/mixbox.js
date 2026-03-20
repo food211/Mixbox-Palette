@@ -697,9 +697,10 @@
   }
 
   var texture;
+  var textureGL;
 
   function lutTexture(gl) {
-    if (!texture) {
+    if (!texture || textureGL !== gl) {
       var pixels = new Uint8Array(512 * 512 * 4);
 
       for(var b = 0; b < 64; b++)
@@ -726,6 +727,7 @@
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
       gl.bindTexture(gl.TEXTURE_2D, textureState);
+      textureGL = gl;
     }
 
     return texture;
