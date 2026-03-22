@@ -817,6 +817,48 @@ function bindEvents() {
     
     // 键盘事件
     let shiftSmudgeActive = false; // Shift 临时涂抹模式
+    let previousTool = null; // 记录上一次的工具，用于快捷键双击回切
+
+    // 获取当前工具标识
+    function getCurrentToolId() {
+        if (isRectSelectMode) return 'rectSelect';
+        if (isEyedropperMode) return 'eyedropper';
+        return currentTool; // 'brush' 或 'smudge'
+    }
+
+    // 通过快捷键切换工具，自动记录上一个工具
+    function switchToTool(targetTool) {
+        const current = getCurrentToolId();
+        if (current === targetTool) {
+            // 再次按下同一快捷键 → 回切上一个工具
+            if (previousTool && previousTool !== targetTool) {
+                switchToTool(previousTool);
+            }
+            return;
+        }
+        previousTool = current;
+        // 先退出当前特殊模式
+        if (isEyedropperMode) document.getElementById('eyedropperBtn').click();
+        if (isRectSelectMode) exitRectSelectMode();
+        // 切换到目标工具
+        switch (targetTool) {
+            case 'brush':
+                if (currentTool !== 'brush') document.getElementById('smudgeBtn').click();
+                break;
+            case 'smudge':
+                if (currentTool !== 'smudge') document.getElementById('smudgeBtn').click();
+                break;
+            case 'eyedropper':
+                if (!isEyedropperMode) document.getElementById('eyedropperBtn').click();
+                break;
+            case 'rectSelect':
+                if (!isRectSelectMode && document.getElementById('rectSelectBtn')) {
+                    document.getElementById('rectSelectBtn').click();
+                }
+                break;
+        }
+    }
+
     document.addEventListener('keydown', (e) => {
         // Escape 退出矩形选取模式
         if (e.key === 'Escape' && isRectSelectMode) {
@@ -837,32 +879,16 @@ function bindEvents() {
         // Shift 临时切换涂抹
         if (e.key === 'Shift' && !shiftSmudgeActive && currentTool === 'brush' && !isEyedropperMode && !isRectSelectMode) {
             shiftSmudgeActive = true;
-            document.getElementById('smudgeBtn').click(); // 切换到涂抹
+            document.getElementById('smudgeBtn').click();
         }
 
         // 工具快捷键 (忽略输入框中的按键)
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
         switch (e.key.toLowerCase()) {
-            case 'b':
-                if (currentTool !== 'brush') document.getElementById('smudgeBtn').click();
-                if (isEyedropperMode) document.getElementById('eyedropperBtn').click();
-                if (isRectSelectMode) exitRectSelectMode();
-                break;
-            case 's':
-                if (isEyedropperMode) document.getElementById('eyedropperBtn').click();
-                if (isRectSelectMode) exitRectSelectMode();
-                if (currentTool !== 'smudge') document.getElementById('smudgeBtn').click();
-                break;
-            case 'i':
-                if (isRectSelectMode) exitRectSelectMode();
-                if (!isEyedropperMode) document.getElementById('eyedropperBtn').click();
-                break;
-            case 'm':
-                if (isEyedropperMode) document.getElementById('eyedropperBtn').click();
-                if (!isRectSelectMode && document.getElementById('rectSelectBtn')) {
-                    document.getElementById('rectSelectBtn').click();
-                }
-                break;
+            case 'b': switchToTool('brush'); break;
+            case 's': switchToTool('smudge'); break;
+            case 'i': switchToTool('eyedropper'); break;
+            case 'm': switchToTool('rectSelect'); break;
             case 'x': // 互换前景/背景色
                 const tmpColor = foregroundColor;
                 foregroundColor = backgroundColor;
