@@ -816,38 +816,71 @@ function bindEvents() {
     });
     
     // 键盘事件
+    let shiftSmudgeActive = false; // Shift 临时涂抹模式
     document.addEventListener('keydown', (e) => {
         // Escape 退出矩形选取模式
         if (e.key === 'Escape' && isRectSelectMode) {
             exitRectSelectMode();
             return;
         }
+
+        // Alt 临时切换吸管
         if (e.altKey && !isEyedropperMode) {
             isEyedropperMode = true;
             mixCanvas.classList.add('eyedropper');
             mixCanvas.classList.remove('brush');
             updateStatus('eyedropper-fg');
-
-            // 按下 Alt 键时高亮吸管按钮
             const eyedropperBtn = document.getElementById('eyedropperBtn');
-            if (eyedropperBtn) {
-                eyedropperBtn.classList.add('active');
-            }
+            if (eyedropperBtn) eyedropperBtn.classList.add('active');
+        }
+
+        // Shift 临时切换涂抹
+        if (e.key === 'Shift' && !shiftSmudgeActive && currentTool === 'brush' && !isEyedropperMode && !isRectSelectMode) {
+            shiftSmudgeActive = true;
+            document.getElementById('smudgeBtn').click(); // 切换到涂抹
+        }
+
+        // 工具快捷键 (忽略输入框中的按键)
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        switch (e.key.toLowerCase()) {
+            case 'b':
+                if (currentTool !== 'brush') document.getElementById('smudgeBtn').click();
+                if (isEyedropperMode) document.getElementById('eyedropperBtn').click();
+                if (isRectSelectMode) exitRectSelectMode();
+                break;
+            case 's':
+                if (isEyedropperMode) document.getElementById('eyedropperBtn').click();
+                if (isRectSelectMode) exitRectSelectMode();
+                if (currentTool !== 'smudge') document.getElementById('smudgeBtn').click();
+                break;
+            case 'i':
+                if (isRectSelectMode) exitRectSelectMode();
+                if (!isEyedropperMode) document.getElementById('eyedropperBtn').click();
+                break;
+            case 'm':
+                if (isEyedropperMode) document.getElementById('eyedropperBtn').click();
+                if (!isRectSelectMode && document.getElementById('rectSelectBtn')) {
+                    document.getElementById('rectSelectBtn').click();
+                }
+                break;
         }
     });
-    
+
     document.addEventListener('keyup', (e) => {
+        // 松开 Alt 退出吸管
         if (!e.altKey && isEyedropperMode) {
             isEyedropperMode = false;
             mixCanvas.classList.remove('eyedropper');
             mixCanvas.classList.add('brush');
             updateStatus('draw');
-            
-            // 松开 Alt 键时取消高亮
             const eyedropperBtn = document.getElementById('eyedropperBtn');
-            if (eyedropperBtn) {
-                eyedropperBtn.classList.remove('active');
-            }
+            if (eyedropperBtn) eyedropperBtn.classList.remove('active');
+        }
+
+        // 松开 Shift 退出临时涂抹
+        if (e.key === 'Shift' && shiftSmudgeActive) {
+            shiftSmudgeActive = false;
+            document.getElementById('smudgeBtn').click(); // 切换回画笔
         }
     });
     
