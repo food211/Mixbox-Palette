@@ -935,14 +935,15 @@ function bindEvents() {
             return;
         }
 
-        if (e.button !== 0) return; // 只处理左键
+        if (e.button !== 0 && e.button !== 2) return; // 左键或右键
 
         if (currentTool === 'brush') {
             // 笔刷工具模式
             isDrawing = true;
             strokeStarted = true;
 
-            const strokeColor = activeColorTarget === 'background' ? backgroundColor : currentBrushColor;
+            // 左键用前景色，右键用背景色
+            const strokeColor = e.button === 2 ? backgroundColor : currentBrushColor;
 
             // 开始新笔画
             beginStroke('brush', strokeColor);
