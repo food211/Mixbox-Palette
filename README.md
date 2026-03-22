@@ -77,10 +77,19 @@ The plugin loads from Cloudflare Pages (`mixbox-palette.pages.dev`) by default, 
 4. **Paint** - Draw on the mixing canvas to blend colors
 5. **Use in Photoshop** - Selected colors sync to Photoshop foreground/background automatically; conversely, changing colors in Photoshop (via color picker, swatches, or keyboard shortcuts) updates the plugin palette
 
-### Eyedropper
-- Hold `Alt` key to enter eyedropper mode
-- `Alt + Left Click` on canvas → foreground color
-- `Alt + Right Click` on canvas → background color
+### Keyboard Shortcuts
+| Key | Action |
+|-----|--------|
+| `B` | Brush tool |
+| `S` | Smudge tool |
+| `I` | Eyedropper tool |
+| `M` | Rectangle select |
+| `X` | Swap foreground/background colors |
+| `Shift` (hold) | Temporary smudge tool |
+| `Alt` (hold) | Temporary eyedropper |
+| `Alt + Left Click` | Pick foreground color |
+| `Alt + Right Click` | Pick background color |
+| `Esc` | Exit rectangle select |
 
 ## Tech Stack
 

@@ -1,5 +1,16 @@
 # 更新日志 / Changelog
 
+== V1.1.3 ==
+[ZH]
+### 新功能
+- **工具快捷键** — 支持键盘快捷键切换工具：`B` 画笔 / `S` 涂抹 / `I` 吸管 / `M` 矩形选取 / `X` 互换前后景色
+- **临时涂抹** — 按住 `Shift` 临时切换到涂抹工具，松开自动切回画笔
+
+[EN]
+### New Features
+- **Tool shortcuts** — Keyboard shortcuts for tool switching: `B` Brush / `S` Smudge / `I` Eyedropper / `M` Rect Select / `X` Swap FG/BG
+- **Temporary smudge** — Hold `Shift` to temporarily switch to smudge tool, release to return to brush
+
 == V1.1.2 ==
 [ZH]
 ### 改进
