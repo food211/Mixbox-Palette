@@ -3,13 +3,23 @@
 == V1.1.3 ==
 [ZH]
 ### 新功能
-- **工具快捷键** — 支持键盘快捷键切换工具：`B` 画笔 / `S` 涂抹 / `I` 吸管 / `M` 矩形选取 / `X` 互换前后景色
+- **工具快捷键** — 支持键盘快捷键切换工具：`B` 画笔 / `S` 涂抹 / `I` 吸管 / `M` 矩形选取 / `X` 互换前后景色，再次按下同一快捷键可回切上一个工具
 - **临时涂抹** — 按住 `Shift` 临时切换到涂抹工具，松开自动切回画笔
+- **右键绘制** — 在混色区右键拖动使用背景色绘制
+- **右键选色** — 右键点击颜料色块直接设为背景色
+
+### 修复
+- 修复颜料名称提示挡住相邻色块的点击
 
 [EN]
 ### New Features
-- **Tool shortcuts** — Keyboard shortcuts for tool switching: `B` Brush / `S` Smudge / `I` Eyedropper / `M` Rect Select / `X` Swap FG/BG
+- **Tool shortcuts** — Keyboard shortcuts for tool switching: `B` Brush / `S` Smudge / `I` Eyedropper / `M` Rect Select / `X` Swap FG/BG; press the same key again to return to previous tool
 - **Temporary smudge** — Hold `Shift` to temporarily switch to smudge tool, release to return to brush
+- **Right-click paint** — Right-click drag on canvas to paint with background color
+- **Right-click color** — Right-click a color swatch to set it as background color
+
+### Fixes
+- Fixed color name tooltip blocking clicks on adjacent swatches
 
 == V1.1.2 ==
 [ZH]
