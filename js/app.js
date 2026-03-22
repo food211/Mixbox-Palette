@@ -863,6 +863,14 @@ function bindEvents() {
                     document.getElementById('rectSelectBtn').click();
                 }
                 break;
+            case 'x': // 互换前景/背景色
+                const tmpColor = foregroundColor;
+                foregroundColor = backgroundColor;
+                currentBrushColor = foregroundColor;
+                backgroundColor = tmpColor;
+                updateColorDisplay();
+                saveAppSettings();
+                break;
         }
     });
 
