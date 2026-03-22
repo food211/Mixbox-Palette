@@ -309,7 +309,7 @@ h1 {
     bottom: 100%;
     left: 50%;
     transform: translateX(-50%);
-    background-color: #4c4c4c; 
+    background-color: #4c4c4c;
     color: white;
     padding: 4px 8px;
     border-radius: 4px;
@@ -319,6 +319,7 @@ h1 {
     visibility: hidden;
     transition: opacity 0.2s, visibility 0.2s;
     z-index: 10;
+    pointer-events: none;
 }
 
 .color-circle:hover .color-name-tooltip {
