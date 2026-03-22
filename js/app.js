@@ -568,6 +568,12 @@ function updateColorPicker() {
             updateColorDisplay();
         });
 
+        circle.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            backgroundColor = colorObj.hex;
+            updateColorDisplay();
+        });
+
         colorPicker.appendChild(circle);
     });
 }
