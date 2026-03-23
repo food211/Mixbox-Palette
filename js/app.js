@@ -1689,9 +1689,9 @@ function initZoomControl() {
 
         // 调整 body 的 padding，防止缩放后内容被裁剪
         if (zoom < 1) {
-            document.body.style.padding = '10px';
+            document.body.style.padding = '0 10px 10px';
         } else {
-            document.body.style.padding = '20px';
+            document.body.style.padding = '0 12px 12px';
         }
     }
 }
@@ -1761,6 +1761,16 @@ window.addEventListener("message", (e) => {
     }
   }
 });
+
+// 焦点指示条：提示用户键盘输入被插件捕获
+(function() {
+    const indicator = document.getElementById('focusIndicator');
+    if (!indicator) return;
+    window.addEventListener('focus', () => indicator.classList.add('active'));
+    window.addEventListener('blur', () => indicator.classList.remove('active'));
+    // 页面加载时如果已有焦点则立即显示
+    if (document.hasFocus()) indicator.classList.add('active');
+})();
 
 // 禁用整个页面的右键菜单（WebView 环境下避免弹出浏览器原生菜单）
 // if (isInWebView()) {
