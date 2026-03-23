@@ -125,25 +125,55 @@ class KMWebGLPainter {
             return pow(r1, vec3(1.0 - t)) * pow(r2, vec3(t));
         }
 
-        // KM Pure: KM Direct + Linear RGB 混合 + 蓝黄绿校正
+        // KM Pure: KM Direct + 线性插值，通道互斥动态混合
         vec3 km_mix(vec3 c1, vec3 c2, float t) {
-            vec3 d = km_mix_direct(c1, c2, t);
-            vec3 l = mix(c1, c2, t);
+            vec3 km = km_mix_direct(c1, c2, t);
+            vec3 lin = c1 + (c2 - c1) * t;
 
-            float satBoost = 0.6;
-            vec3 blended = mix(d, l, satBoost);
+            // 通道互斥检测
+            float conflictR = abs(c1.r - c2.r) * (1.0 - min(c1.r, c2.r));
+            float conflictG = abs(c1.g - c2.g) * (1.0 - min(c1.g, c2.g));
+            float conflictB = abs(c1.b - c2.b) * (1.0 - min(c1.b, c2.b));
+            float maxConflict = max(conflictR, max(conflictG, conflictB));
+            float conflictBlend = maxConflict * maxConflict;
 
-            // 蓝黄绿校正
-            float blue1   = max(0.0, c1.b - max(c1.r, c1.g));
-            float yellow1 = max(0.0, min(c1.r, c1.g) - c1.b);
-            float blue2   = max(0.0, c2.b - max(c2.r, c2.g));
-            float yellow2 = max(0.0, min(c2.r, c2.g) - c2.b);
+            // 自适应 satBoost: 饱和度越高越偏线性，避免 KM 过度变暗
+            float maxC1 = max(c1.r, max(c1.g, c1.b));
+            float minC1 = min(c1.r, min(c1.g, c1.b));
+            float maxC2 = max(c2.r, max(c2.g, c2.b));
+            float minC2 = min(c2.r, min(c2.g, c2.b));
+            float sat1 = maxC1 > 0.001 ? (maxC1 - minC1) / maxC1 : 0.0;
+            float sat2 = maxC2 > 0.001 ? (maxC2 - minC2) / maxC2 : 0.0;
+            float avgSat = (sat1 + sat2) * 0.5;
+            float satBoost = mix(0.35, 0.55, avgSat);
+            float blend = max(satBoost, conflictBlend);
 
-            float crossSignal = max(blue1 * yellow2, blue2 * yellow1);
+            vec3 result = km + (lin - km) * blend;
+
+            // 蓝黄绿校正（色相角检测 + 饱和度加权）
+            // 色相角: atan2(sqrt(3)*(G-B), 2R-G-B)
+            float hue1 = atan(sqrt(3.0) * (c1.g - c1.b), 2.0 * c1.r - c1.g - c1.b);
+            float hue2 = atan(sqrt(3.0) * (c2.g - c2.b), 2.0 * c2.r - c2.g - c2.b);
+            // 蓝区: 色相 ≈ -π/2 (210°~270°), 黄区: 色相 ≈ π/3 (45°~75°)
+            // smoothstep 窗口给出柔和的区间归属度
+            float blueZone1  = smoothstep(0.3, 1.0, max(0.0, 1.0 - abs(hue1 + 1.57) / 1.05)) * sat1;
+            float yellowZone1 = smoothstep(0.3, 1.0, max(0.0, 1.0 - abs(hue1 - 1.05) / 0.52)) * sat1;
+            float blueZone2  = smoothstep(0.3, 1.0, max(0.0, 1.0 - abs(hue2 + 1.57) / 1.05)) * sat2;
+            float yellowZone2 = smoothstep(0.3, 1.0, max(0.0, 1.0 - abs(hue2 - 1.05) / 0.52)) * sat2;
+            float crossSignal = max(blueZone1 * yellowZone2, blueZone2 * yellowZone1);
             float midWeight = 4.0 * t * (1.0 - t);
-            blended.g = min(1.0, blended.g + crossSignal * midWeight * 0.35);
+            float greenInject = crossSignal * midWeight;
+            result.g = min(1.0, result.g + greenInject * 0.28);
+            result.r = result.r * (1.0 - greenInject * 0.4);
 
-            return blended;
+            // 亮度限制: green boost 后不超过线性插值亮度
+            float lumResult = dot(result, vec3(0.299, 0.587, 0.114));
+            float lumLin = dot(lin, vec3(0.299, 0.587, 0.114));
+            if (lumResult > lumLin && lumLin > 0.001) {
+                result *= lumLin / lumResult;
+            }
+
+            return result;
         }
 
         // ============ 主程序 ============
