@@ -1,5 +1,34 @@
 # 更新日志 / Changelog
 
+== V1.1.4 ==
+[ZH]
+### 新功能
+- **焦点指示条** — 插件获得键盘焦点时顶部亮起蓝色指示条，提示快捷键已被插件捕获
+- **涂抹强度独立参数** — 涂抹工具和画笔工具使用独立的强度参数，切换工具时自动切换
+
+### 改进
+- **颜料浓度调节优化** — 滑条范围扩大至1-100，采用平滑曲线映射，低浓度区域调节更细腻
+- **缩放范围扩展** — 最大缩放比例从120%提升至150%
+- **代码拆分** — CSS和JS文件按功能模块拆分，提升可维护性
+
+### 修复
+- 修复重复定义的提示弹窗DOM元素
+- 修复缩放时顶部出现多余空隙
+
+[EN]
+### New Features
+- **Focus indicator** — A blue bar appears at the top when the plugin captures keyboard focus, reminding users to click PS canvas to return shortcuts
+- **Independent smudge strength** — Smudge tool and brush tool now have separate strength parameters
+
+### Improvements
+- **Paint concentration slider** — Range expanded to 1-100 with smooth curve mapping for finer control at low values
+- **Zoom range expanded** — Maximum zoom increased from 120% to 150%
+- **Code splitting** — CSS and JS files split into modules for better maintainability
+
+### Fixes
+- Fixed duplicate alert modal DOM elements
+- Fixed extra gap at top when zooming
+
 == V1.1.3 ==
 [ZH]
 ### 新功能

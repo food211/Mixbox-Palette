@@ -3,7 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <title>Mixbox Palette</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/header.css">
+    <link rel="stylesheet" href="css/palette.css">
+    <link rel="stylesheet" href="css/controls.css">
+    <link rel="stylesheet" href="css/mix-area.css">
+    <link rel="stylesheet" href="css/modals.css">
 </head>
 <body oncontextmenu="return false">
     <div class="container">
@@ -53,9 +58,9 @@
                 <span id="brushSizeValue">15</span>px
             </div>
             <div class="brush-size">
-                <label data-i18n="paintConcentration">Concentration</label>
-                <input type="range" id="brushMix" min="1" max="50" value="30">
-                <span id="brushMixStrength">30</span>%
+                <label id="mixLabel" data-i18n="paintConcentration">Concentration</label>
+                <input type="range" id="brushMix" min="1" max="100" value="77">
+                <span id="brushMixStrength">77</span>%
             </div>
             <div class="brush-preview-group">
                 <span class="brush-label" data-i18n="brushLabel">Brush</span>
@@ -197,10 +202,13 @@
             // 加载其他依赖
             await Promise.all([
                 loadScript('js/brush-manager.js'),
-                loadScript('js/palette-storage.js')
+                loadScript('js/palette-storage.js'),
+                loadScript('js/ps-bridge.js'),
+                loadScript('js/palette-presets.js'),
+                loadScript('js/zoom.js')
             ]);
             console.log('✅ 其他依赖已加载');
-            
+
             // 最后加载应用主逻辑
             await loadScript('js/app.js');
             console.log('✅ app.js 已加载');
