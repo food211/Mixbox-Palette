@@ -11,22 +11,38 @@
 body {
     background-color: #6b6b6b;
     color: #e0e0e0;
-    padding: 12px;
+    padding: 0 12px 12px;
     display: flex;
-    justify-content: center;
-    align-items: flex-start;
+    flex-direction: column;
+    align-items: center;
     min-height: 100vh;
     overflow-y: auto;
 }
 
+.focus-indicator {
+    width: calc(100% + 30px);
+    margin: -15px -15px 8px;
+    height: 14px;
+    background-color: #3a3a3a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: transparent;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.focus-indicator.active {
+    background-color: #29b6f6;
+    color: #333;
+}
+
 .container {
     background-color: #272727;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     padding: 15px;
     max-width: 400px;
     width: 100%;
-    transition: transform 0.3s ease;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 h1 {
