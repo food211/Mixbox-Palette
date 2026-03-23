@@ -701,6 +701,9 @@ function bindEvents() {
     }
 
     document.addEventListener('keydown', (e) => {
+        // 阻止空格滚动页面（空格在PS中用于移动画布）
+        if (e.key === ' ') e.preventDefault();
+
         // Escape 退出矩形选取模式
         if (e.key === 'Escape' && isRectSelectMode) {
             exitRectSelectMode();
