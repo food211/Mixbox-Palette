@@ -34,7 +34,7 @@ body {
 
 .focus-indicator.active {
     background-color: #29b6f6;
-    color: #333;
+    color: #fff;
 }
 
 .container {
