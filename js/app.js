@@ -12,7 +12,6 @@ let colors = palettePresets[currentPalette].colors;
 let foregroundColor = '#000000';
 let backgroundColor = '#ffffff';
 let currentBrushColor = foregroundColor;
-let activeColorTarget = 'foreground'; // 'foreground' 或 'background'
 let brushSize = 15;
 let isDrawing = false;
 let isEyedropperMode = false;
@@ -382,16 +381,12 @@ function updateColorPicker() {
         
         circle.addEventListener('click', (e) => {
             e.preventDefault();
-            if (activeColorTarget === 'background') {
-                backgroundColor = colorObj.hex;
-            } else {
-                foregroundColor = colorObj.hex;
-                currentBrushColor = foregroundColor;
-                // 选择颜色后自动关闭涂抹模式
-                if (currentTool === 'smudge') {
-                    const smudgeBtn = document.getElementById('smudgeBtn');
-                    smudgeBtn.click();
-                }
+            foregroundColor = colorObj.hex;
+            currentBrushColor = foregroundColor;
+            // 选择颜色后自动关闭涂抹模式
+            if (currentTool === 'smudge') {
+                const smudgeBtn = document.getElementById('smudgeBtn');
+                smudgeBtn.click();
             }
             updateColorDisplay();
         });
@@ -410,15 +405,6 @@ function updateColorPicker() {
  * 绑定事件
  */
 function bindEvents() {
-    // 前景/背景色块点击切换激活目标
-    fgColorBox.addEventListener('click', () => {
-        activeColorTarget = 'foreground';
-        updateColorDisplay();
-    });
-    bgColorBox.addEventListener('click', () => {
-        activeColorTarget = 'background';
-        updateColorDisplay();
-    });
 
     // 笔刷大小控制
     brushSizeInput.addEventListener('input', (e) => {
@@ -1019,8 +1005,6 @@ let lastSyncedBgColor = null;
 function updateColorDisplay() {
     if (foregroundColor) fgColorBox.style.backgroundColor = foregroundColor;
     if (backgroundColor) bgColorBox.style.backgroundColor = backgroundColor;
-    fgColorBox.classList.toggle('active-target', activeColorTarget === 'foreground');
-    bgColorBox.classList.toggle('active-target', activeColorTarget === 'background');
     document.querySelectorAll('.color-circle').forEach(circle => {
         const color = circle.dataset.color;
         circle.classList.toggle('selected-fg', color === foregroundColor);
