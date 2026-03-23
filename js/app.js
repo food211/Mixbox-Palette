@@ -758,6 +758,22 @@ function bindEvents() {
             document.getElementById('smudgeBtn').click(); // 切换回画笔
         }
     });
+
+    // 窗口失焦时重置临时快捷键状态（Alt吸管、Shift涂抹）
+    window.addEventListener('blur', () => {
+        if (isEyedropperMode) {
+            isEyedropperMode = false;
+            mixCanvas.classList.remove('eyedropper');
+            mixCanvas.classList.add('brush');
+            updateStatus('draw');
+            const eyedropperBtn = document.getElementById('eyedropperBtn');
+            if (eyedropperBtn) eyedropperBtn.classList.remove('active');
+        }
+        if (shiftSmudgeActive) {
+            shiftSmudgeActive = false;
+            document.getElementById('smudgeBtn').click();
+        }
+    });
     
     // Canvas 事件
     let strokeStarted = false;
