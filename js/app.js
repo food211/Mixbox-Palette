@@ -1537,8 +1537,3 @@ window.addEventListener("message", (e) => {
     // 页面加载时如果已有焦点则立即显示
     if (document.hasFocus()) indicator.classList.add('active');
 })();
-
-// 禁用整个页面的右键菜单（WebView 环境下避免弹出浏览器原生菜单）
-// if (isInWebView()) {
-//   document.addEventListener('contextmenu', (e) => e.preventDefault());
-// }
