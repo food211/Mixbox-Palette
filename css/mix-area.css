@@ -1,0 +1,93 @@
+
+.mix-area-container {
+    margin-bottom: 5px;
+}
+
+.mix-area-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 5px;
+}
+
+.mix-area-header h3 {
+    font-size: 14px;
+    color: #e0e0e0;
+}
+
+.color-indicators {
+    display: flex;
+    gap: 15px;
+}
+
+.color-indicator {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    color: #b0b0b0;
+}
+
+.color-box {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.color-box.foreground {
+    border: 2px solid #fff;
+}
+
+.color-box.background {
+    border: 2px dashed #fff;
+}
+
+.color-box.active-target {
+    outline: 2px solid #6afe6f;
+    outline-offset: 2px;
+}
+
+.mix-area {
+    position: relative;
+    border: 1px solid #4c4c4c;
+    border-radius: 8px;
+    overflow: hidden;
+    background-color: #2c2c2c;
+}
+
+#mixCanvas {
+    display: block;
+    width: 100%;
+    cursor: crosshair;
+}
+
+#mixCanvas.brush {
+    cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" fill="rgba(255,255,255,0.4)"/></svg>') 12 12, auto;
+}
+
+#mixCanvas.eyedropper {
+    cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M17.5 2.5L23 8l-15 15H2v-6L17.5 2.5z" stroke="white" stroke-width="2" fill="#333"/></svg>') 2 22, auto;
+}
+
+#mixCanvas.rect-select,
+#selectOverlay {
+    cursor: crosshair;
+}
+
+.info {
+    background-color: #2c2c2c;
+    padding: 15px;
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #b0b0b0;
+}
+
+.info p {
+    margin-bottom: 5px;
+}
+
+.info strong {
+    color: #e0e0e0;
+}

@@ -1,180 +1,8 @@
-// ============ WebView 通信 ============
-// 远端要求的最低宿主版本（宿主版本低于此值时提示用户更新插件）
-const MIN_HOST_VERSION = '1.0.4';
-
-// 画布背景色（模拟水彩纸的暖白色，RGB 约 248/248/245）
-const CANVAS_BG = { r: 1, g: 1, b: 1 };
-
-// 自定义提示弹窗（替代 alert）
-function showAlert(message) {
-  const modal = document.getElementById('alertModal');
-  const text = document.getElementById('alertModalText');
-  const okBtn = document.getElementById('alertModalOkBtn');
-  text.textContent = message;
-  modal.classList.add('active');
-  okBtn.onclick = () => modal.classList.remove('active');
+// 颜料浓度滑条值(1-100) → 实际混色强度(0.01-0.5) 的非线性映射
+// 使用平方曲线使低浓度区域变化更平缓
+function mixSliderToStrength(sliderValue) {
+    return 0.5 * Math.pow(sliderValue / 100, 2);
 }
-
-// 检测是否在 UXP WebView 环境中
-function isInWebView() {
-  return typeof window.uxpHost !== 'undefined';
-}
-
-// 获取宿主版本号（从 URL 参数 ?host=x.x.x 读取）
-function getHostVersion() {
-  const params = new URLSearchParams(window.location.search);
-  return params.get('host');
-}
-
-// 比较版本号，返回 -1/0/1
-function compareVersions(a, b) {
-  const pa = a.split('.').map(Number);
-  const pb = b.split('.').map(Number);
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const na = pa[i] || 0, nb = pb[i] || 0;
-    if (na < nb) return -1;
-    if (na > nb) return 1;
-  }
-  return 0;
-}
-
-// 检查宿主版本兼容性，不兼容时显示提示并返回 false
-function checkHostCompatibility() {
-  if (!isInWebView()) return true; // 浏览器直接访问，无需检查
-  const hostVer = getHostVersion();
-  if (!hostVer) return true; // 无版本参数，跳过检查（兼容未传参的旧宿主）
-  if (compareVersions(hostVer, MIN_HOST_VERSION) >= 0) return true;
-
-  const lang = navigator.language || '';
-  const isZH = lang.startsWith('zh');
-  document.body.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#2b2b2b;color:#e0e0e0;font-family:sans-serif;text-align:center;padding:20px">'
-    + '<div style="font-size:48px;margin-bottom:20px">⚠️</div>'
-    + '<h2>' + (isZH ? '插件版本过低' : 'Plugin Update Required') + '</h2>'
-    + '<p style="color:#aaa;max-width:400px">' + (isZH
-      ? '当前 Photoshop 插件版本 (v' + hostVer + ') 与远端不兼容，请在 Adobe Exchange 中更新到最新版本。'
-      : 'Your Photoshop plugin (v' + hostVer + ') is incompatible with the current remote version. Please update via Adobe Exchange.')
-    + '</p>'
-    + '</div>';
-  return false;
-}
-
-// 发送颜色到 Photoshop
-function sendColorToPS(target, hexColor) {
-  if (isInWebView()) {
-    const r = parseInt(hexColor.slice(1, 3), 16);
-    const g = parseInt(hexColor.slice(3, 5), 16);
-    const b = parseInt(hexColor.slice(5, 7), 16);
-
-    window.uxpHost.postMessage({
-      type: "setColor",
-      target: target,
-      color: { r, g, b, hex: hexColor }
-    });
-  }
-}
-// 在外部浏览器中打开链接（兼容 UXP WebView 和普通浏览器）
-function openExternalURL(url) {
-  console.log('[openExternalURL] url:', url, 'isWebView:', isInWebView());
-  if (isInWebView()) {
-    console.log('[openExternalURL] posting message to uxpHost');
-    window.uxpHost.postMessage({ type: "openURL", url });
-  } else {
-    window.open(url, '_blank');
-  }
-}
-// ============ WebView 通信结束 ============
-
-// 颜料预设
-const palettePresets = {
-    // 温莎牛顿 Cotman 16 色
-    winsorNewtonCotman: {
-        name: "温莎牛顿 Cotman 16色",
-        colors: [
-            { hex: '#F5E84C', name: 'Lemon Yellow', nameCN: '柠檬黄' },
-            { hex: '#F0D635', name: 'Cadmium Yellow Pale Hue', nameCN: '镉黄浅' },
-            { hex: '#ED7F3D', name: 'Cadmium Orange Hue', nameCN: '镉橙' },
-            { hex: '#E85D5D', name: 'Cadmium Red Pale Hue', nameCN: '镉红浅' },
-            { hex: '#7A1818', name: 'Alizarin Crimson Hue', nameCN: '茜素深红' },
-            { hex: '#6B2A7C', name: 'Purple Lake', nameCN: '紫湖' },
-            { hex: '#1C3575', name: 'Ultramarine', nameCN: '群青' },
-            { hex: '#1A8FCC', name: 'Cerulean Blue Hue', nameCN: '天蓝' },
-            { hex: '#0A7A5A', name: 'Viridian Hue', nameCN: '翠绿' },
-            { hex: '#456B0E', name: 'Sap Green', nameCN: '树汁绿' },
-            { hex: '#C49665', name: 'Yellow Ochre', nameCN: '黄赭' },
-            { hex: '#8F4A2A', name: 'Raw Sienna', nameCN: '生赭' },
-            { hex: '#7A3F13', name: 'Burnt Sienna', nameCN: '熟赭' },
-            { hex: '#362320', name: 'Burnt Umber', nameCN: '熟褐' },
-            { hex: '#424B5A', name: 'Payne\'s Gray', nameCN: '佩恩灰' },
-            { hex: '#F5F5F0', name: 'Chinese White', nameCN: '中国白' }
-        ]
-    },
-    // 数字艺术家调色板
-    digitalArtist: {
-        name: "数字艺术家调色板",
-        colors: [
-            { hex: '#FFFF00', name: 'Yellow', nameCN: '黄色' },
-            { hex: '#FFA500', name: 'Orange', nameCN: '橙色' },
-            { hex: '#FF0000', name: 'Red', nameCN: '红色' },
-            { hex: '#FF69B4', name: 'Hot Pink', nameCN: '粉红' },
-            { hex: '#8A2BE2', name: 'Violet', nameCN: '紫色' },
-            { hex: '#0000FF', name: 'Blue', nameCN: '蓝色' },
-            { hex: '#00BFFF', name: 'Deep Sky Blue', nameCN: '天蓝' },
-            { hex: '#008000', name: 'Green', nameCN: '绿色' },
-            { hex: '#00FF7F', name: 'Spring Green', nameCN: '春绿' },
-            { hex: '#8B4513', name: 'Brown', nameCN: '棕色' },
-            { hex: '#D2B48C', name: 'Tan', nameCN: '棕褐' },
-            { hex: '#FFD700', name: 'Gold', nameCN: '金色' },
-            { hex: '#ffffff', name: 'White', nameCN: '纯白' },
-            { hex: '#808080', name: 'Gray', nameCN: '灰色' },
-            { hex: '#2F4F4F', name: 'Dark Slate Gray', nameCN: '深灰' },
-            { hex: '#000000', name: 'Black', nameCN: '黑色' }
-        ]
-    },
-    // 施美尔 Schmincke Horadam 16色
-    schminckeHoradam: {
-        name: "施美尔 Horadam 16色",
-        colors: [
-            { hex: '#FFEB3B', name: 'Lemon Yellow', nameCN: '柠檬黄' },
-            { hex: '#FFC107', name: 'Indian Yellow', nameCN: '印度黄' },
-            { hex: '#FF5722', name: 'Vermilion', nameCN: '朱红' },
-            { hex: '#E91E63', name: 'Ruby Red', nameCN: '宝石红' },
-            { hex: '#9C27B0', name: 'Magenta', nameCN: '洋红' },
-            { hex: '#673AB7', name: 'Mauve', nameCN: '淡紫' },
-            { hex: '#3F51B5', name: 'Ultramarine Finest', nameCN: '特级群青' },
-            { hex: '#2196F3', name: 'Prussian Blue', nameCN: '普鲁士蓝' },
-            { hex: '#03A9F4', name: 'Cerulean Blue', nameCN: '天蓝' },
-            { hex: '#009688', name: 'Phthalo Green', nameCN: '酞青绿' },
-            { hex: '#4CAF50', name: 'Permanent Green', nameCN: '永固绿' },
-            { hex: '#8BC34A', name: 'May Green', nameCN: '五月绿' },
-            { hex: '#CDDC39', name: 'Green Earth', nameCN: '绿土' },
-            { hex: '#A1887F', name: 'Burnt Sienna', nameCN: '熟赭' },
-            { hex: '#795548', name: 'Sepia Brown', nameCN: '深褐' },
-            { hex: '#607D8B', name: 'Neutral Grey', nameCN: '中性灰' }
-        ]
-    },
-    // 日本吴竹透明水彩 16色
-    kuretakeGansai: {
-        name: "吴竹 Gansai 16色",
-        colors: [
-            { hex: '#FFEB3B', name: 'Pale Yellow', nameCN: '淡黄' },
-            { hex: '#FFC107', name: 'Yellow', nameCN: '中黄' },
-            { hex: '#FF9800', name: 'Orange', nameCN: '橙色' },
-            { hex: '#F44336', name: 'Scarlet', nameCN: '朱红' },
-            { hex: '#E91E63', name: 'Carmine', nameCN: '胭脂红' },
-            { hex: '#9C27B0', name: 'Violet', nameCN: '紫色' },
-            { hex: '#673AB7', name: 'Purple', nameCN: '深紫' },
-            { hex: '#3F51B5', name: 'Indigo', nameCN: '靛蓝' },
-            { hex: '#2196F3', name: 'Blue', nameCN: '蓝色' },
-            { hex: '#03A9F4', name: 'Light Blue', nameCN: '浅蓝' },
-            { hex: '#00BCD4', name: 'Turquoise', nameCN: '绿松石' },
-            { hex: '#009688', name: 'Viridian', nameCN: '翠绿' },
-            { hex: '#4CAF50', name: 'Green', nameCN: '绿色' },
-            { hex: '#8BC34A', name: 'Sap Green', nameCN: '树绿' },
-            { hex: '#795548', name: 'Brown', nameCN: '棕色' },
-            { hex: '#607D8B', name: 'Gray', nameCN: '灰色' }
-        ]
-    }
-};
 
 // 当前颜料预设
 let currentPalette = 'winsorNewtonCotman';
@@ -345,7 +173,7 @@ async function initApp() {
 
     // 5b. 画布初始化完成后将保存的混合强度应用到 painter
     if (savedBrushSettings && savedBrushSettings.mixStrength != null && painter) {
-        painter.setMixStrength(savedBrushSettings.mixStrength / 100);
+        painter.setMixStrength(mixSliderToStrength(savedBrushSettings.mixStrength));
     }
 
     // 6. 初始化UI
@@ -602,10 +430,15 @@ function bindEvents() {
     brushMixSlider.addEventListener('input', (e) => {
         const value = parseInt(e.target.value);
         brushMixValue.textContent = value;
-        if (painter && painter.setMixStrength) {
-            painter.setMixStrength(value / 100);
+        if (currentTool === 'smudge') {
+            smudgeStrength = value;
+            paletteStorage.saveAppSettings({ smudgeBrushSize, smudgeStrength });
+        } else {
+            if (painter && painter.setMixStrength) {
+                painter.setMixStrength(mixSliderToStrength(value));
+            }
+            saveBrushSettings();
         }
-        saveBrushSettings();
     });
     
     // 清空按钮
@@ -641,6 +474,7 @@ function bindEvents() {
             };
             currentTool = 'smudge';
             smudgeBtn.classList.add('active');
+            document.getElementById('mixLabel').textContent = t('smudgeStrength');
 
             // 读取保存的涂抹工具设置
             const savedApp = paletteStorage.loadAppSettings();
@@ -661,6 +495,7 @@ function bindEvents() {
 
             currentTool = 'brush';
             smudgeBtn.classList.remove('active');
+            document.getElementById('mixLabel').textContent = t('paintConcentration');
 
             // 恢复笔刷工具设置
             if (savedBrushSettings) {
@@ -669,7 +504,7 @@ function bindEvents() {
                 brushSizeValue.textContent = savedBrushSettings.size;
                 brushMixSlider.value = savedBrushSettings.mixStrength;
                 brushMixValue.textContent = savedBrushSettings.mixStrength;
-                painter.setMixStrength(savedBrushSettings.mixStrength / 100);
+                painter.setMixStrength(mixSliderToStrength(savedBrushSettings.mixStrength));
             }
             console.log('✅ 切换回笔刷工具');
         }
@@ -1625,75 +1460,6 @@ function smudgeAtPoint(x, y, dx, dy) {
         sourceRGB,  // 使用采样的颜色
         brushCanvas
     );
-}
-
-// ============ 缩放控制 ============
-function initZoomControl() {
-    const zoomBtn = document.getElementById('zoomBtn');
-    const zoomDropdown = document.getElementById('zoomDropdown');
-    const container = document.querySelector('.container');
-
-    // 从 localStorage 读取保存的缩放比例
-    let currentZoom = parseFloat(localStorage.getItem('mixbox_zoom') || '1.0');
-
-    // 应用初始缩放
-    applyZoom(currentZoom);
-
-    // 切换下拉菜单
-    zoomBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        zoomDropdown.classList.toggle('show');
-    });
-
-    // 选择缩放选项
-    document.querySelectorAll('.zoom-option').forEach(option => {
-        const zoom = parseFloat(option.getAttribute('data-zoom'));
-
-        // 标记当前选中的选项
-        if (Math.abs(zoom - currentZoom) < 0.01) {
-            option.classList.add('active');
-        }
-
-        option.addEventListener('click', (e) => {
-            e.stopPropagation();
-
-            // 移除所有 active 状态
-            document.querySelectorAll('.zoom-option').forEach(opt => {
-                opt.classList.remove('active');
-            });
-
-            // 添加当前选中状态
-            option.classList.add('active');
-
-            // 应用缩放
-            currentZoom = zoom;
-            applyZoom(currentZoom);
-
-            // 保存到 localStorage
-            localStorage.setItem('mixbox_zoom', currentZoom.toString());
-
-            // 关闭下拉菜单
-            zoomDropdown.classList.remove('show');
-        });
-    });
-
-    // 点击页面其他地方关闭下拉菜单
-    document.addEventListener('click', () => {
-        zoomDropdown.classList.remove('show');
-    });
-
-    function applyZoom(zoom) {
-        container.style.transform = `scale(${zoom})`;
-        container.style.transformOrigin = 'top center';
-        zoomBtn.textContent = `${Math.round(zoom * 100)}%`;
-
-        // 调整 body 的 padding，防止缩放后内容被裁剪
-        if (zoom < 1) {
-            document.body.style.padding = '0 10px 10px';
-        } else {
-            document.body.style.padding = '0 12px 12px';
-        }
-    }
 }
 
 // ============ 语言切换 ============

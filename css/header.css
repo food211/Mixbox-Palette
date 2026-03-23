@@ -1,0 +1,232 @@
+
+.header-top {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    width: 100%;
+}
+
+.github-link {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 6px;
+    margin-top: 15px;
+    font-size: 12px;
+    color: #b0b0b0;
+}
+
+.github-link a {
+    color: #888;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    transition: color 0.2s;
+}
+
+.github-link a:hover {
+    color: #64B5F6;
+}
+
+.version-link {
+    background-color: #404040;
+    color: #b0b0b0 !important;
+    padding: 4px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    opacity: 0.6;
+}
+
+.version-link:hover {
+    background-color: #505050;
+    color: #64B5F6 !important;
+    opacity: 1;
+}
+
+.palette-selector {
+    position: relative;
+    display: inline-block;
+    margin-bottom: 5px;
+}
+
+.palette-btn {
+    background-color: #2196F3;
+    color: white;
+    border: none;
+    padding: 3px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.palette-btn:hover {
+    background-color: #1976D2;
+}
+
+.palette-btn::after {
+    content: '\25BC';
+    font-size: 8px;
+}
+
+.palette-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    background-color: #2c2c2c;
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    min-width: 160px;
+    z-index: 100;
+    display: none;
+    margin-top: 3px;
+    overflow: hidden;
+    border: 1px solid #3c3c3c;
+    font-size: 12px;
+}
+
+.palette-dropdown.show {
+    display: block;
+}
+
+.palette-option {
+    padding: 6px 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 12px;
+    color: #e0e0e0;
+}
+
+.palette-option:hover {
+    background-color: #3c3c3c;
+}
+
+.palette-option.active {
+    background-color: #2196F3;
+    color: white;
+}
+
+.header-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 10px;
+    position: relative;
+}
+
+.header-controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    width: 100%;
+    justify-content: center;
+}
+
+.palette-info {
+    margin-bottom: 10px;
+    font-size: 14px;
+    color: #b0b0b0;
+}
+
+/* 语言切换 & 引擎切换按钮 */
+.lang-selector {
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: flex;
+    gap: 4px;
+}
+
+.lang-btn, .engine-btn {
+    background-color: #404040;
+    color: #ffffff;
+    border: none;
+    padding: 4px 8px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 11px;
+    opacity: 0.6;
+    transition: opacity 0.2s, background-color 0.2s;
+}
+
+.lang-btn:hover, .engine-btn:hover {
+    background-color: #505050;
+    opacity: 1;
+}
+
+.engine-btn.active {
+    background-color: #2196F3;
+    opacity: 0.9;
+}
+
+/* 缩放选择器样式 */
+.zoom-selector {
+    position: absolute;
+    top: 0;
+    right: 0;
+}
+
+.zoom-btn {
+    background-color: #404040;
+    color: #b0b0b0;
+    border: none;
+    padding: 4px 8px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    opacity: 0.6;
+    transition: opacity 0.2s, background-color 0.2s;
+}
+
+.zoom-btn:hover {
+    background-color: #505050;
+    opacity: 1;
+}
+
+.zoom-btn::after {
+    content: '\25BC';
+    font-size: 8px;
+}
+
+.zoom-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background-color: #2c2c2c;
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    min-width: 80px;
+    z-index: 1000;
+    display: none;
+    margin-top: 3px;
+    overflow: hidden;
+    border: 1px solid #3c3c3c;
+}
+
+.zoom-dropdown.show {
+    display: block;
+}
+
+.zoom-option {
+    padding: 6px 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 11px;
+    color: #e0e0e0;
+    text-align: center;
+}
+
+.zoom-option:hover {
+    background-color: #3c3c3c;
+}
+
+.zoom-option.active {
+    background-color: #505050;
+    color: #ffffff;
+}

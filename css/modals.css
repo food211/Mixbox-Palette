@@ -1,0 +1,228 @@
+
+.brush-selector-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s, visibility 0.3s;
+}
+
+.brush-selector-modal.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.brush-selector-content {
+    background-color: #2c2c2c;
+    border-radius: 8px;
+    padding: 20px;
+    width: 90%;
+    max-width: 600px;
+    max-height: 80vh;
+    overflow-y: auto;
+    color: #e0e0e0;
+}
+
+.brush-selector-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.brush-selector-header h3 {
+    font-size: 18px;
+    color: #e0e0e0;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #b0b0b0;
+}
+
+.brush-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.brush-option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.brush-option:hover {
+    background-color: #3c3c3c;
+}
+
+.brush-option.selected {
+    background-color: #1e3a5f;
+}
+
+.brush-option canvas {
+    width: 80px;
+    height: 80px;
+    margin-bottom: 8px;
+}
+
+.brush-option-name {
+    font-size: 12px;
+    text-align: center;
+    color: #b0b0b0;
+}
+
+.custom-brush-upload {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #3c3c3c;
+}
+
+.custom-brush-upload label {
+    display: block;
+    margin-bottom: 10px;
+    font-size: 14px;
+    color: #b0b0b0;
+}
+
+.custom-brush-upload input[type="file"] {
+    display: none;
+}
+
+.upload-btn {
+    background-color: #2196F3;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    display: inline-block;
+}
+
+.upload-btn:hover {
+    background-color: #1976D2;
+}
+
+/* ============ 更新提示弹窗 ============ */
+.update-modal-content {
+    max-width: 420px;
+    max-height: 70vh;
+}
+
+.update-modal-body {
+    font-size: 13px;
+    line-height: 1.6;
+    color: #c8c8c8;
+    max-height: 240px;
+    overflow-y: auto;
+    margin-bottom: 10px;
+}
+
+.update-modal-body .update-section-title {
+    font-size: 12px;
+    font-weight: bold;
+    margin: 8px 0 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background: #383838;
+    padding: 2px 6px;
+    border-radius: 3px;
+    display: inline-block;
+}
+
+.update-modal-body .update-item {
+    margin: 3px 0;
+    padding-left: 4px;
+}
+
+.update-changelog-link {
+    display: block;
+    font-size: 12px;
+    color: #5b9bd5;
+    text-decoration: none;
+    margin-bottom: 14px;
+}
+
+.update-changelog-link:hover {
+    text-decoration: underline;
+}
+
+.update-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.update-btn-later,
+.update-btn-dismiss {
+    background: none;
+    border: 1px solid #555;
+    color: #b0b0b0;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.update-btn-later:hover,
+.update-btn-dismiss:hover {
+    background-color: #3c3c3c;
+}
+
+.update-btn-refresh {
+    background-color: #2196F3;
+    border: none;
+    color: white;
+    padding: 6px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.update-btn-refresh:hover {
+    background-color: #1976D2;
+}
+
+.alert-modal-content {
+    text-align: center;
+    padding: 16px 14px 14px;
+    max-width: 80%;
+    width: auto;
+}
+
+.alert-modal-content p {
+    margin: 0 0 16px;
+    font-size: 14px;
+    color: #e0e0e0;
+}
+
+.alert-ok-btn {
+    background-color: #2196F3;
+    border: none;
+    color: white;
+    padding: 6px 24px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.alert-ok-btn:hover {
+    background-color: #1976D2;
+}
