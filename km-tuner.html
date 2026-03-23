@@ -64,7 +64,6 @@
 <div class="controls">
   <label>颜色 A <input type="color" id="colorA" value="#ff0000"></label>
   <label>颜色 B <input type="color" id="colorB" value="#0000ff"></label>
-  <label>饱和度补偿 <input type="range" id="satBoost" min="0" max="100" value="60"> <span id="satBoostVal">0.60</span></label>
   <label style="margin-left:auto; font-size:12px; color:#666;">
     渐变宽度每像素对应 t = 0→1，左=纯A，右=纯B
   </label>
@@ -165,7 +164,7 @@
 </div>
 
 <p class="note">
-  KM Pure = KM Direct + 饱和度补偿。混合后检测饱和度损失，将色彩推回纯色方向，模拟水彩稀释效果。
+  KM Pure = KM Direct + 线性插值动态混合。通道互斥检测 + 自适应饱和度补偿，高饱和色对自动偏向线性插值避免变暗。
 </p>
 
 <script src="js/mixbox.js"></script>
@@ -185,30 +184,55 @@ function kmMixDirect(r1, g1, b1, r2, g2, b2, t) {
   return [geoMix(r1, r2, t), geoMix(g1, g2, t), geoMix(b1, b2, t)];
 }
 
-// --- KM Pure: blend between KM Direct and Linear RGB + blue-yellow green correction ---
-// satBoost=0 → pure KM Direct, satBoost=1 → pure Linear RGB
-let satBoost = 0.6;
+// --- KM Pure: KM Direct + 线性插值，通道互斥动态混合，自适应 satBoost ---
 
 function kmMixPure(r1, g1, b1, r2, g2, b2, t) {
-  const [dr, dg, db] = kmMixDirect(r1, g1, b1, r2, g2, b2, t);
-  const [lr, lg, lb] = linearMix(r1, g1, b1, r2, g2, b2, t);
-  let mr = dr + (lr - dr) * satBoost;
-  let mg = dg + (lg - dg) * satBoost;
-  let mb = db + (lb - db) * satBoost;
+  const [kr, kg, kb] = kmMixDirect(r1, g1, b1, r2, g2, b2, t);
+  const lr = r1 + (r2 - r1) * t;
+  const lg = g1 + (g2 - g1) * t;
+  const lb = b1 + (b2 - b1) * t;
 
-  // Blue-yellow green correction:
-  // Detect how much "blue" and "yellow" are meeting.
-  const blue1 = Math.max(0, b1 - Math.max(r1, g1));
-  const yellow1 = Math.max(0, Math.min(r1, g1) - b1);
-  const blue2 = Math.max(0, b2 - Math.max(r2, g2));
-  const yellow2 = Math.max(0, Math.min(r2, g2) - b2);
+  // 通道互斥检测
+  const conflictR = Math.abs(r1 - r2) * (1 - Math.min(r1, r2));
+  const conflictG = Math.abs(g1 - g2) * (1 - Math.min(g1, g2));
+  const conflictB = Math.abs(b1 - b2) * (1 - Math.min(b1, b2));
+  const maxConflict = Math.max(conflictR, conflictG, conflictB);
+  const conflictBlend = maxConflict * maxConflict;
 
-  const crossSignal = Math.max(blue1 * yellow2, blue2 * yellow1);
+  // 自适应 satBoost: 饱和度越高越偏线性
+  const maxC1 = Math.max(r1, g1, b1), minC1 = Math.min(r1, g1, b1);
+  const maxC2 = Math.max(r2, g2, b2), minC2 = Math.min(r2, g2, b2);
+  const sat1 = maxC1 > 0.001 ? (maxC1 - minC1) / maxC1 : 0;
+  const sat2 = maxC2 > 0.001 ? (maxC2 - minC2) / maxC2 : 0;
+  const avgSat = (sat1 + sat2) * 0.5;
+  const satBoost = 0.35 + (0.55 - 0.35) * avgSat;
+  const blend = Math.max(satBoost, conflictBlend);
+
+  let mr = kr + (lr - kr) * blend;
+  let mg = kg + (lg - kg) * blend;
+  let mb = kb + (lb - kb) * blend;
+
+  // 蓝黄绿校正（色相角检测 + 饱和度加权）
+  const hue1 = Math.atan2(Math.sqrt(3) * (g1 - b1), 2 * r1 - g1 - b1);
+  const hue2 = Math.atan2(Math.sqrt(3) * (g2 - b2), 2 * r2 - g2 - b2);
+  function smoothstep(edge0, edge1, x) { const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0))); return t * t * (3 - 2 * t); }
+  const blueZone1  = smoothstep(0.3, 1.0, Math.max(0, 1 - Math.abs(hue1 + 1.57) / 1.05)) * sat1;
+  const yellowZone1 = smoothstep(0.3, 1.0, Math.max(0, 1 - Math.abs(hue1 - 1.05) / 0.52)) * sat1;
+  const blueZone2  = smoothstep(0.3, 1.0, Math.max(0, 1 - Math.abs(hue2 + 1.57) / 1.05)) * sat2;
+  const yellowZone2 = smoothstep(0.3, 1.0, Math.max(0, 1 - Math.abs(hue2 - 1.05) / 0.52)) * sat2;
+  const crossSignal = Math.max(blueZone1 * yellowZone2, blueZone2 * yellowZone1);
   const midWeight = 4 * t * (1 - t);
-  const greenBoost = crossSignal * midWeight;
+  const greenInject = crossSignal * midWeight;
+  mg = Math.min(1, mg + greenInject * 0.28);
+  mr = mr * (1 - greenInject * 0.4);
 
-  // Gentle green injection only — don't touch R or B
-  mg = Math.min(1, mg + greenBoost * 0.35);
+  // 亮度限制: green boost 后不超过线性插值亮度
+  const lumResult = mr * 0.299 + mg * 0.587 + mb * 0.114;
+  const lumLin = lr * 0.299 + lg * 0.587 + lb * 0.114;
+  if (lumResult > lumLin && lumLin > 0.001) {
+    const scale = lumLin / lumResult;
+    mr *= scale; mg *= scale; mb *= scale;
+  }
 
   return [mr, mg, mb];
 }
@@ -293,14 +317,6 @@ function renderAll() {
 
 document.getElementById('colorA').addEventListener('input', renderAll);
 document.getElementById('colorB').addEventListener('input', renderAll);
-
-const satSlider = document.getElementById('satBoost');
-const satVal = document.getElementById('satBoostVal');
-satSlider.addEventListener('input', () => {
-  satBoost = satSlider.value / 100;
-  satVal.textContent = satBoost.toFixed(2);
-  renderAll();
-});
 
 requestAnimationFrame(() => requestAnimationFrame(renderAll));
 </script>
