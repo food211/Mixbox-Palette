@@ -768,7 +768,7 @@ function bindEvents() {
     let strokeStarted = false;
     let lastX = 0;
     let lastY = 0;
-    let minDistance = 2; // 笔触之间的最小距离，可以调整
+    let minDistance = 2; // 笔触之间的最小距离，会根据笔刷类型动态调整
 
     mixCanvas.addEventListener('mousedown', (e) => {
         const rect = mixCanvas.getBoundingClientRect();
@@ -850,8 +850,14 @@ function bindEvents() {
                 const distance = Math.sqrt(Math.pow(x - lastX, 2) + Math.pow(y - lastY, 2));
                 const activeColor = currentStroke ? currentStroke.color : currentBrushColor;
 
-                if (distance >= minDistance) {
-                    const steps = Math.floor(distance / minDistance);
+                // 纹理笔刷用更大间距避免过度叠加
+                const brushType = currentBrush.type;
+                const effectiveMinDist = (brushType === 'splatter' || brushType === 'dry')
+                    ? Math.max(minDistance, brushSize * 0.1)
+                    : minDistance;
+
+                if (distance >= effectiveMinDist) {
+                    const steps = Math.floor(distance / effectiveMinDist);
 
                     if (steps > 1) {
                         for (let i = 1; i <= steps; i++) {
