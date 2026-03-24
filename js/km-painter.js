@@ -155,22 +155,22 @@ class KMWebGLPainter {
         }
 
         // LUT采样：RGB → 10个vec4（38波长反射率）
-        // 纹理布局: x = gi*64+ri, y = band*64+bi，共4096×640
+        // 纹理布局: x = gi*32+ri, y = band*32+bi，共1024×320
         // LUT存储sqrt(R)以提高暗色精度，采样后平方还原
         // r/b轴在各自段内连续，LINEAR自动插值；g轴跨段手动插值
         void sampleLUT(vec3 c,
             out vec4 R0, out vec4 R1, out vec4 R2, out vec4 R3, out vec4 R4,
             out vec4 R5, out vec4 R6, out vec4 R7, out vec4 R8, out vec4 R9)
         {
-            vec3 f = clamp(c, 0.0, 1.0) * 63.0;
+            vec3 f = clamp(c, 0.0, 1.0) * 31.0;
             float g0 = floor(f.g); float g1 = min(g0+1.0, 63.0); float gf = f.g - g0;
-            float u0 = (g0 * 64.0 + f.r + 0.5) / 4096.0;
-            float u1 = (g1 * 64.0 + f.r + 0.5) / 4096.0;
+            float u0 = (g0 * 32.0 + f.r + 0.5) / 1024.0;
+            float u1 = (g1 * 32.0 + f.r + 0.5) / 1024.0;
 
             // 在sqrt域采样并插值，然后平方还原反射率
             #define SAMPLE_BAND(band) mix( \
-                texture2D(u_lut, vec2(u0, (float(band)*64.0 + f.b + 0.5) / 640.0)), \
-                texture2D(u_lut, vec2(u1, (float(band)*64.0 + f.b + 0.5) / 640.0)), \
+                texture2D(u_lut, vec2(u0, (float(band)*32.0 + f.b + 0.5) / 320.0)), \
+                texture2D(u_lut, vec2(u1, (float(band)*32.0 + f.b + 0.5) / 320.0)), \
                 gf)
 
             R0 = SAMPLE_BAND(0); R0 *= R0;
@@ -212,8 +212,8 @@ class KMWebGLPainter {
 
         // KM混色（内联展开，避免WebGL1 loop限制）
         vec4 km_band(vec4 r1, vec4 r2, float conc1, float conc2, float totalConc) {
-            vec4 rc1 = clamp(r1, 1e-4, 1.0);
-            vec4 rc2 = clamp(r2, 1e-4, 1.0);
+            vec4 rc1 = clamp(r1, 0.01, 1.0);
+            vec4 rc2 = clamp(r2, 0.01, 1.0);
             vec4 ks1 = (1.0 - rc1) * (1.0 - rc1) / (2.0 * rc1);
             vec4 ks2 = (1.0 - rc2) * (1.0 - rc2) / (2.0 * rc2);
             vec4 km = (ks1 * conc1 + ks2 * conc2) / totalConc;
@@ -226,14 +226,11 @@ class KMWebGLPainter {
             sampleLUT(c1, A0,A1,A2,A3,A4,A5,A6,A7,A8,A9);
             sampleLUT(c2, B0,B1,B2,B3,B4,B5,B6,B7,B8,B9);
 
-            float lum1 = luminance(A0,A1,A2,A3,A4,A5,A6,A7,A8,A9);
-            float lum2 = luminance(B0,B1,B2,B3,B4,B5,B6,B7,B8,B9);
+            float conc1 = 0.5;
+            float conc2 = 0.5;
+            float totalConc = 1.0;
 
-            float conc1 = (1.0 - t) * (1.0 - t) * lum1;
-            float conc2 = t * t * lum2;
-            float totalConc = max(conc1 + conc2, 1e-7);
-
-            return reflectanceToRGB(
+            vec3 kmResult = reflectanceToRGB(
                 km_band(A0,B0,conc1,conc2,totalConc),
                 km_band(A1,B1,conc1,conc2,totalConc),
                 km_band(A2,B2,conc1,conc2,totalConc),
@@ -245,6 +242,63 @@ class KMWebGLPainter {
                 km_band(A8,B8,conc1,conc2,totalConc),
                 km_band(A9,B9,conc1,conc2,totalConc)
             );
+
+            // 第一段：轻触混色
+            vec3 blended = mix(c1, kmResult, clamp(t * 2.0, 0.0, 1.0));
+            // 第二段：重涂覆盖
+            vec3 result = mix(blended, c2, clamp(t * 2.0 - 1.0, 0.0, 1.0));
+
+            // 模拟颜料被水稀释的色相偏移
+            // 计算颜色饱和度和亮度
+            float maxComp = max(max(c2.r, c2.g), c2.b);
+            float minComp = min(min(c2.r, c2.g), c2.b);
+            float chroma = maxComp - minComp;
+            float saturation = (maxComp > 0.0) ? chroma / maxComp : 0.0;
+            
+            // 根据饱和度和颜色特性决定色相偏移强度
+            // 红色和紫色系列稀释后偏移更明显
+            float redPurpleFactor = max(0.0, c2.r - c2.g) * 0.7 + max(0.0, c2.r - c2.b) * 0.3;
+            float hueShiftStrength = saturation * 0.15 * redPurpleFactor;
+            
+            // 当与白色混合时应用色相偏移
+            // 检测c1是否接近白色
+            float c1Luminance = dot(c1, vec3(0.2126, 0.7152, 0.0722));
+            float isWhitish = smoothstep(0.85, 1.0, c1Luminance);
+            
+            // 应用色相偏移 - 红色系列通常向黄色偏移，蓝色系列向青色偏移
+            if (isWhitish > 0.0 && saturation > 0.1) {
+                // 简化的RGB色相偏移
+                // 红色系列向黄色偏移（增加绿色分量）
+                if (c2.r > c2.b && c2.r > c2.g) {
+                    result.g += hueShiftStrength * isWhitish * (1.0 - t);
+                    result.r -= hueShiftStrength * 0.25 * isWhitish * (1.0 - t);
+                }
+                // 蓝色系列向青色偏移（增加绿色分量）
+                else if (c2.b > c2.r && c2.b > c2.g) {
+                    result.g += hueShiftStrength * 0.7 * isWhitish * (1.0 - t);
+                    result.b -= hueShiftStrength * 0.3 * isWhitish * (1.0 - t);
+                }
+                // 紫色系列向红色偏移（减少蓝色分量）
+                else if (c2.r > 0.5 && c2.b > 0.5 && c2.g < 0.5) {
+                    result.r += hueShiftStrength * 0.3 * isWhitish * (1.0 - t);
+                    result.b -= hueShiftStrength * 0.5 * isWhitish * (1.0 - t);
+                }
+            }
+
+            // 自适应亮度补偿：只补偿 KM 造成的损失
+            float lum1 = dot(c1, vec3(0.2126, 0.7152, 0.0722));
+            float lum2 = dot(c2, vec3(0.2126, 0.7152, 0.0722));
+            float expectedLum = mix(lum1, lum2, t);  // 用 t 加权，而不是固定 0.5
+            float resultLum   = dot(result, vec3(0.2126, 0.7152, 0.0722));
+
+            // 亮度修正强度系数设为0.75，在保持颜色纯度和适当补偿之间取得平衡
+            float brightnessCorrectionFactor = 0.75; // 默认为0.75，增大会加强修正，减小会减弱修正
+            
+            float loss = max(0.0, expectedLum - resultLum);
+            float compensationStrength = loss / max(expectedLum, 0.001) * brightnessCorrectionFactor;
+            result *= 1.0 + compensationStrength;
+
+            return clamp(result, 0.0, 1.0);
         }
 
         void main() {
@@ -263,8 +317,8 @@ class KMWebGLPainter {
             float radialFalloff = 1.0 - smoothstep(0.0, u_brushRadius, distToCenter);
 
             float mixAmount = radialFalloff * brushAlpha * u_baseMixStrength;
-            // KM内部用t²计算浓度，对外暴露sqrt(t)使感知混色量线性化
-            float kmT = sqrt(clamp(mixAmount, 0.0, 1.0));
+            // 只要笔刷 alpha 够，t 至少能达到 0.5（进入覆盖段）
+            float kmT = clamp(mixAmount + brushAlpha * 0.3, 0.0, 1.0);
 
             gl_FragColor = vec4(km_mix(canvasColor.rgb, u_brushColor.rgb, kmT), 1.0);
         }
