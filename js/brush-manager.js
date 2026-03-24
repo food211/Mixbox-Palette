@@ -13,6 +13,8 @@ class BrushManager {
             { type: 'flat' },
             { type: 'dry' }
         ];
+        // 笔刷纹理缓存（仅确定性笔刷，key = `${type}_${size}`）
+        this._brushCache = new Map();
     }
 
     /**
@@ -96,6 +98,13 @@ class BrushManager {
      * 创建笔刷纹理
      */
     createBrushTexture(size, brush) {
+        // splatter/dry 含随机数，不缓存；自定义图片笔刷也不缓存
+        const cacheable = !brush.image && brush.type !== 'splatter' && brush.type !== 'dry';
+        if (cacheable) {
+            const key = `${brush.type}_${size}`;
+            if (this._brushCache.has(key)) return this._brushCache.get(key);
+        }
+
         const canvas = document.createElement('canvas');
         canvas.width = size * 2;
         canvas.height = size * 2;
@@ -179,6 +188,10 @@ class BrushManager {
             }
         }
         
+        if (cacheable) {
+            const key = `${brush.type}_${size}`;
+            this._brushCache.set(key, canvas);
+        }
         return canvas;
     }
 
