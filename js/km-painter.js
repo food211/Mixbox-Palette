@@ -2,7 +2,7 @@
  * KM 混色引擎 (Kubelka-Munk Mixing Engine)
  * 使用 38波长光谱 Kubelka-Munk 物理公式进行颜料混色
  * RGB → 38波长反射率LUT查表 → KM混合 → RGB
- * WebGL1 兼容，使用单张合并LUT纹理（4096×640）
+ * WebGL1 兼容，使用单张合并LUT纹理（1024×320）
  *
  * Copyright (C) 2026 food211
  * License: GPL-3.0 (https://www.gnu.org/licenses/gpl-3.0.html)
@@ -50,7 +50,7 @@ class KMWebGLPainter {
         this.setupFramebuffers();
         this.setupGeometry();
 
-        console.log('✅ KMWebGLPainter 初始化完成（38波长光谱KM，WebGL1，64³LUT）');
+        console.log('✅ KMWebGLPainter 初始化完成（38波长光谱KM，WebGL1，32³LUT）');
     }
 
     initWebGL() {
@@ -163,7 +163,7 @@ class KMWebGLPainter {
             out vec4 R5, out vec4 R6, out vec4 R7, out vec4 R8, out vec4 R9)
         {
             vec3 f = clamp(c, 0.0, 1.0) * 31.0;
-            float g0 = floor(f.g); float g1 = min(g0+1.0, 63.0); float gf = f.g - g0;
+            float g0 = floor(f.g); float g1 = min(g0+1.0, 31.0); float gf = f.g - g0;
             float u0 = (g0 * 32.0 + f.r + 0.5) / 1024.0;
             float u1 = (g1 * 32.0 + f.r + 0.5) / 1024.0;
 

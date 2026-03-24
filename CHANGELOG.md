@@ -1,5 +1,14 @@
 # 更新日志 / Changelog
 
+== V1.1.6 ==
+[ZH]
+### 改进
+- **KM混色深度优化** — 对 Kubelka-Munk 物理混色引擎进行全面优化，混色效果更自然准确，在保证性能的同时修复了多项混色表现问题
+
+[EN]
+### Improvements
+- **KM mixing refined** — Comprehensive refinement of the Kubelka-Munk physical mixing engine for more natural and accurate color blending, improving performance while fixing several mixing behavior issues
+
 == V1.1.5 ==
 [ZH]
 ### 改进
