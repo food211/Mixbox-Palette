@@ -69,6 +69,7 @@
   <label>颜色 A <input type="color" id="colorA" value="#e32636"></label>
   <label>颜色 B <input type="color" id="colorB" value="#1a3a6a"></label>
   <label>饱和度补偿 <input type="range" id="satBoost" min="0" max="100" value="50"> <span id="satBoostVal">0.50</span></label>
+  <button id="compareBtn" style="padding: 6px 12px; background: #444; color: #fff; border: none; border-radius: 4px; cursor: pointer;">生成对比分析</button>
   <label style="margin-left:auto; font-size:12px; color:#666;">
     渐变宽度每像素对应 t = 0→1，左=纯A，右=纯B
   </label>
@@ -635,8 +636,138 @@ function renderAll() {
   }
 }
 
+// sRGB -> linear -> Lab 近似 (for ΔE)
+function toLab(r, g, b) {
+  const lin = v => v > 0.04045 ? Math.pow((v+0.055)/1.055, 2.4) : v/12.92;
+  let X = lin(r)*0.4124564 + lin(g)*0.3575761 + lin(b)*0.1804375;
+  let Y = lin(r)*0.2126729 + lin(g)*0.7151522 + lin(b)*0.0721750;
+  let Z = lin(r)*0.0193339 + lin(g)*0.1191920 + lin(b)*0.9503041;
+  X/=0.95047; Z/=1.08883;
+  const f = t => t > 0.008856 ? Math.cbrt(t) : 7.787*t+16/116;
+  return [116*f(Y)-16, 500*(f(X)-f(Y)), 200*(f(Y)-f(Z))];
+}
+
+function dE(r1,g1,b1,r2,g2,b2) {
+  const [L1,a1,b1_]=toLab(r1,g1,b1), [L2,a2,b2_]=toLab(r2,g2,b2);
+  return Math.sqrt((L1-L2)**2+(a1-a2)**2+(b1_-b2_)**2);
+}
+
+function generateComparisonReport() {
+  // 定义混色算法
+  const mixers = {
+    'Linear RGB': linearMix,
+    'KM Direct': kmMixDirect,
+    'KM Pure': kmMixPure,
+    'KM Lite': kmMixFix,
+    'Mixbox': mixboxMix,
+    'Spectral': spectralMix
+  };
+  
+  const ts = [0.25, 0.5, 0.75]; // 混合比例
+  
+  // 存储所有结果
+  const results = [];
+  const comparisons = {};
+ 
+  // 对每对颜色进行测试
+  for (const pair of testPairs) {
+    const [r1, g1, b1] = hexToRGB01(pair.a);
+    const [r2, g2, b2] = hexToRGB01(pair.b);
+    
+    for (const t of ts) {
+      const caseId = `${pair.id} (t=${t})`;
+      const mixResults = {};
+      
+      // 计算每种混合算法的结果
+      for (const [mixerName, mixerFn] of Object.entries(mixers)) {
+        const [r, g, b] = mixerFn(r1, g1, b1, r2, g2, b2, t);
+        mixResults[mixerName] = {
+          rgb: [r, g, b],
+          rgbStr: `rgb(${Math.round(r*255)},${Math.round(g*255)},${Math.round(b*255)})`
+        };
+      }
+      
+      // 添加到结果中
+      results.push({
+        case: caseId,
+        ...Object.fromEntries(Object.entries(mixResults).map(([name, data]) => [name, data.rgbStr]))
+      });
+      
+      // 计算每种算法之间的差异
+      for (const [name1, data1] of Object.entries(mixResults)) {
+        for (const [name2, data2] of Object.entries(mixResults)) {
+          if (name1 >= name2) continue; // 避免重复比较
+          
+          const [r1, g1, b1] = data1.rgb;
+          const [r2, g2, b2] = data2.rgb;
+          const de = dE(r1, g1, b1, r2, g2, b2);
+          const dr = Math.abs(r1-r2)*255;
+          const dg = Math.abs(g1-g2)*255;
+          const db = Math.abs(b1-b2)*255;
+          
+          const compKey = `${name1} vs ${name2}`;
+          if (!comparisons[compKey]) {
+            comparisons[compKey] = {
+              count: 0,
+              totalDE: 0,
+              maxDE: 0,
+              maxCase: '',
+              details: []
+            };
+          }
+          
+          comparisons[compKey].count++;
+          comparisons[compKey].totalDE += de;
+          
+          if (de > comparisons[compKey].maxDE) {
+            comparisons[compKey].maxDE = de;
+            comparisons[compKey].maxCase = caseId;
+          }
+          
+          comparisons[compKey].details.push({
+            case: caseId,
+            dRGB: `Δ(${dr.toFixed(1)},${dg.toFixed(1)},${db.toFixed(1)})`,
+            dE: de.toFixed(2)
+          });
+        }
+      }
+    }
+  }
+  
+  // 输出结果
+  console.log("===== 混色算法对比分析 =====");
+  console.log("\n1. 各算法混色结果:");
+  console.table(results);
+  
+  console.log("\n2. 算法间差异统计:");
+  for (const [compKey, data] of Object.entries(comparisons)) {
+    console.log(`\n${compKey}:`);
+    console.log(`平均ΔE: ${(data.totalDE/data.count).toFixed(2)}, 最大ΔE: ${data.maxDE.toFixed(2)} [${data.maxCase}]`);
+    console.table(data.details);
+  }
+  
+  console.log("\n3. 自定义颜色混合对比:");
+  const hexA = document.getElementById('colorA').value;
+  const hexB = document.getElementById('colorB').value;
+  const [r1, g1, b1] = hexToRGB01(hexA);
+  const [r2, g2, b2] = hexToRGB01(hexB);
+  
+  const customResults = [];
+  for (const t of [0.25, 0.5, 0.75]) {
+    const row = { t: t };
+    for (const [mixerName, mixerFn] of Object.entries(mixers)) {
+      const [r, g, b] = mixerFn(r1, g1, b1, r2, g2, b2, t);
+      row[mixerName] = `rgb(${Math.round(r*255)},${Math.round(g*255)},${Math.round(b*255)})`;
+    }
+    customResults.push(row);
+  }
+  console.log(`自定义颜色: ${hexA} + ${hexB}`);
+  console.table(customResults);
+}
+
 document.getElementById('colorA').addEventListener('input', renderAll);
 document.getElementById('colorB').addEventListener('input', renderAll);
+document.getElementById('compareBtn').addEventListener('click', generateComparisonReport);
 
 const satSlider = document.getElementById('satBoost');
 const satVal = document.getElementById('satBoostVal');
