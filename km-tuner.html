@@ -19,7 +19,7 @@
 
   .grid {
     display: grid;
-    grid-template-columns: 80px 1fr 1fr 1fr 1fr;
+    grid-template-columns: 130px 1fr 1fr 1fr 1fr 1fr;
     gap: 2px;
   }
   .grid-header {
@@ -51,6 +51,7 @@
   .badge-direct { background: #3a2a1a; color: #bb8844; }
   .badge-linear { background: #2a2a3a; color: #6688bb; }
   .badge-mixbox { background: #3a1a3a; color: #bb66bb; }
+  .badge-fix { background: #1a3a3a; color: #44bbbb; }
 </style>
 </head>
 <body>
@@ -58,12 +59,14 @@
   <span class="badge badge-linear">Linear RGB</span>
   <span class="badge badge-direct">KM Direct</span>
   <span class="badge badge-pure">KM Pure</span>
+  <span class="badge badge-fix">KM Fix</span>
   <span class="badge badge-mixbox">Mixbox</span>
 </h1>
 
 <div class="controls">
-  <label>颜色 A <input type="color" id="colorA" value="#ff0000"></label>
-  <label>颜色 B <input type="color" id="colorB" value="#0000ff"></label>
+  <label>颜色 A <input type="color" id="colorA" value="#e32636"></label>
+  <label>颜色 B <input type="color" id="colorB" value="#1a3a6a"></label>
+  <label>饱和度补偿 <input type="range" id="satBoost" min="0" max="100" value="50"> <span id="satBoostVal">0.50</span></label>
   <label style="margin-left:auto; font-size:12px; color:#666;">
     渐变宽度每像素对应 t = 0→1，左=纯A，右=纯B
   </label>
@@ -75,6 +78,7 @@
     <div>Linear RGB <span class="badge badge-linear">参考</span></div>
     <div>KM Direct <span class="badge badge-direct">当前使用</span></div>
     <div>KM Pure <span class="badge badge-pure">饱和度补偿</span></div>
+    <div>KM Fix <span class="badge badge-fix">亮度修正</span></div>
     <div>Mixbox <span class="badge badge-mixbox">LUT</span></div>
   </div>
 
@@ -83,88 +87,154 @@
   <div class="cell"><canvas id="c_custom_linear"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_custom_direct"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_custom_pure"    height="40"></canvas></div>
+  <div class="cell"><canvas id="c_custom_fix"     height="40"></canvas></div>
   <div class="cell"><canvas id="c_custom_mixbox"  height="40"></canvas></div>
 
   <div class="section-gap"></div>
 
   <!-- 固定测试色对 -->
-  <div class="row-label">红 + 白<br><small style="color:#555">期望：粉红</small></div>
+  <div class="row-label">镉红 + 钛白<br><small style="color:#555">期望：粉红</small></div>
   <div class="cell"><canvas id="c_rw_linear"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_rw_direct"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_rw_pure"    height="40"></canvas></div>
+  <div class="cell"><canvas id="c_rw_fix"     height="40"></canvas></div>
   <div class="cell"><canvas id="c_rw_mixbox"  height="40"></canvas></div>
 
-  <div class="row-label">蓝 + 白<br><small style="color:#555">期望：天蓝</small></div>
+  <div class="row-label">群青 + 钛白<br><small style="color:#555">期望：天蓝</small></div>
   <div class="cell"><canvas id="c_bw2_linear" height="40"></canvas></div>
   <div class="cell"><canvas id="c_bw2_direct" height="40"></canvas></div>
   <div class="cell"><canvas id="c_bw2_pure"   height="40"></canvas></div>
+  <div class="cell"><canvas id="c_bw2_fix"    height="40"></canvas></div>
   <div class="cell"><canvas id="c_bw2_mixbox" height="40"></canvas></div>
 
-  <div class="row-label">红 + 蓝<br><small style="color:#555">期望：紫</small></div>
+  <div class="row-label">镉红 + 群青<br><small style="color:#555">期望：紫</small></div>
   <div class="cell"><canvas id="c_rb_linear"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_rb_direct"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_rb_pure"    height="40"></canvas></div>
+  <div class="cell"><canvas id="c_rb_fix"     height="40"></canvas></div>
   <div class="cell"><canvas id="c_rb_mixbox"  height="40"></canvas></div>
 
-  <div class="row-label">蓝 + 黄<br><small style="color:#555">期望：绿</small></div>
+  <div class="row-label">群青 + 镉黄<br><small style="color:#555">期望：绿</small></div>
   <div class="cell"><canvas id="c_by_linear"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_by_direct"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_by_pure"    height="40"></canvas></div>
+  <div class="cell"><canvas id="c_by_fix"     height="40"></canvas></div>
   <div class="cell"><canvas id="c_by_mixbox"  height="40"></canvas></div>
 
-  <div class="row-label">红 + 黄<br><small style="color:#555">期望：橙</small></div>
+  <div class="row-label">镉红 + 镉黄<br><small style="color:#555">期望：橙</small></div>
   <div class="cell"><canvas id="c_ry_linear"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_ry_direct"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_ry_pure"    height="40"></canvas></div>
+  <div class="cell"><canvas id="c_ry_fix"     height="40"></canvas></div>
   <div class="cell"><canvas id="c_ry_mixbox"  height="40"></canvas></div>
 
-  <div class="row-label">黑 + 白<br><small style="color:#555">期望：中灰</small></div>
+  <div class="row-label">象牙黑 + 钛白<br><small style="color:#555">期望：中灰</small></div>
   <div class="cell"><canvas id="c_bw_linear"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_bw_direct"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_bw_pure"    height="40"></canvas></div>
+  <div class="cell"><canvas id="c_bw_fix"     height="40"></canvas></div>
   <div class="cell"><canvas id="c_bw_mixbox"  height="40"></canvas></div>
 
-  <div class="row-label">青 + 品红<br><small style="color:#555">差异最大</small></div>
+  <div class="row-label">翡翠绿 + 玫瑰红<br><small style="color:#555">冷暖对比</small></div>
   <div class="cell"><canvas id="c_cm_linear"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_cm_direct"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_cm_pure"    height="40"></canvas></div>
+  <div class="cell"><canvas id="c_cm_fix"     height="40"></canvas></div>
   <div class="cell"><canvas id="c_cm_mixbox"  height="40"></canvas></div>
 
   <div class="section-gap"></div>
 
-  <div class="row-label">红 + 绿<br><small style="color:#555">互补：棕/暗黄</small></div>
+  <div class="row-label">镉红 + 氧化铬绿<br><small style="color:#555">互补：棕</small></div>
   <div class="cell"><canvas id="c_rg_linear"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_rg_direct"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_rg_pure"    height="40"></canvas></div>
+  <div class="cell"><canvas id="c_rg_fix"     height="40"></canvas></div>
   <div class="cell"><canvas id="c_rg_mixbox"  height="40"></canvas></div>
 
-  <div class="row-label">紫 + 黄<br><small style="color:#555">互补：灰棕</small></div>
+  <div class="row-label">二噁嗪紫 + 镉黄<br><small style="color:#555">互补：灰棕</small></div>
   <div class="cell"><canvas id="c_py_linear"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_py_direct"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_py_pure"    height="40"></canvas></div>
+  <div class="cell"><canvas id="c_py_fix"     height="40"></canvas></div>
   <div class="cell"><canvas id="c_py_mixbox"  height="40"></canvas></div>
 
-  <div class="row-label">橙 + 蓝<br><small style="color:#555">互补：灰褐</small></div>
+  <div class="row-label">镉橙 + 群青<br><small style="color:#555">互补：灰褐</small></div>
   <div class="cell"><canvas id="c_ob_linear"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_ob_direct"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_ob_pure"    height="40"></canvas></div>
+  <div class="cell"><canvas id="c_ob_fix"     height="40"></canvas></div>
   <div class="cell"><canvas id="c_ob_mixbox"  height="40"></canvas></div>
 
-  <div class="row-label">青 + 红<br><small style="color:#555">互补：暗灰</small></div>
+  <div class="row-label">翡翠绿 + 镉红<br><small style="color:#555">互补：暗灰</small></div>
   <div class="cell"><canvas id="c_cr_linear"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_cr_direct"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_cr_pure"    height="40"></canvas></div>
+  <div class="cell"><canvas id="c_cr_fix"     height="40"></canvas></div>
   <div class="cell"><canvas id="c_cr_mixbox"  height="40"></canvas></div>
 
-  <div class="row-label">绿 + 品红<br><small style="color:#555">互补：灰</small></div>
+  <div class="row-label">氧化铬绿 + 玫瑰红<br><small style="color:#555">互补：灰</small></div>
   <div class="cell"><canvas id="c_gm_linear"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_gm_direct"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_gm_pure"    height="40"></canvas></div>
+  <div class="cell"><canvas id="c_gm_fix"     height="40"></canvas></div>
   <div class="cell"><canvas id="c_gm_mixbox"  height="40"></canvas></div>
+
+  <div class="section-gap"></div>
+
+  <!-- RGB 纯色组 -->
+  <div class="row-label">纯红 + 纯绿<br><small style="color:#555">RGB：黄</small></div>
+  <div class="cell"><canvas id="c_prg_linear"  height="40"></canvas></div>
+  <div class="cell"><canvas id="c_prg_direct"  height="40"></canvas></div>
+  <div class="cell"><canvas id="c_prg_pure"    height="40"></canvas></div>
+  <div class="cell"><canvas id="c_prg_fix"     height="40"></canvas></div>
+  <div class="cell"><canvas id="c_prg_mixbox"  height="40"></canvas></div>
+
+  <div class="row-label">纯红 + 纯蓝<br><small style="color:#555">RGB：品红</small></div>
+  <div class="cell"><canvas id="c_prb_linear"  height="40"></canvas></div>
+  <div class="cell"><canvas id="c_prb_direct"  height="40"></canvas></div>
+  <div class="cell"><canvas id="c_prb_pure"    height="40"></canvas></div>
+  <div class="cell"><canvas id="c_prb_fix"     height="40"></canvas></div>
+  <div class="cell"><canvas id="c_prb_mixbox"  height="40"></canvas></div>
+
+  <div class="row-label">纯绿 + 纯蓝<br><small style="color:#555">RGB：青</small></div>
+  <div class="cell"><canvas id="c_pgb_linear"  height="40"></canvas></div>
+  <div class="cell"><canvas id="c_pgb_direct"  height="40"></canvas></div>
+  <div class="cell"><canvas id="c_pgb_pure"    height="40"></canvas></div>
+  <div class="cell"><canvas id="c_pgb_fix"     height="40"></canvas></div>
+  <div class="cell"><canvas id="c_pgb_mixbox"  height="40"></canvas></div>
+
+  <div class="row-label">纯红 + 纯白<br><small style="color:#555">RGB</small></div>
+  <div class="cell"><canvas id="c_prw_linear"  height="40"></canvas></div>
+  <div class="cell"><canvas id="c_prw_direct"  height="40"></canvas></div>
+  <div class="cell"><canvas id="c_prw_pure"    height="40"></canvas></div>
+  <div class="cell"><canvas id="c_prw_fix"     height="40"></canvas></div>
+  <div class="cell"><canvas id="c_prw_mixbox"  height="40"></canvas></div>
+
+  <div class="row-label">纯黄 + 纯蓝<br><small style="color:#555">RGB互补</small></div>
+  <div class="cell"><canvas id="c_pyb_linear"  height="40"></canvas></div>
+  <div class="cell"><canvas id="c_pyb_direct"  height="40"></canvas></div>
+  <div class="cell"><canvas id="c_pyb_pure"    height="40"></canvas></div>
+  <div class="cell"><canvas id="c_pyb_fix"     height="40"></canvas></div>
+  <div class="cell"><canvas id="c_pyb_mixbox"  height="40"></canvas></div>
+
+  <div class="row-label">纯青 + 纯红<br><small style="color:#555">RGB互补</small></div>
+  <div class="cell"><canvas id="c_pcr_linear"  height="40"></canvas></div>
+  <div class="cell"><canvas id="c_pcr_direct"  height="40"></canvas></div>
+  <div class="cell"><canvas id="c_pcr_pure"    height="40"></canvas></div>
+  <div class="cell"><canvas id="c_pcr_fix"     height="40"></canvas></div>
+  <div class="cell"><canvas id="c_pcr_mixbox"  height="40"></canvas></div>
+
+  <div class="row-label">纯品红 + 纯绿<br><small style="color:#555">RGB互补</small></div>
+  <div class="cell"><canvas id="c_pmg_linear"  height="40"></canvas></div>
+  <div class="cell"><canvas id="c_pmg_direct"  height="40"></canvas></div>
+  <div class="cell"><canvas id="c_pmg_pure"    height="40"></canvas></div>
+  <div class="cell"><canvas id="c_pmg_fix"     height="40"></canvas></div>
+  <div class="cell"><canvas id="c_pmg_mixbox"  height="40"></canvas></div>
 </div>
 
 <p class="note">
-  KM Pure = KM Direct + 线性插值动态混合。通道互斥检测 + 自适应饱和度补偿，高饱和色对自动偏向线性插值避免变暗。
+  KM Pure = KM Direct + 饱和度补偿。混合后检测饱和度损失，将色彩推回纯色方向，模拟水彩稀释效果。<br>
+  KM Fix = KM Direct + 亮度保持修正。保留 KM Direct 的色相混合，但将亮度提升到线性插值的期望值，避免中间色变暗。
 </p>
 
 <script src="js/mixbox.js"></script>
@@ -184,54 +254,162 @@ function kmMixDirect(r1, g1, b1, r2, g2, b2, t) {
   return [geoMix(r1, r2, t), geoMix(g1, g2, t), geoMix(b1, b2, t)];
 }
 
-// --- KM Pure: KM Direct + 线性插值，通道互斥动态混合，自适应 satBoost ---
+// --- KM Pure: blend between KM Direct and Linear RGB + blue-yellow green correction ---
+// satBoost=0 → pure KM Direct, satBoost=1 → pure Linear RGB
+let satBoost = 0.5;
 
 function kmMixPure(r1, g1, b1, r2, g2, b2, t) {
-  const [kr, kg, kb] = kmMixDirect(r1, g1, b1, r2, g2, b2, t);
-  const lr = r1 + (r2 - r1) * t;
-  const lg = g1 + (g2 - g1) * t;
-  const lb = b1 + (b2 - b1) * t;
+  const [dr, dg, db] = kmMixDirect(r1, g1, b1, r2, g2, b2, t);
+  const [lr, lg, lb] = linearMix(r1, g1, b1, r2, g2, b2, t);
 
-  // 通道互斥检测
-  const conflictR = Math.abs(r1 - r2) * (1 - Math.min(r1, r2));
-  const conflictG = Math.abs(g1 - g2) * (1 - Math.min(g1, g2));
-  const conflictB = Math.abs(b1 - b2) * (1 - Math.min(b1, b2));
-  const maxConflict = Math.max(conflictR, conflictG, conflictB);
+  // 通道互斥检测：两色在某通道上一高一低时，几何均值崩溃，需更多线性
+  const chanConflict = (a, b) => Math.abs(a - b) * (1 - Math.min(a, b));
+  const maxConflict = Math.max(
+    chanConflict(r1, r2),
+    chanConflict(g1, g2),
+    chanConflict(b1, b2)
+  );
   const conflictBlend = maxConflict * maxConflict;
 
-  // 自适应 satBoost: 饱和度越高越偏线性
-  const maxC1 = Math.max(r1, g1, b1), minC1 = Math.min(r1, g1, b1);
-  const maxC2 = Math.max(r2, g2, b2), minC2 = Math.min(r2, g2, b2);
-  const sat1 = maxC1 > 0.001 ? (maxC1 - minC1) / maxC1 : 0;
-  const sat2 = maxC2 > 0.001 ? (maxC2 - minC2) / maxC2 : 0;
-  const avgSat = (sat1 + sat2) * 0.5;
-  const satBoost = 0.35 + (0.55 - 0.35) * avgSat;
+  // satBoost 为用户控制的基础混合比，conflictBlend 为通道互斥时的最低保障
   const blend = Math.max(satBoost, conflictBlend);
 
-  let mr = kr + (lr - kr) * blend;
-  let mg = kg + (lg - kg) * blend;
-  let mb = kb + (lb - kb) * blend;
+  let mr = dr + (lr - dr) * blend;
+  let mg = dg + (lg - dg) * blend;
+  let mb = db + (lb - db) * blend;
 
-  // 蓝黄绿校正（色相角检测 + 饱和度加权）
-  const hue1 = Math.atan2(Math.sqrt(3) * (g1 - b1), 2 * r1 - g1 - b1);
-  const hue2 = Math.atan2(Math.sqrt(3) * (g2 - b2), 2 * r2 - g2 - b2);
-  function smoothstep(edge0, edge1, x) { const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0))); return t * t * (3 - 2 * t); }
-  const blueZone1  = smoothstep(0.3, 1.0, Math.max(0, 1 - Math.abs(hue1 + 1.57) / 1.05)) * sat1;
-  const yellowZone1 = smoothstep(0.3, 1.0, Math.max(0, 1 - Math.abs(hue1 - 1.05) / 0.52)) * sat1;
-  const blueZone2  = smoothstep(0.3, 1.0, Math.max(0, 1 - Math.abs(hue2 + 1.57) / 1.05)) * sat2;
-  const yellowZone2 = smoothstep(0.3, 1.0, Math.max(0, 1 - Math.abs(hue2 - 1.05) / 0.52)) * sat2;
-  const crossSignal = Math.max(blueZone1 * yellowZone2, blueZone2 * yellowZone1);
+  // Blue-yellow green correction (hue-based detection)
+  const hueOf = (r, g, b) => {
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+    if (d < 0.001) return -1; // achromatic
+    let h;
+    if (mx === r) h = ((g - b) / d) % 6;
+    else if (mx === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    return ((h / 6) % 1 + 1) % 1; // 0~1
+  };
+  const satOf = (r, g, b) => {
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+    return mx < 0.001 ? 0 : (mx - mn) / mx;
+  };
+
+  // Blueness: hue ~0.49-0.83 (cyan-blue-purple), weighted by saturation
+  const blueWeight = (r, g, b) => {
+    const h = hueOf(r, g, b); if (h < 0) return 0;
+    const s = satOf(r, g, b);
+    return Math.max(0, 1 - Math.abs(h - 0.66) / 0.17) * s;
+  };
+  // Yellowness: hue ~0.0-0.23 (red-orange-yellow), weighted by saturation
+  const yellowWeight = (r, g, b) => {
+    const h = hueOf(r, g, b); if (h < 0) return 0;
+    const s = satOf(r, g, b);
+    return Math.max(0, 1 - Math.abs(h - 0.11) / 0.12) * s;
+  };
+
+  const bw1 = blueWeight(r1, g1, b1), yw1 = yellowWeight(r1, g1, b1);
+  const bw2 = blueWeight(r2, g2, b2), yw2 = yellowWeight(r2, g2, b2);
+
+  const crossSignal = Math.max(bw1 * yw2, bw2 * yw1);
   const midWeight = 4 * t * (1 - t);
-  const greenInject = crossSignal * midWeight;
-  mg = Math.min(1, mg + greenInject * 0.28);
-  mr = mr * (1 - greenInject * 0.4);
+  // 自适应绿色注入：cross^0.3 使弱信号也能获得足够的绿色增强
+  if (crossSignal > 0.01) {
+    const crossP = Math.pow(crossSignal, 0.3);
+    const greenBoost = 0.13 * crossP * midWeight;
+    const redReduce = 0.4 * crossP * midWeight;
+    mg = Math.min(1, mg + greenBoost);
+    mr = mr * (1 - redReduce);
+  }
 
-  // 亮度限制: green boost 后不超过线性插值亮度
-  const lumResult = mr * 0.299 + mg * 0.587 + mb * 0.114;
-  const lumLin = lr * 0.299 + lg * 0.587 + lb * 0.114;
-  if (lumResult > lumLin && lumLin > 0.001) {
-    const scale = lumLin / lumResult;
-    mr *= scale; mg *= scale; mb *= scale;
+  return [mr, mg, mb];
+}
+
+// --- KM Fix: KM Direct + 线性插值混合（通道互斥 + 色相距离自适应）---
+// 色相近且通道无冲突 → 纯 KM Direct，通道互斥或互补 → 偏向线性插值
+function kmMixFix(r1, g1, b1, r2, g2, b2, t) {
+  const [dr, dg, db] = kmMixDirect(r1, g1, b1, r2, g2, b2, t);
+  const [lr, lg, lb] = linearMix(r1, g1, b1, r2, g2, b2, t);
+
+  // 通道互斥检测：两色在某通道上一高一低时，几何均值必然崩溃
+  // 每通道：|a - b| 越大且 min(a,b) 越小 → 互斥越严重
+  const chanConflict = (a, b) => Math.abs(a - b) * (1 - Math.min(a, b));
+  const maxConflict = Math.max(
+    chanConflict(r1, r2),
+    chanConflict(g1, g2),
+    chanConflict(b1, b2)
+  );
+
+  // 色相距离（作为辅助信号）
+  const hue = (r, g, b) => {
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    const d = max - min;
+    if (d < 0.001) return 0;
+    let h;
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    return ((h / 6) % 1 + 1) % 1;
+  };
+  const sat = (r, g, b) => {
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    return max < 0.001 ? 0 : (max - min) / max;
+  };
+
+  const h1 = hue(r1, g1, b1), h2 = hue(r2, g2, b2);
+  const s1 = sat(r1, g1, b1), s2 = sat(r2, g2, b2);
+
+  let hueDist = Math.abs(h1 - h2);
+  if (hueDist > 0.5) hueDist = 1 - hueDist;
+  const hueDistNorm = hueDist * 2;
+  const chromaWeight = Math.min(s1, s2);
+  const effectiveHueDist = hueDistNorm * chromaWeight;
+
+  // 综合两个信号：取较大者，确保通道互斥时也能切换到线性
+  const divergence = Math.max(effectiveHueDist, maxConflict);
+
+  // 混合因子：平滑过渡
+  const linBlend = divergence * divergence;
+
+  let mr = dr + (lr - dr) * linBlend;
+  let mg = dg + (lg - dg) * linBlend;
+  let mb = db + (lb - db) * linBlend;
+
+  // Blue-yellow green correction (hue-based, same as KM Pure)
+  const hueOf = (r, g, b) => {
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+    if (d < 0.001) return -1;
+    let h;
+    if (mx === r) h = ((g - b) / d) % 6;
+    else if (mx === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    return ((h / 6) % 1 + 1) % 1;
+  };
+  const satOf = (r, g, b) => {
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+    return mx < 0.001 ? 0 : (mx - mn) / mx;
+  };
+  const blueWeight = (r, g, b) => {
+    const h = hueOf(r, g, b); if (h < 0) return 0;
+    const s = satOf(r, g, b);
+    return Math.max(0, 1 - Math.abs(h - 0.66) / 0.17) * s;
+  };
+  const yellowWeight = (r, g, b) => {
+    const h = hueOf(r, g, b); if (h < 0) return 0;
+    const s = satOf(r, g, b);
+    return Math.max(0, 1 - Math.abs(h - 0.11) / 0.12) * s;
+  };
+
+  const bw1 = blueWeight(r1, g1, b1), yw1 = yellowWeight(r1, g1, b1);
+  const bw2 = blueWeight(r2, g2, b2), yw2 = yellowWeight(r2, g2, b2);
+
+  const crossSignal = Math.max(bw1 * yw2, bw2 * yw1);
+  const midWeight = 4 * t * (1 - t);
+  // 自适应绿色注入：cross^0.3 使弱信号也能获得足够的绿色增强
+  if (crossSignal > 0.01) {
+    const crossP = Math.pow(crossSignal, 0.3);
+    const greenBoost = 0.13 * crossP * midWeight;
+    const redReduce = 0.4 * crossP * midWeight;
+    mg = Math.min(1, mg + greenBoost);
+    mr = mr * (1 - redReduce);
   }
 
   return [mr, mg, mb];
@@ -258,6 +436,7 @@ function drawGradient(canvasEl, r1, g1, b1, r2, g2, b2, mixFn) {
     let rgb;
     if (mixFn === 'linear') rgb = linearMix(r1, g1, b1, r2, g2, b2, t);
     else if (mixFn === 'direct') rgb = kmMixDirect(r1, g1, b1, r2, g2, b2, t);
+    else if (mixFn === 'fix') rgb = kmMixFix(r1, g1, b1, r2, g2, b2, t);
     else if (mixFn === 'mixbox') rgb = mixboxMix(r1, g1, b1, r2, g2, b2, t);
     else rgb = kmMixPure(r1, g1, b1, r2, g2, b2, t);
 
@@ -283,18 +462,25 @@ function hexToRGB01(hex) {
 // ============ 测试色对 ============
 
 const testPairs = [
-  { id: 'rw',  a: '#ff0000', b: '#ffffff' },
-  { id: 'bw2', a: '#0000ff', b: '#ffffff' },
-  { id: 'rb',  a: '#ff0000', b: '#0000ff' },
-  { id: 'by',  a: '#0000ff', b: '#ffff00' },
-  { id: 'ry',  a: '#ff0000', b: '#ffff00' },
-  { id: 'bw',  a: '#000000', b: '#ffffff' },
-  { id: 'cm',  a: '#00ffff', b: '#ff00ff' },
-  { id: 'rg',  a: '#ff0000', b: '#00ff00' },
-  { id: 'py',  a: '#8000ff', b: '#ffff00' },
-  { id: 'ob',  a: '#ff8000', b: '#0040ff' },
-  { id: 'cr',  a: '#00ffff', b: '#ff0000' },
-  { id: 'gm',  a: '#00ff00', b: '#ff00ff' },
+  { id: 'rw',  a: '#e32636', b: '#f5f5f0' },  // 镉红 + 钛白
+  { id: 'bw2', a: '#1a3a6a', b: '#f5f5f0' },  // 群青 + 钛白
+  { id: 'rb',  a: '#e32636', b: '#1a3a6a' },  // 镉红 + 群青
+  { id: 'by',  a: '#1a3a6a', b: '#f5c71a' },  // 群青 + 镉黄
+  { id: 'ry',  a: '#e32636', b: '#f5c71a' },  // 镉红 + 镉黄
+  { id: 'bw',  a: '#1e1e1e', b: '#f5f5f0' },  // 象牙黑 + 钛白
+  { id: 'cm',  a: '#007e7a', b: '#c8306b' },  // 翡翠绿 + 玫瑰红
+  { id: 'rg',  a: '#e32636', b: '#2e6b30' },  // 镉红 + 氧化铬绿
+  { id: 'py',  a: '#5c2d91', b: '#f5c71a' },  // 二噁嗪紫 + 镉黄
+  { id: 'ob',  a: '#e87e04', b: '#1a3a6a' },  // 镉橙 + 群青
+  { id: 'cr',  a: '#007e7a', b: '#e32636' },  // 翡翠绿 + 镉红
+  { id: 'gm',  a: '#2e6b30', b: '#c8306b' },  // 氧化铬绿 + 玫瑰红
+  { id: 'prg', a: '#ff0000', b: '#00ff00' },  // 纯红 + 纯绿
+  { id: 'prb', a: '#ff0000', b: '#0000ff' },  // 纯红 + 纯蓝
+  { id: 'pgb', a: '#00ff00', b: '#0000ff' },  // 纯绿 + 纯蓝
+  { id: 'prw', a: '#ff0000', b: '#ffffff' },  // 纯红 + 纯白
+  { id: 'pyb', a: '#ffff00', b: '#0000ff' },  // 纯黄 + 纯蓝
+  { id: 'pcr', a: '#00ffff', b: '#ff0000' },  // 纯青 + 纯红
+  { id: 'pmg', a: '#ff00ff', b: '#00ff00' },  // 纯品红 + 纯绿
 ];
 
 function renderAll() {
@@ -305,7 +491,7 @@ function renderAll() {
 
   document.getElementById('customLabel').textContent = '自定义';
 
-  const methods = ['linear', 'direct', 'pure', 'mixbox'];
+  const methods = ['linear', 'direct', 'pure', 'fix', 'mixbox'];
   methods.forEach(m => drawGradient(document.getElementById(`c_custom_${m}`), r1, g1, b1, r2, g2, b2, m));
 
   for (const pair of testPairs) {
@@ -317,6 +503,14 @@ function renderAll() {
 
 document.getElementById('colorA').addEventListener('input', renderAll);
 document.getElementById('colorB').addEventListener('input', renderAll);
+
+const satSlider = document.getElementById('satBoost');
+const satVal = document.getElementById('satBoostVal');
+satSlider.addEventListener('input', () => {
+  satBoost = satSlider.value / 100;
+  satVal.textContent = satBoost.toFixed(2);
+  renderAll();
+});
 
 requestAnimationFrame(() => requestAnimationFrame(renderAll));
 </script>
