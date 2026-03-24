@@ -156,41 +156,32 @@ class KMWebGLPainter {
 
         // LUT采样：RGB → 10个vec4（38波长反射率）
         // 纹理布局: x = gi*64+ri, y = band*64+bi，共4096×640
-        // r/g/b三轴全部手动三线性插值，避免LINEAR跨g段或跨band污染
-        vec4 sampleLUTPoint(float r, float g, float b, float band) {
-            float u = (g * 64.0 + r + 0.5) / 4096.0;
-            float v = (band * 64.0 + b + 0.5) / 640.0;
-            return texture2D(u_lut, vec2(u, v));
-        }
-
+        // r/b轴在各自段内连续，LINEAR自动插值；g轴跨段手动插值
         void sampleLUT(vec3 c,
             out vec4 R0, out vec4 R1, out vec4 R2, out vec4 R3, out vec4 R4,
             out vec4 R5, out vec4 R6, out vec4 R7, out vec4 R8, out vec4 R9)
         {
             vec3 f = clamp(c, 0.0, 1.0) * 63.0;
-            float r0 = floor(f.r); float r1 = min(r0+1.0, 63.0); float rf = f.r - r0;
             float g0 = floor(f.g); float g1 = min(g0+1.0, 63.0); float gf = f.g - g0;
-            float b0 = floor(f.b); float b1 = min(b0+1.0, 63.0); float bf = f.b - b0;
+            float u0 = (g0 * 64.0 + f.r + 0.5) / 4096.0;
+            float u1 = (g1 * 64.0 + f.r + 0.5) / 4096.0;
 
-            #define TRILINEAR(band) \
-                mix( \
-                    mix(mix(sampleLUTPoint(r0,g0,b0,band), sampleLUTPoint(r1,g0,b0,band), rf), \
-                        mix(sampleLUTPoint(r0,g1,b0,band), sampleLUTPoint(r1,g1,b0,band), rf), gf), \
-                    mix(mix(sampleLUTPoint(r0,g0,b1,band), sampleLUTPoint(r1,g0,b1,band), rf), \
-                        mix(sampleLUTPoint(r0,g1,b1,band), sampleLUTPoint(r1,g1,b1,band), rf), gf), \
-                bf)
+            #define SAMPLE_BAND(band) mix( \
+                texture2D(u_lut, vec2(u0, (float(band)*64.0 + f.b + 0.5) / 640.0)), \
+                texture2D(u_lut, vec2(u1, (float(band)*64.0 + f.b + 0.5) / 640.0)), \
+                gf)
 
-            R0 = TRILINEAR(0.0);
-            R1 = TRILINEAR(1.0);
-            R2 = TRILINEAR(2.0);
-            R3 = TRILINEAR(3.0);
-            R4 = TRILINEAR(4.0);
-            R5 = TRILINEAR(5.0);
-            R6 = TRILINEAR(6.0);
-            R7 = TRILINEAR(7.0);
-            R8 = TRILINEAR(8.0);
-            R9 = TRILINEAR(9.0);
-            #undef TRILINEAR
+            R0 = SAMPLE_BAND(0);
+            R1 = SAMPLE_BAND(1);
+            R2 = SAMPLE_BAND(2);
+            R3 = SAMPLE_BAND(3);
+            R4 = SAMPLE_BAND(4);
+            R5 = SAMPLE_BAND(5);
+            R6 = SAMPLE_BAND(6);
+            R7 = SAMPLE_BAND(7);
+            R8 = SAMPLE_BAND(8);
+            R9 = SAMPLE_BAND(9);
+            #undef SAMPLE_BAND
         }
 
         // 38波长反射率 → XYZ → RGB
@@ -512,8 +503,8 @@ class KMWebGLPainter {
             gl.bindTexture(gl.TEXTURE_2D, tex);
             gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
             gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
             gl.bindTexture(gl.TEXTURE_2D, null);
