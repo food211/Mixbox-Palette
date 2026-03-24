@@ -226,11 +226,12 @@ class KMWebGLPainter {
             sampleLUT(c1, A0,A1,A2,A3,A4,A5,A6,A7,A8,A9);
             sampleLUT(c2, B0,B1,B2,B3,B4,B5,B6,B7,B8,B9);
 
-            float conc1 = 0.5;
-            float conc2 = 0.5;
+            // 用 t 直接控制颜料浓度比，使深浅方向都对称
+            float conc1 = 1.0 - t;
+            float conc2 = t;
             float totalConc = 1.0;
 
-            vec3 kmResult = reflectanceToRGB(
+            vec3 result = reflectanceToRGB(
                 km_band(A0,B0,conc1,conc2,totalConc),
                 km_band(A1,B1,conc1,conc2,totalConc),
                 km_band(A2,B2,conc1,conc2,totalConc),
@@ -243,59 +244,16 @@ class KMWebGLPainter {
                 km_band(A9,B9,conc1,conc2,totalConc)
             );
 
-            // 第一段：轻触混色
-            vec3 blended = mix(c1, kmResult, clamp(t * 2.0, 0.0, 1.0));
-            // 第二段：重涂覆盖
-            vec3 result = mix(blended, c2, clamp(t * 2.0 - 1.0, 0.0, 1.0));
+            // 线性插值参考色（用于所有比较的基准）
+            vec3 linearMix = mix(c1, c2, t);
+            const vec3 LUM_COEFF = vec3(0.2126, 0.7152, 0.0722);
+            float linearLum = dot(linearMix, LUM_COEFF);
+            float resultLum = dot(result, LUM_COEFF);
 
-            // 模拟颜料被水稀释的色相偏移
-            // 计算颜色饱和度和亮度
-            float maxComp = max(max(c2.r, c2.g), c2.b);
-            float minComp = min(min(c2.r, c2.g), c2.b);
-            float chroma = maxComp - minComp;
-            float saturation = (maxComp > 0.0) ? chroma / maxComp : 0.0;
-            
-            // 根据饱和度和颜色特性决定色相偏移强度
-            // 红色和紫色系列稀释后偏移更明显
-            float redPurpleFactor = max(0.0, c2.r - c2.g) * 0.7 + max(0.0, c2.r - c2.b) * 0.3;
-            float hueShiftStrength = saturation * 0.15 * redPurpleFactor;
-            
-            // 当与白色混合时应用色相偏移
-            // 检测c1是否接近白色
-            float c1Luminance = dot(c1, vec3(0.2126, 0.7152, 0.0722));
-            float isWhitish = smoothstep(0.85, 1.0, c1Luminance);
-            
-            // 应用色相偏移 - 红色系列通常向黄色偏移，蓝色系列向青色偏移
-            if (isWhitish > 0.0 && saturation > 0.1) {
-                // 简化的RGB色相偏移
-                // 红色系列向黄色偏移（增加绿色分量）
-                if (c2.r > c2.b && c2.r > c2.g) {
-                    result.g += hueShiftStrength * isWhitish * (1.0 - t);
-                    result.r -= hueShiftStrength * 0.25 * isWhitish * (1.0 - t);
-                }
-                // 蓝色系列向青色偏移（增加绿色分量）
-                else if (c2.b > c2.r && c2.b > c2.g) {
-                    result.g += hueShiftStrength * 0.7 * isWhitish * (1.0 - t);
-                    result.b -= hueShiftStrength * 0.3 * isWhitish * (1.0 - t);
-                }
-                // 紫色系列向红色偏移（减少蓝色分量）
-                else if (c2.r > 0.5 && c2.b > 0.5 && c2.g < 0.5) {
-                    result.r += hueShiftStrength * 0.3 * isWhitish * (1.0 - t);
-                    result.b -= hueShiftStrength * 0.5 * isWhitish * (1.0 - t);
-                }
-            }
-
-            // 自适应亮度补偿：只补偿 KM 造成的损失
-            float lum1 = dot(c1, vec3(0.2126, 0.7152, 0.0722));
-            float lum2 = dot(c2, vec3(0.2126, 0.7152, 0.0722));
-            float expectedLum = mix(lum1, lum2, t);  // 用 t 加权，而不是固定 0.5
-            float resultLum   = dot(result, vec3(0.2126, 0.7152, 0.0722));
-
-            // 亮度修正强度系数设为0.75，在保持颜色纯度和适当补偿之间取得平衡
-            float brightnessCorrectionFactor = 0.75; // 默认为0.75，增大会加强修正，减小会减弱修正
-            
-            float loss = max(0.0, expectedLum - resultLum);
-            float compensationStrength = loss / max(expectedLum, 0.001) * brightnessCorrectionFactor;
+            // 提亮补偿：接近白色时补偿更强，随t缩放保留笔刷渐变
+            float brightnessCorrectionFactor = 0.6 + linearLum * 0.8;
+            float loss = max(0.0, linearLum - resultLum);
+            float compensationStrength = loss / max(linearLum, 0.001) * brightnessCorrectionFactor * t;
             result *= 1.0 + compensationStrength;
 
             return clamp(result, 0.0, 1.0);
@@ -317,8 +275,8 @@ class KMWebGLPainter {
             float radialFalloff = 1.0 - smoothstep(0.0, u_brushRadius, distToCenter);
 
             float mixAmount = radialFalloff * brushAlpha * u_baseMixStrength;
-            // 只要笔刷 alpha 够，t 至少能达到 0.5（进入覆盖段）
-            float kmT = clamp(mixAmount + brushAlpha * 0.3, 0.0, 1.0);
+            
+            float kmT = clamp(mixAmount, 0.0, 1.0);
 
             gl_FragColor = vec4(km_mix(canvasColor.rgb, u_brushColor.rgb, kmT), 1.0);
         }
