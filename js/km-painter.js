@@ -2,11 +2,17 @@
  * KM 混色引擎 (Kubelka-Munk Mixing Engine)
  * 使用 38波长光谱 Kubelka-Munk 物理公式进行颜料混色
  * RGB → 38波长反射率LUT查表 → KM混合 → RGB
- * WebGL1 兼容，使用单张合并LUT纹理（1024×320）
+ * WebGL1 兼容，使用单张合并LUT纹理（4096×640）
  *
  * Copyright (C) 2026 food211
  * License: GPL-3.0 (https://www.gnu.org/licenses/gpl-3.0.html)
  * Repository: https://github.com/food211/Mixbox-Palette
+ *
+ * The 38-wavelength spectral basis (BASE reflectance coefficients) and CMF weights
+ * used in the LUT generator are derived from spectral.js by Ronald van Wijnen,
+ * used under the MIT License.
+ * https://github.com/rvanwijnen/spectral.js
+ * Copyright (c) Ronald van Wijnen
  */
 class KMWebGLPainter {
     constructor(canvas) {
@@ -39,12 +45,12 @@ class KMWebGLPainter {
     async init() {
         this.initWebGL();
         this.compileShaders();
-        this.loadLUT();
+        await this.loadLUT();
         this.setupTextures();
         this.setupFramebuffers();
         this.setupGeometry();
 
-        console.log('✅ KMWebGLPainter 初始化完成（38波长光谱KM，WebGL1）');
+        console.log('✅ KMWebGLPainter 初始化完成（38波长光谱KM，WebGL1，64³LUT）');
     }
 
     initWebGL() {
@@ -149,34 +155,42 @@ class KMWebGLPainter {
         }
 
         // LUT采样：RGB → 10个vec4（38波长反射率）
-        // 纹理布局: x = gi*32+ri, y = band*32+bi
-        // g轴手动插值（g轴在x方向分段拼接，LINEAR不能跨段），r/b轴由LINEAR自动插值
+        // 纹理布局: x = gi*64+ri, y = band*64+bi，共4096×640
+        // r/g/b三轴全部手动三线性插值，避免LINEAR跨g段或跨band污染
+        vec4 sampleLUTPoint(float r, float g, float b, float band) {
+            float u = (g * 64.0 + r + 0.5) / 4096.0;
+            float v = (band * 64.0 + b + 0.5) / 640.0;
+            return texture2D(u_lut, vec2(u, v));
+        }
+
         void sampleLUT(vec3 c,
             out vec4 R0, out vec4 R1, out vec4 R2, out vec4 R3, out vec4 R4,
             out vec4 R5, out vec4 R6, out vec4 R7, out vec4 R8, out vec4 R9)
         {
-            vec3 f = clamp(c, 0.0, 1.0) * 31.0;
-            float g0 = floor(f.g);
-            float g1 = min(g0 + 1.0, 31.0);
-            float gf = f.g - g0;
-            float b = f.b;
-            float u0 = (g0 * 32.0 + f.r + 0.5) / 1024.0;
-            float u1 = (g1 * 32.0 + f.r + 0.5) / 1024.0;
-            #define SAMPLE_BAND(band) mix( \
-                texture2D(u_lut, vec2(u0, (float(band)*32.0 + b + 0.5) / 320.0)), \
-                texture2D(u_lut, vec2(u1, (float(band)*32.0 + b + 0.5) / 320.0)), \
-                gf)
-            R0 = SAMPLE_BAND(0);
-            R1 = SAMPLE_BAND(1);
-            R2 = SAMPLE_BAND(2);
-            R3 = SAMPLE_BAND(3);
-            R4 = SAMPLE_BAND(4);
-            R5 = SAMPLE_BAND(5);
-            R6 = SAMPLE_BAND(6);
-            R7 = SAMPLE_BAND(7);
-            R8 = SAMPLE_BAND(8);
-            R9 = SAMPLE_BAND(9);
-            #undef SAMPLE_BAND
+            vec3 f = clamp(c, 0.0, 1.0) * 63.0;
+            float r0 = floor(f.r); float r1 = min(r0+1.0, 63.0); float rf = f.r - r0;
+            float g0 = floor(f.g); float g1 = min(g0+1.0, 63.0); float gf = f.g - g0;
+            float b0 = floor(f.b); float b1 = min(b0+1.0, 63.0); float bf = f.b - b0;
+
+            #define TRILINEAR(band) \
+                mix( \
+                    mix(mix(sampleLUTPoint(r0,g0,b0,band), sampleLUTPoint(r1,g0,b0,band), rf), \
+                        mix(sampleLUTPoint(r0,g1,b0,band), sampleLUTPoint(r1,g1,b0,band), rf), gf), \
+                    mix(mix(sampleLUTPoint(r0,g0,b1,band), sampleLUTPoint(r1,g0,b1,band), rf), \
+                        mix(sampleLUTPoint(r0,g1,b1,band), sampleLUTPoint(r1,g1,b1,band), rf), gf), \
+                bf)
+
+            R0 = TRILINEAR(0.0);
+            R1 = TRILINEAR(1.0);
+            R2 = TRILINEAR(2.0);
+            R3 = TRILINEAR(3.0);
+            R4 = TRILINEAR(4.0);
+            R5 = TRILINEAR(5.0);
+            R6 = TRILINEAR(6.0);
+            R7 = TRILINEAR(7.0);
+            R8 = TRILINEAR(8.0);
+            R9 = TRILINEAR(9.0);
+            #undef TRILINEAR
         }
 
         // 38波长反射率 → XYZ → RGB
@@ -308,78 +322,205 @@ class KMWebGLPainter {
         return program;
     }
 
-    loadLUT() {
-        const gl = this.gl;
-        const N = 38;
-        const LUT_N = 32;
-        const LUT_W = LUT_N * LUT_N;   // 1024
-        const LUT_BAND_H = LUT_N;       // 32
-        const NUM_BANDS = 10;
-        const LUT_H = LUT_BAND_H * NUM_BANDS; // 320
+    // 纯JS PNG解码器：绕开 <img> 颜色管理，直接读取原始字节
+    // 支持 RGBA8 deflate PNG，不依赖任何外部库
+    _decodePNG(u8) {
+        // 工具函数
+        const u32 = (b, o) => ((b[o]<<24)|(b[o+1]<<16)|(b[o+2]<<8)|b[o+3])>>>0;
 
-        // 38波长 Spectral BASE 数据
-        const BASE_W=[1.00116072718764,1.00116065159728,1.00116031922747,1.00115867270789,1.00115259844552,1.00113252528998,1.00108500663327,1.00099687889453,1.00086525152274,1.0006962900094,1.00050496114888,1.00030808187992,1.00011966602013,0.999952765968407,0.999821836899297,0.999738609557593,0.999709551639612,0.999731930210627,0.999799436346195,0.999900330316671,1.00002040652611,1.00014478793658,1.00025997903412,1.00035579697089,1.00042753780269,1.00047623344888,1.00050720967508,1.00052519156373,1.00053509606896,1.00054022097482,1.00054272816784,1.00054389569087,1.00054448212151,1.00054476959992,1.00054489887762,1.00054496254689,1.00054498927058,1.000544996993];
-        const BASE_C=[0.970585001322962,0.970592498143425,0.970625348729891,0.970786806119017,0.971368673228248,0.973163230621252,0.976740223158765,0.981587605491377,0.986280265652949,0.989949147689134,0.99249270153842,0.994145680405256,0.995183975033212,0.995756750110818,0.99591281828671,0.995606157834528,0.994597600961854,0.99221571549237,0.986236452783249,0.967943337264541,0.891285004244943,0.536202477862053,0.154108119001878,0.0574575093228929,0.0315349873107007,0.0222633920086335,0.0182022841492439,0.016299055973264,0.0153656239334613,0.0149111568733976,0.0146954339898235,0.0145964146717719,0.0145470156699655,0.0145228771899495,0.0145120341118965,0.0145066940939832,0.0145044507314479,0.0145038009464639];
-        const BASE_M=[0.990673557319988,0.990671524961979,0.990662582353421,0.990618107644795,0.99045148087871,0.989871081400204,0.98828660875964,0.984290692797504,0.973934905625306,0.941817838460145,0.817390326195156,0.432472805065729,0.13845397825887,0.0537347216940033,0.0292174996673231,0.021313651750859,0.0201349530181136,0.0241323096280662,0.0372236145223627,0.0760506552706601,0.205375471942399,0.541268903460439,0.815841685086486,0.912817704123976,0.946339830166962,0.959927696331991,0.966260595230312,0.969325970058424,0.970854536721399,0.971605066528128,0.971962769757392,0.972127272274509,0.972209417745812,0.972249577678424,0.972267621998742,0.97227650946215,0.972280243306874,0.97228132482656];
-        const BASE_Y=[0.0210523371789306,0.0210564627517414,0.0210746178695038,0.0211649058448753,0.0215027957272504,0.0226738799041561,0.0258235649693629,0.0334879385639851,0.0519069663740307,0.100749014833473,0.239129899706847,0.534804312272748,0.79780757864303,0.911449894067384,0.953797963004507,0.971241615465429,0.979303123807588,0.983380119507575,0.985461246567755,0.986435046976605,0.986738250670141,0.986617882445032,0.986277776758643,0.985860592444056,0.98547492767621,0.985176934765558,0.984971574014181,0.984846303415712,0.984775351811199,0.984738066625265,0.984719648311765,0.984711023391939,0.984706683300676,0.984704554393091,0.98470359630937,0.984703124077552,0.98470292561509,0.984702868122795];
-        const BASE_R=[0.0315605737777207,0.0315520718330149,0.0315148215513658,0.0313318044982702,0.0306729857725527,0.0286480476989607,0.0246450407045709,0.0192960753663651,0.0142066612220556,0.0102942608878609,0.0076191460521811,0.005898041083542,0.0048233247781713,0.0042298748350633,0.0040599171299341,0.0043533695594676,0.0053434425970201,0.0076917201010463,0.0135969795736536,0.0316975442661115,0.107861196355249,0.463812603168704,0.847055405272011,0.943185409393918,0.968862150696558,0.978030667473603,0.982043643854306,0.983923623718707,0.984845484154382,0.985294275814596,0.985507295219825,0.985605071539837,0.985653849933578,0.985677685033883,0.985688391806122,0.985693664690031,0.985695879848205,0.985696521463762];
-        const BASE_G=[0.0095560747554212,0.0095581580120851,0.0095673245444588,0.0096129126297349,0.0097837090401843,0.010378622705871,0.0120026452378567,0.0160977721473922,0.026706190223168,0.0595555440185881,0.186039826532826,0.570579820116159,0.861467768400292,0.945879089767658,0.970465486474305,0.97841363028445,0.979589031411224,0.975533536908632,0.962288755397813,0.92312157451312,0.793434018943111,0.459270135902429,0.185574103666303,0.0881774959955372,0.05436302287667,0.0406288447060719,0.034221520431697,0.0311185790956966,0.0295708898336134,0.0288108739348928,0.0284486271324597,0.0282820301724731,0.0281988376490237,0.0281581655342037,0.0281398910216386,0.0281308901665811,0.0281271086805816,0.0281260133612096];
-        const BASE_B=[0.979404752502014,0.97940070684313,0.979382903470261,0.979294364945594,0.97896301460857,0.977814466694043,0.974724321133836,0.967198482343973,0.949079657530575,0.900850128940977,0.76315044546224,0.465922171649319,0.201263280451005,0.0877524413419623,0.0457176793291679,0.0284706050521843,0.020527176756985,0.0165302792310211,0.0145135107212858,0.0136003508637687,0.0133604258769571,0.013548894314568,0.0139594356366992,0.014443425575357,0.0148854440621406,0.0152254296999746,0.0154592848180209,0.0156018026485961,0.0156824871281936,0.0157248764360615,0.0157458108784121,0.0157556123350225,0.0157605443964911,0.0157629637515278,0.0157640525629106,0.015764589232951,0.0157648147772649,0.0157648801149616];
-
-        function uncompand(x) {
-            return x > 0.04045 ? Math.pow((x+0.055)/1.055, 2.4) : x/12.92;
+        // 收集所有 IDAT 数据
+        let width = 0, height = 0;
+        const idatChunks = [];
+        let pos = 8; // 跳过PNG签名
+        while (pos < u8.length) {
+            const len = u32(u8, pos);
+            const type = String.fromCharCode(u8[pos+4],u8[pos+5],u8[pos+6],u8[pos+7]);
+            const data = u8.subarray(pos+8, pos+8+len);
+            if (type === 'IHDR') {
+                width  = u32(data, 0);
+                height = u32(data, 4);
+            } else if (type === 'IDAT') {
+                idatChunks.push(data);
+            } else if (type === 'IEND') {
+                break;
+            }
+            pos += 12 + len;
         }
 
-        const data = new Uint8Array(LUT_W * LUT_H * 4);
+        // 合并 IDAT
+        let totalLen = idatChunks.reduce((s, c) => s + c.length, 0);
+        const zlibData = new Uint8Array(totalLen);
+        let off = 0;
+        for (const c of idatChunks) { zlibData.set(c, off); off += c.length; }
 
-        for (let bi = 0; bi < LUT_N; bi++) {
-            for (let gi = 0; gi < LUT_N; gi++) {
-                for (let ri = 0; ri < LUT_N; ri++) {
-                    const r = ri / (LUT_N - 1);
-                    const g = gi / (LUT_N - 1);
-                    const b = bi / (LUT_N - 1);
+        // zlib inflate（存储模式 / deflate）— 手写inflate解析
+        const raw = this._inflate(zlibData, width, height);
 
-                    let lr = uncompand(r), lg = uncompand(g), lb = uncompand(b);
-                    let w = Math.min(lr, lg, lb);
-                    lr -= w; lg -= w; lb -= w;
-                    const c  = Math.min(lg, lb);
-                    const m  = Math.min(lr, lb);
-                    const y  = Math.min(lr, lg);
-                    const rd = Math.max(0, Math.min(lr-lb, lr-lg));
-                    const gd = Math.max(0, Math.min(lg-lb, lg-lr));
-                    const bd = Math.max(0, Math.min(lb-lg, lb-lr));
-
-                    const px = gi * LUT_N + ri;
-                    for (let band = 0; band < NUM_BANDS; band++) {
-                        const py = band * LUT_BAND_H + bi;
-                        const idx = (py * LUT_W + px) * 4;
-                        for (let ch = 0; ch < 4; ch++) {
-                            const wi = band * 4 + ch;
-                            if (wi < N) {
-                                const val = Math.max(1e-7,
-                                    w*BASE_W[wi] + c*BASE_C[wi] + m*BASE_M[wi] + y*BASE_Y[wi] +
-                                    rd*BASE_R[wi] + gd*BASE_G[wi] + bd*BASE_B[wi]);
-                                data[idx + ch] = Math.round(Math.min(1, val) * 255);
-                            } else {
-                                data[idx + ch] = 0;
-                            }
-                        }
-                    }
+        // PNG filter 还原 → 输出 RGBA 像素
+        const rowBytes = width * 4;
+        const pixels = new Uint8Array(width * height * 4);
+        for (let y = 0; y < height; y++) {
+            const filterType = raw[y * (rowBytes + 1)];
+            const src = y * (rowBytes + 1) + 1;
+            const dst = y * rowBytes;
+            const prev = y > 0 ? pixels.subarray((y-1)*rowBytes, y*rowBytes) : null;
+            for (let x = 0; x < rowBytes; x++) {
+                const a = x >= 4 ? pixels[dst + x - 4] : 0;
+                const b = prev ? prev[x] : 0;
+                const c = (prev && x >= 4) ? prev[x - 4] : 0;
+                let val = raw[src + x];
+                if      (filterType === 1) val = (val + a) & 0xff;
+                else if (filterType === 2) val = (val + b) & 0xff;
+                else if (filterType === 3) val = (val + ((a + b) >> 1)) & 0xff;
+                else if (filterType === 4) {
+                    const p = a + b - c;
+                    const pa = Math.abs(p-a), pb = Math.abs(p-b), pc = Math.abs(p-c);
+                    val = (val + (pa<=pb && pa<=pc ? a : pb<=pc ? b : c)) & 0xff;
                 }
+                pixels[dst + x] = val;
             }
         }
+        return { width, height, pixels };
+    }
 
-        const tex = gl.createTexture();
-        gl.bindTexture(gl.TEXTURE_2D, tex);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, LUT_W, LUT_H, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        gl.bindTexture(gl.TEXTURE_2D, null);
+    // zlib/deflate inflate，支持存储块和固定/动态霍夫曼
+    _inflate(zlib, width, height) {
+        // 跳过zlib头(2字节)，忽略尾部adler32(4字节)
+        const deflate = zlib.subarray(2, zlib.length - 4);
+        const rowBytes = width * 4;
+        const out = new Uint8Array(height * (rowBytes + 1));
+        let inPos = 0, outPos = 0;
 
-        this.textures.lut = tex;
-        console.log('✅ LUT纹理生成完成（JS计算，无CORS）');
+        // 位读取器
+        let bitBuf = 0, bitLen = 0;
+        const readBits = (n) => {
+            while (bitLen < n) { bitBuf |= deflate[inPos++] << bitLen; bitLen += 8; }
+            const val = bitBuf & ((1<<n)-1); bitBuf >>= n; bitLen -= n; return val;
+        };
+
+        // 固定霍夫曼码长
+        const fixedLitLen = new Array(288);
+        for (let i=0;i<144;i++) fixedLitLen[i]=8;
+        for (let i=144;i<256;i++) fixedLitLen[i]=9;
+        for (let i=256;i<280;i++) fixedLitLen[i]=7;
+        for (let i=280;i<288;i++) fixedLitLen[i]=8;
+        const fixedDist = new Array(32).fill(5);
+
+        // 改用正确的霍夫曼读取（带码长的table）
+        const buildTree2 = (lens) => {
+            const maxLen = lens.reduce((a,b)=>Math.max(a,b),0);
+            if (maxLen === 0) return { sym: new Int32Array(0), len: new Int32Array(0), maxLen: 0 };
+            const counts = new Int32Array(maxLen+1);
+            for (const l of lens) if (l) counts[l]++;
+            const nextCode = new Int32Array(maxLen+1);
+            for (let i = 1; i < maxLen; i++) nextCode[i+1] = (nextCode[i]+counts[i])<<1;
+            const size = 1<<maxLen;
+            const symTable = new Int32Array(size).fill(-1);
+            const lenTable = new Int32Array(size);
+            for (let s = 0; s < lens.length; s++) {
+                const l = lens[s]; if (!l) continue;
+                let code = nextCode[l]++;
+                let rev = 0;
+                for (let i = 0; i < l; i++) { rev=(rev<<1)|(code&1); code>>=1; }
+                for (let i = rev; i < size; i += (1<<l)) { symTable[i]=s; lenTable[i]=l; }
+            }
+            return { symTable, lenTable, maxLen };
+        };
+        const peekRead = (tree) => {
+            while (bitLen < tree.maxLen) {
+                if (inPos < deflate.length) { bitBuf |= deflate[inPos++] << bitLen; bitLen += 8; }
+                else break;
+            }
+            const idx = bitBuf & ((1<<tree.maxLen)-1);
+            const sym = tree.symTable[idx];
+            const l   = tree.lenTable[idx];
+            bitBuf >>= l; bitLen -= l;
+            return sym;
+        };
+
+        const lenExtra  = [0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0];
+        const lenBase   = [3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,43,51,59,67,83,99,115,131,163,195,227,258];
+        const distExtra = [0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13];
+        const distBase  = [1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577];
+
+        const inflate_block = (litTree, distTree) => {
+            while (true) {
+                const sym = peekRead(litTree);
+                if (sym < 256) {
+                    out[outPos++] = sym;
+                } else if (sym === 256) {
+                    break;
+                } else {
+                    const li = sym - 257;
+                    const length = lenBase[li] + readBits(lenExtra[li]);
+                    const di = peekRead(distTree);
+                    const dist = distBase[di] + readBits(distExtra[di]);
+                    let copyPos = outPos - dist;
+                    for (let i = 0; i < length; i++) out[outPos++] = out[copyPos++];
+                }
+            }
+        };
+
+        while (true) {
+            const bfinal = readBits(1);
+            const btype  = readBits(2);
+            if (btype === 0) {
+                // 存储块
+                bitBuf = 0; bitLen = 0;
+                const len  = deflate[inPos] | (deflate[inPos+1]<<8); inPos+=4;
+                out.set(deflate.subarray(inPos, inPos+len), outPos);
+                inPos += len; outPos += len;
+            } else if (btype === 1) {
+                // 固定霍夫曼
+                inflate_block(buildTree2(fixedLitLen), buildTree2(fixedDist));
+            } else if (btype === 2) {
+                // 动态霍夫曼
+                const hlit  = readBits(5) + 257;
+                const hdist = readBits(5) + 1;
+                const hclen = readBits(4) + 4;
+                const clOrder = [16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15];
+                const clLens = new Array(19).fill(0);
+                for (let i = 0; i < hclen; i++) clLens[clOrder[i]] = readBits(3);
+                const clTree = buildTree2(clLens);
+                const allLens = [];
+                while (allLens.length < hlit + hdist) {
+                    const s = peekRead(clTree);
+                    if (s < 16) { allLens.push(s); }
+                    else if (s === 16) { const rep = readBits(2)+3; for(let i=0;i<rep;i++) allLens.push(allLens[allLens.length-1]); }
+                    else if (s === 17) { const rep = readBits(3)+3; for(let i=0;i<rep;i++) allLens.push(0); }
+                    else              { const rep = readBits(7)+11; for(let i=0;i<rep;i++) allLens.push(0); }
+                }
+                inflate_block(buildTree2(allLens.slice(0,hlit)), buildTree2(allLens.slice(hlit)));
+            }
+            if (bfinal) break;
+        }
+        return out;
+    }
+
+    loadLUT() {
+        return new Promise((resolve) => {
+            const gl = this.gl;
+            // 把 data:image/png;base64,... 解码为原始字节，绕开 <img> 颜色管理
+            const b64 = KM_LUT_DATA.split(',')[1];
+            const bin = atob(b64);
+            const u8  = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+
+            const { width, height, pixels } = this._decodePNG(u8);
+
+            const tex = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, tex);
+            gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            gl.bindTexture(gl.TEXTURE_2D, null);
+            this.textures.lut = tex;
+            console.log(`✅ LUT纹理加载完成（${width}×${height}，纯JS解码，无颜色管理）`);
+            resolve();
+        });
     }
 
     setupTextures() {
