@@ -149,24 +149,34 @@ class KMWebGLPainter {
         }
 
         // LUT采样：RGB → 10个vec4（38波长反射率）
-        // 纹理布局: x = gi*32+ri, y = band*32+bi，NEAREST采样
+        // 纹理布局: x = gi*32+ri, y = band*32+bi
+        // g轴手动插值（g轴在x方向分段拼接，LINEAR不能跨段），r/b轴由LINEAR自动插值
         void sampleLUT(vec3 c,
             out vec4 R0, out vec4 R1, out vec4 R2, out vec4 R3, out vec4 R4,
             out vec4 R5, out vec4 R6, out vec4 R7, out vec4 R8, out vec4 R9)
         {
-            vec3 idx = floor(clamp(c, 0.0, 1.0) * 31.0 + 0.5);
-            float u = (idx.g * 32.0 + idx.r + 0.5) / 1024.0;
-            float b = idx.b;
-            R0 = texture2D(u_lut, vec2(u, (0.0*32.0 + b + 0.5) / 320.0));
-            R1 = texture2D(u_lut, vec2(u, (1.0*32.0 + b + 0.5) / 320.0));
-            R2 = texture2D(u_lut, vec2(u, (2.0*32.0 + b + 0.5) / 320.0));
-            R3 = texture2D(u_lut, vec2(u, (3.0*32.0 + b + 0.5) / 320.0));
-            R4 = texture2D(u_lut, vec2(u, (4.0*32.0 + b + 0.5) / 320.0));
-            R5 = texture2D(u_lut, vec2(u, (5.0*32.0 + b + 0.5) / 320.0));
-            R6 = texture2D(u_lut, vec2(u, (6.0*32.0 + b + 0.5) / 320.0));
-            R7 = texture2D(u_lut, vec2(u, (7.0*32.0 + b + 0.5) / 320.0));
-            R8 = texture2D(u_lut, vec2(u, (8.0*32.0 + b + 0.5) / 320.0));
-            R9 = texture2D(u_lut, vec2(u, (9.0*32.0 + b + 0.5) / 320.0));
+            vec3 f = clamp(c, 0.0, 1.0) * 31.0;
+            float g0 = floor(f.g);
+            float g1 = min(g0 + 1.0, 31.0);
+            float gf = f.g - g0;
+            float b = f.b;
+            float u0 = (g0 * 32.0 + f.r + 0.5) / 1024.0;
+            float u1 = (g1 * 32.0 + f.r + 0.5) / 1024.0;
+            #define SAMPLE_BAND(band) mix( \
+                texture2D(u_lut, vec2(u0, (float(band)*32.0 + b + 0.5) / 320.0)), \
+                texture2D(u_lut, vec2(u1, (float(band)*32.0 + b + 0.5) / 320.0)), \
+                gf)
+            R0 = SAMPLE_BAND(0);
+            R1 = SAMPLE_BAND(1);
+            R2 = SAMPLE_BAND(2);
+            R3 = SAMPLE_BAND(3);
+            R4 = SAMPLE_BAND(4);
+            R5 = SAMPLE_BAND(5);
+            R6 = SAMPLE_BAND(6);
+            R7 = SAMPLE_BAND(7);
+            R8 = SAMPLE_BAND(8);
+            R9 = SAMPLE_BAND(9);
+            #undef SAMPLE_BAND
         }
 
         // 38波长反射率 → XYZ → RGB
@@ -362,8 +372,8 @@ class KMWebGLPainter {
         const tex = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, tex);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, LUT_W, LUT_H, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
         gl.bindTexture(gl.TEXTURE_2D, null);
