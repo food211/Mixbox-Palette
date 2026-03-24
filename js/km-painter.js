@@ -244,16 +244,14 @@ class KMWebGLPainter {
                 km_band(A9,B9,conc1,conc2,totalConc)
             );
 
-            // 线性插值参考色（用于所有比较的基准）
+            // 提亮补偿：仅修正KM算法本身的变暗偏差，不随笔刷衰减变化
             vec3 linearMix = mix(c1, c2, t);
             const vec3 LUM_COEFF = vec3(0.2126, 0.7152, 0.0722);
             float linearLum = dot(linearMix, LUM_COEFF);
             float resultLum = dot(result, LUM_COEFF);
-
-            // 提亮补偿：接近白色时补偿更强，随t缩放保留笔刷渐变
-            float brightnessCorrectionFactor = 0.6 + linearLum * 0.8;
+            float brightnessCorrectionFactor = 0.4 + linearLum * 0.5;
             float loss = max(0.0, linearLum - resultLum);
-            float compensationStrength = loss / max(linearLum, 0.001) * brightnessCorrectionFactor * t;
+            float compensationStrength = loss / max(linearLum, 0.001) * brightnessCorrectionFactor;
             result *= 1.0 + compensationStrength;
 
             return clamp(result, 0.0, 1.0);
@@ -275,10 +273,14 @@ class KMWebGLPainter {
             float radialFalloff = 1.0 - smoothstep(0.0, u_brushRadius, distToCenter);
 
             float mixAmount = radialFalloff * brushAlpha * u_baseMixStrength;
-            
-            float kmT = clamp(mixAmount, 0.0, 1.0);
+            float edgeWeight = clamp(mixAmount, 0.0, 1.0);
 
-            gl_FragColor = vec4(km_mix(canvasColor.rgb, u_brushColor.rgb, kmT), 1.0);
+            // km_mix 用固定的 u_baseMixStrength 计算混色，补偿不受边缘衰减影响
+            // 再用 edgeWeight 线性插值回画布色，边缘平滑无跳断
+            vec3 mixedColor = km_mix(canvasColor.rgb, u_brushColor.rgb, clamp(u_baseMixStrength, 0.0, 1.0));
+            vec3 finalColor = mix(canvasColor.rgb, mixedColor, edgeWeight / max(u_baseMixStrength, 0.001));
+
+            gl_FragColor = vec4(clamp(finalColor, 0.0, 1.0), 1.0);
         }
         `;
 
