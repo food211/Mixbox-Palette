@@ -125,7 +125,7 @@ class KMWebGLPainter {
             return pow(r1, vec3(1.0 - t)) * pow(r2, vec3(t));
         }
 
-        // KM Pure: KM Direct + 线性插值，通道互斥动态混合
+        // KM Pure: KM Direct + 线性插值，通道互斥动态混合 + 蓝黄绿校正
         vec3 km_mix(vec3 c1, vec3 c2, float t) {
             vec3 km = km_mix_direct(c1, c2, t);
             vec3 lin = c1 + (c2 - c1) * t;
@@ -137,40 +137,51 @@ class KMWebGLPainter {
             float maxConflict = max(conflictR, max(conflictG, conflictB));
             float conflictBlend = maxConflict * maxConflict;
 
-            // 自适应 satBoost: 饱和度越高越偏线性，避免 KM 过度变暗
+            float blend = max(0.5, conflictBlend);
+
+            vec3 result = km + (lin - km) * blend;
+
+            // 蓝黄绿校正（HSV色相检测 + 饱和度加权）
             float maxC1 = max(c1.r, max(c1.g, c1.b));
             float minC1 = min(c1.r, min(c1.g, c1.b));
             float maxC2 = max(c2.r, max(c2.g, c2.b));
             float minC2 = min(c2.r, min(c2.g, c2.b));
             float sat1 = maxC1 > 0.001 ? (maxC1 - minC1) / maxC1 : 0.0;
             float sat2 = maxC2 > 0.001 ? (maxC2 - minC2) / maxC2 : 0.0;
-            float avgSat = (sat1 + sat2) * 0.5;
-            float satBoost = mix(0.35, 0.55, avgSat);
-            float blend = max(satBoost, conflictBlend);
 
-            vec3 result = km + (lin - km) * blend;
-
-            // 蓝黄绿校正（色相角检测 + 饱和度加权）
-            // 色相角: atan2(sqrt(3)*(G-B), 2R-G-B)
-            float hue1 = atan(sqrt(3.0) * (c1.g - c1.b), 2.0 * c1.r - c1.g - c1.b);
-            float hue2 = atan(sqrt(3.0) * (c2.g - c2.b), 2.0 * c2.r - c2.g - c2.b);
-            // 蓝区: 色相 ≈ -π/2 (210°~270°), 黄区: 色相 ≈ π/3 (45°~75°)
-            // smoothstep 窗口给出柔和的区间归属度
-            float blueZone1  = smoothstep(0.3, 1.0, max(0.0, 1.0 - abs(hue1 + 1.57) / 1.05)) * sat1;
-            float yellowZone1 = smoothstep(0.3, 1.0, max(0.0, 1.0 - abs(hue1 - 1.05) / 0.52)) * sat1;
-            float blueZone2  = smoothstep(0.3, 1.0, max(0.0, 1.0 - abs(hue2 + 1.57) / 1.05)) * sat2;
-            float yellowZone2 = smoothstep(0.3, 1.0, max(0.0, 1.0 - abs(hue2 - 1.05) / 0.52)) * sat2;
-            float crossSignal = max(blueZone1 * yellowZone2, blueZone2 * yellowZone1);
+            // HSV hue (0~1)
+            float hue1 = -1.0;
+            float hue2 = -1.0;
+            float d1 = maxC1 - minC1;
+            float d2 = maxC2 - minC2;
+            if (d1 > 0.001) {
+                float h1;
+                if (maxC1 == c1.r) h1 = mod((c1.g - c1.b) / d1, 6.0);
+                else if (maxC1 == c1.g) h1 = (c1.b - c1.r) / d1 + 2.0;
+                else h1 = (c1.r - c1.g) / d1 + 4.0;
+                hue1 = mod(h1 / 6.0 + 1.0, 1.0);
+            }
+            if (d2 > 0.001) {
+                float h2;
+                if (maxC2 == c2.r) h2 = mod((c2.g - c2.b) / d2, 6.0);
+                else if (maxC2 == c2.g) h2 = (c2.b - c2.r) / d2 + 2.0;
+                else h2 = (c2.r - c2.g) / d2 + 4.0;
+                hue2 = mod(h2 / 6.0 + 1.0, 1.0);
+            }
+            // Blue hue ~0.49-0.83 (cyan-blue-purple), Yellow hue ~0.0-0.23 (orange-yellow)
+            float bw1 = (hue1 >= 0.0) ? max(0.0, 1.0 - abs(hue1 - 0.66) / 0.17) * sat1 : 0.0;
+            float yw1 = (hue1 >= 0.0) ? max(0.0, 1.0 - abs(hue1 - 0.11) / 0.12) * sat1 : 0.0;
+            float bw2 = (hue2 >= 0.0) ? max(0.0, 1.0 - abs(hue2 - 0.66) / 0.17) * sat2 : 0.0;
+            float yw2 = (hue2 >= 0.0) ? max(0.0, 1.0 - abs(hue2 - 0.11) / 0.12) * sat2 : 0.0;
+            float crossSignal = max(bw1 * yw2, bw2 * yw1);
             float midWeight = 4.0 * t * (1.0 - t);
-            float greenInject = crossSignal * midWeight;
-            result.g = min(1.0, result.g + greenInject * 0.28);
-            result.r = result.r * (1.0 - greenInject * 0.4);
-
-            // 亮度限制: green boost 后不超过线性插值亮度
-            float lumResult = dot(result, vec3(0.299, 0.587, 0.114));
-            float lumLin = dot(lin, vec3(0.299, 0.587, 0.114));
-            if (lumResult > lumLin && lumLin > 0.001) {
-                result *= lumLin / lumResult;
+            // 自适应绿色注入：cross^0.3 使弱信号也能获得足够的绿色增强
+            if (crossSignal > 0.01) {
+                float crossP = pow(crossSignal, 0.3);
+                float greenBoost = 0.13 * crossP * midWeight;
+                float redReduce = 0.4 * crossP * midWeight;
+                result.g = min(1.0, result.g + greenBoost);
+                result.r = result.r * (1.0 - redReduce);
             }
 
             return result;
