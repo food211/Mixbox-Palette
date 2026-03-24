@@ -156,6 +156,7 @@ class KMWebGLPainter {
 
         // LUT采样：RGB → 10个vec4（38波长反射率）
         // 纹理布局: x = gi*64+ri, y = band*64+bi，共4096×640
+        // LUT存储sqrt(R)以提高暗色精度，采样后平方还原
         // r/b轴在各自段内连续，LINEAR自动插值；g轴跨段手动插值
         void sampleLUT(vec3 c,
             out vec4 R0, out vec4 R1, out vec4 R2, out vec4 R3, out vec4 R4,
@@ -166,21 +167,22 @@ class KMWebGLPainter {
             float u0 = (g0 * 64.0 + f.r + 0.5) / 4096.0;
             float u1 = (g1 * 64.0 + f.r + 0.5) / 4096.0;
 
+            // 在sqrt域采样并插值，然后平方还原反射率
             #define SAMPLE_BAND(band) mix( \
                 texture2D(u_lut, vec2(u0, (float(band)*64.0 + f.b + 0.5) / 640.0)), \
                 texture2D(u_lut, vec2(u1, (float(band)*64.0 + f.b + 0.5) / 640.0)), \
                 gf)
 
-            R0 = SAMPLE_BAND(0);
-            R1 = SAMPLE_BAND(1);
-            R2 = SAMPLE_BAND(2);
-            R3 = SAMPLE_BAND(3);
-            R4 = SAMPLE_BAND(4);
-            R5 = SAMPLE_BAND(5);
-            R6 = SAMPLE_BAND(6);
-            R7 = SAMPLE_BAND(7);
-            R8 = SAMPLE_BAND(8);
-            R9 = SAMPLE_BAND(9);
+            R0 = SAMPLE_BAND(0); R0 *= R0;
+            R1 = SAMPLE_BAND(1); R1 *= R1;
+            R2 = SAMPLE_BAND(2); R2 *= R2;
+            R3 = SAMPLE_BAND(3); R3 *= R3;
+            R4 = SAMPLE_BAND(4); R4 *= R4;
+            R5 = SAMPLE_BAND(5); R5 *= R5;
+            R6 = SAMPLE_BAND(6); R6 *= R6;
+            R7 = SAMPLE_BAND(7); R7 *= R7;
+            R8 = SAMPLE_BAND(8); R8 *= R8;
+            R9 = SAMPLE_BAND(9); R9 *= R9;
             #undef SAMPLE_BAND
         }
 
@@ -226,6 +228,7 @@ class KMWebGLPainter {
 
             float lum1 = luminance(A0,A1,A2,A3,A4,A5,A6,A7,A8,A9);
             float lum2 = luminance(B0,B1,B2,B3,B4,B5,B6,B7,B8,B9);
+
             float conc1 = (1.0 - t) * (1.0 - t) * lum1;
             float conc2 = t * t * lum2;
             float totalConc = max(conc1 + conc2, 1e-7);
