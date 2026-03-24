@@ -1,5 +1,14 @@
 # 更新日志 / Changelog
 
+== V1.1.5 ==
+[ZH]
+### 改进
+- **混色引擎升级** — 混色算法升级为38波长完整光谱 Kubelka-Munk，蓝+黄可正确混出绿色，颜色更自然准确
+
+[EN]
+### Improvements
+- **Mixing engine upgrade** — Mixing algorithm upgraded to full 38-wavelength spectral Kubelka-Munk, blue + yellow correctly produces green, more natural and accurate color mixing
+
 == V1.1.4 ==
 [ZH]
 ### 新功能
