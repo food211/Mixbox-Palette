@@ -306,10 +306,24 @@ class MixboxWebGLPainter {
     
     /**
      * 绘制笔触 (核心方法)
+     * 返回脏区矩形 {x, y, w, h}，供 readToCanvas2D 局部回读
      */
     drawBrush(x, y, size, colorRGB, brushCanvas) {
         const gl = this.gl;
-        
+        const cw = this.canvas.width;
+        const ch = this.canvas.height;
+
+        // 计算笔刷 AABB，clamp 到画布范围
+        const halfSize = size / 2;
+        const rx0 = Math.max(0, Math.floor(x - halfSize));
+        const ry0 = Math.max(0, Math.floor(y - halfSize));
+        const rx1 = Math.min(cw, Math.ceil(x + halfSize));
+        const ry1 = Math.min(ch, Math.ceil(y + halfSize));
+        const rw = rx1 - rx0;
+        const rh = ry1 - ry0;
+
+        if (rw <= 0 || rh <= 0) return null;
+
         // 更新笔刷纹理
         if (brushCanvas !== this.lastBrushCanvas) {
             if (this.currentBrushTexture) {
@@ -318,63 +332,74 @@ class MixboxWebGLPainter {
             this.currentBrushTexture = this.createBrushTextureFromCanvas(brushCanvas);
             this.lastBrushCanvas = brushCanvas;
         }
-        
+
         gl.useProgram(this.program);
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.temp);
-        gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-        
+
+        // 全 viewport（保证顶点坐标→裁剪坐标的变换与 shader 中 canvasUV 计算一致）
+        gl.viewport(0, 0, cw, ch);
+
+        // scissor 裁剪：只让片段着色器处理笔刷覆盖区域
+        // WebGL Y 轴从底部起，需要翻转
+        gl.enable(gl.SCISSOR_TEST);
+        gl.scissor(rx0, ch - ry1, rw, rh);
+
         // 清除纹理绑定
         for (let i = 0; i < 8; i++) {
             gl.activeTexture(gl.TEXTURE0 + i);
             gl.bindTexture(gl.TEXTURE_2D, null);
         }
-        
+
         // 绑定纹理
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, this.textures.mixbox_lut);
         gl.uniform1i(this.locations.mixbox_lut, 0);
-        
+
         gl.activeTexture(gl.TEXTURE1);
         gl.bindTexture(gl.TEXTURE_2D, this.textures.canvas);
         gl.uniform1i(this.locations.u_canvasTexture, 1);
-        
+
         gl.activeTexture(gl.TEXTURE2);
         gl.bindTexture(gl.TEXTURE_2D, this.currentBrushTexture);
         gl.uniform1i(this.locations.u_brushTexture, 2);
-        
+
         // 设置 uniform
-        gl.uniform2f(this.locations.u_resolution, this.canvas.width, this.canvas.height);
+        gl.uniform2f(this.locations.u_resolution, cw, ch);
         gl.uniform4f(this.locations.u_brushColor, colorRGB.r, colorRGB.g, colorRGB.b, 1.0);
         gl.uniform2f(this.locations.u_currentPosition, x, y);
-        gl.uniform1f(this.locations.u_brushRadius, size / 2);  // ✅ 使用 brushRadius 替代 mixDistance
+        gl.uniform1f(this.locations.u_brushRadius, size / 2);
         gl.uniform1f(this.locations.u_baseMixStrength, this.baseMixStrength);
-        
+
         // 更新几何体
-        const halfSize = size / 2;
         const positions = new Float32Array([
             x - halfSize, y - halfSize,
             x + halfSize, y - halfSize,
             x - halfSize, y + halfSize,
             x + halfSize, y + halfSize
         ]);
-        
+
         gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.position);
         gl.bufferData(gl.ARRAY_BUFFER, positions, gl.DYNAMIC_DRAW);
         gl.enableVertexAttribArray(this.locations.a_position);
         gl.vertexAttribPointer(this.locations.a_position, 2, gl.FLOAT, false, 0, 0);
-        
+
         gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.texCoord);
         gl.enableVertexAttribArray(this.locations.a_texCoord);
         gl.vertexAttribPointer(this.locations.a_texCoord, 2, gl.FLOAT, false, 0, 0);
-        
+
         // 绘制
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-        
+
+        // 关闭 scissor
+        gl.disable(gl.SCISSOR_TEST);
+
         // 交换纹理
         this.swapTextures();
-        
+
         // 恢复默认 Framebuffer
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+        return { x: rx0, y: ry0, w: rw, h: rh };
     }
 
     /**
@@ -401,52 +426,64 @@ class MixboxWebGLPainter {
     }     
     /**
      * 从 WebGL 读取到 Canvas 2D
+     * @param {Object|null} rect - 局部脏区 {x, y, w, h}，null 则全量回读
      */
-    readToCanvas2D() {
+    readToCanvas2D(rect) {
         const gl = this.gl;
-        // 使用离屏canvas的2D上下文
-        const ctx = this.offscreenCtx;
-        
-        const pixels = new Uint8Array(this.canvas.width * this.canvas.height * 4);
-        
+        const cw = this.canvas.width;
+        const ch = this.canvas.height;
+
         // 清除所有纹理绑定
         for (let i = 0; i < 8; i++) {
             gl.activeTexture(gl.TEXTURE0 + i);
             gl.bindTexture(gl.TEXTURE_2D, null);
         }
-        
-        // 绑定画布帧缓冲区
+
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
-        
-        // 读取像素
-        gl.readPixels(0, 0, this.canvas.width, this.canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-        
-        // 翻转 Y 轴
-        const flippedPixels = new Uint8ClampedArray(pixels.length);
-        const width = this.canvas.width;
-        const height = this.canvas.height;
-        const rowSize = width * 4;
-        
-        for (let y = 0; y < height; y++) {
-            const srcRow = (height - 1 - y) * rowSize;
-            const dstRow = y * rowSize;
-            for (let x = 0; x < rowSize; x++) {
-                flippedPixels[dstRow + x] = pixels[srcRow + x];
+
+        const displayCtx = this.canvas.getContext('2d', { willReadFrequently: true });
+
+        if (rect && rect.w > 0 && rect.h > 0) {
+            // 局部回读：只读脏区
+            // WebGL Y 轴从底部起
+            const glY = ch - rect.y - rect.h;
+            const pixels = new Uint8Array(rect.w * rect.h * 4);
+            gl.readPixels(rect.x, glY, rect.w, rect.h, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+
+            // 翻转 Y 轴（局部）
+            const flipped = new Uint8ClampedArray(pixels.length);
+            const rowSize = rect.w * 4;
+            for (let row = 0; row < rect.h; row++) {
+                const srcRow = (rect.h - 1 - row) * rowSize;
+                const dstRow = row * rowSize;
+                flipped.set(pixels.subarray(srcRow, srcRow + rowSize), dstRow);
+            }
+
+            const imageData = new ImageData(flipped, rect.w, rect.h);
+            if (displayCtx) {
+                displayCtx.putImageData(imageData, rect.x, rect.y);
+            }
+        } else {
+            // 全量回读（用于 clear / restore 等场景）
+            const pixels = new Uint8Array(cw * ch * 4);
+            gl.readPixels(0, 0, cw, ch, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+
+            const flipped = new Uint8ClampedArray(pixels.length);
+            const rowSize = cw * 4;
+            for (let row = 0; row < ch; row++) {
+                const srcRow = (ch - 1 - row) * rowSize;
+                const dstRow = row * rowSize;
+                flipped.set(pixels.subarray(srcRow, srcRow + rowSize), dstRow);
+            }
+
+            const imageData = new ImageData(flipped, cw, ch);
+            this.offscreenCtx.putImageData(imageData, 0, 0);
+            if (displayCtx) {
+                displayCtx.clearRect(0, 0, cw, ch);
+                displayCtx.drawImage(this.offscreenCanvas, 0, 0);
             }
         }
-        
-        // 写入离屏Canvas
-        const imageData = new ImageData(flippedPixels, this.canvas.width, this.canvas.height);
-        ctx.putImageData(imageData, 0, 0);
-        
-        // 将离屏Canvas绘制到显示Canvas
-        const displayCtx = this.canvas.getContext('2d', { willReadFrequently: true });
-        if (displayCtx) {
-            displayCtx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-            displayCtx.drawImage(this.offscreenCanvas, 0, 0);
-        }
-        
-        // 恢复
+
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     }
 

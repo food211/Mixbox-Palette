@@ -603,6 +603,19 @@ class KMWebGLPainter {
 
     drawBrush(x, y, size, colorRGB, brushCanvas) {
         const gl = this.gl;
+        const cw = this.canvas.width;
+        const ch = this.canvas.height;
+
+        // 计算笔刷 AABB，clamp 到画布范围
+        const halfSize = size / 2;
+        const rx0 = Math.max(0, Math.floor(x - halfSize));
+        const ry0 = Math.max(0, Math.floor(y - halfSize));
+        const rx1 = Math.min(cw, Math.ceil(x + halfSize));
+        const ry1 = Math.min(ch, Math.ceil(y + halfSize));
+        const rw = rx1 - rx0;
+        const rh = ry1 - ry0;
+
+        if (rw <= 0 || rh <= 0) return null;
 
         if (brushCanvas !== this.lastBrushCanvas) {
             if (this.currentBrushTexture) gl.deleteTexture(this.currentBrushTexture);
@@ -612,7 +625,11 @@ class KMWebGLPainter {
 
         gl.useProgram(this.program);
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.temp);
-        gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+        gl.viewport(0, 0, cw, ch);
+
+        // scissor 裁剪：只处理笔刷覆盖区域
+        gl.enable(gl.SCISSOR_TEST);
+        gl.scissor(rx0, ch - ry1, rw, rh);
 
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, this.textures.canvas);
@@ -626,13 +643,12 @@ class KMWebGLPainter {
         gl.bindTexture(gl.TEXTURE_2D, this.textures.lut);
         gl.uniform1i(this.locations.u_lut, 2);
 
-        gl.uniform2f(this.locations.u_resolution, this.canvas.width, this.canvas.height);
+        gl.uniform2f(this.locations.u_resolution, cw, ch);
         gl.uniform4f(this.locations.u_brushColor, colorRGB.r, colorRGB.g, colorRGB.b, 1.0);
         gl.uniform2f(this.locations.u_currentPosition, x, y);
         gl.uniform1f(this.locations.u_brushRadius, size / 2);
         gl.uniform1f(this.locations.u_baseMixStrength, this.baseMixStrength);
 
-        const halfSize = size / 2;
         const positions = new Float32Array([
             x-halfSize, y-halfSize,
             x+halfSize, y-halfSize,
@@ -651,8 +667,11 @@ class KMWebGLPainter {
 
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
+        gl.disable(gl.SCISSOR_TEST);
         this.swapTextures();
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+        return { x: rx0, y: ry0, w: rw, h: rh };
     }
 
     swapTextures() {
@@ -672,9 +691,10 @@ class KMWebGLPainter {
         this.framebuffers.temp = tempFB;
     }
 
-    readToCanvas2D() {
+    readToCanvas2D(rect) {
         const gl = this.gl;
-        const ctx = this.offscreenCtx;
+        const cw = this.canvas.width;
+        const ch = this.canvas.height;
 
         for (let i = 0; i < 4; i++) {
             gl.activeTexture(gl.TEXTURE0 + i);
@@ -682,28 +702,44 @@ class KMWebGLPainter {
         }
 
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
-        const pixels = new Uint8Array(this.canvas.width * this.canvas.height * 4);
-        gl.readPixels(0, 0, this.canvas.width, this.canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-
-        const flippedPixels = new Uint8ClampedArray(pixels.length);
-        const width = this.canvas.width;
-        const height = this.canvas.height;
-        const rowSize = width * 4;
-
-        for (let y = 0; y < height; y++) {
-            const srcRow = (height - 1 - y) * rowSize;
-            const dstRow = y * rowSize;
-            for (let x = 0; x < rowSize; x++) {
-                flippedPixels[dstRow + x] = pixels[srcRow + x];
-            }
-        }
-
-        ctx.putImageData(new ImageData(flippedPixels, width, height), 0, 0);
 
         const displayCtx = this.canvas.getContext('2d', { willReadFrequently: true });
-        if (displayCtx) {
-            displayCtx.clearRect(0, 0, width, height);
-            displayCtx.drawImage(this.offscreenCanvas, 0, 0);
+
+        if (rect && rect.w > 0 && rect.h > 0) {
+            // 局部回读：只读脏区
+            const glY = ch - rect.y - rect.h;
+            const pixels = new Uint8Array(rect.w * rect.h * 4);
+            gl.readPixels(rect.x, glY, rect.w, rect.h, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+
+            const flipped = new Uint8ClampedArray(pixels.length);
+            const rowSize = rect.w * 4;
+            for (let row = 0; row < rect.h; row++) {
+                const srcRow = (rect.h - 1 - row) * rowSize;
+                const dstRow = row * rowSize;
+                flipped.set(pixels.subarray(srcRow, srcRow + rowSize), dstRow);
+            }
+
+            if (displayCtx) {
+                displayCtx.putImageData(new ImageData(flipped, rect.w, rect.h), rect.x, rect.y);
+            }
+        } else {
+            // 全量回读（用于 clear / restore 等场景）
+            const pixels = new Uint8Array(cw * ch * 4);
+            gl.readPixels(0, 0, cw, ch, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+
+            const flipped = new Uint8ClampedArray(pixels.length);
+            const rowSize = cw * 4;
+            for (let row = 0; row < ch; row++) {
+                const srcRow = (ch - 1 - row) * rowSize;
+                const dstRow = row * rowSize;
+                flipped.set(pixels.subarray(srcRow, srcRow + rowSize), dstRow);
+            }
+
+            this.offscreenCtx.putImageData(new ImageData(flipped, cw, ch), 0, 0);
+            if (displayCtx) {
+                displayCtx.clearRect(0, 0, cw, ch);
+                displayCtx.drawImage(this.offscreenCanvas, 0, 0);
+            }
         }
 
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);

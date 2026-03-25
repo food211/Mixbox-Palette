@@ -1314,10 +1314,10 @@ function replaySmudgeSegment(x1, y1, x2, y2, size, brushType, strength) {
         const targetY = y + dirY * pushDistance;
 
         // 绘制到目标位置（会与画布上已有颜色混色）
-        painter.drawBrush(targetX, targetY, size * 2, sourceRGB, brushCanvas);
+        const r = painter.drawBrush(targetX, targetY, size * 2, sourceRGB, brushCanvas);
 
-        // 每次绘制后同步到 2D canvas，以便下一次取色正确
-        painter.readToCanvas2D();
+        // 每次绘制后同步到 2D canvas，以便下一次取色正确（局部回读）
+        painter.readToCanvas2D(r);
     }
 }
 
@@ -1381,6 +1381,17 @@ function hexToRgb(hex) {
 }
 
 /**
+ * 合并两个脏区矩形
+ */
+function unionDirtyRect(a, b) {
+    const x = Math.min(a.x, b.x);
+    const y = Math.min(a.y, b.y);
+    const x2 = Math.max(a.x + a.w, b.x + b.w);
+    const y2 = Math.max(a.y + a.h, b.y + b.h);
+    return { x, y, w: x2 - x, h: y2 - y };
+}
+
+/**
  * 绘制笔刷
  */
 function drawBrush(x, y, color) {
@@ -1393,16 +1404,16 @@ function drawBrush(x, y, color) {
     const brushCanvas = brushManager.createBrushTexture(brushSize, currentBrush);
     
     // 3. 使用 WebGL 绘制（物理混色）
-    painter.drawBrush(
-        x, 
-        y, 
+    const dirtyRect = painter.drawBrush(
+        x,
+        y,
         brushSize * 2,  // WebGL 笔刷尺寸需要 *2
-        colorRGB, 
+        colorRGB,
         brushCanvas,
     );
-    
-    // 4. 读取到 Canvas 2D（用于显示）
-    painter.readToCanvas2D();
+
+    // 4. 读取到 Canvas 2D（仅回读脏区，提升性能）
+    painter.readToCanvas2D(dirtyRect);
 }
 
 /**
@@ -1410,23 +1421,21 @@ function drawBrush(x, y, color) {
  */
 function smudgeAlongPath(x1, y1, x2, y2) {
     if (!painter) return;
-    
-    // 计算路径长度
+
     const distance = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
-    const steps = Math.max(1, Math.floor(distance / 2));  // 每 2 像素采样一次
-    
-    // 沿着路径插值
+    const steps = Math.max(1, Math.floor(distance / 2));
+
+    // 累积所有步骤的脏区
+    let unionRect = null;
     for (let i = 0; i <= steps; i++) {
         const ratio = i / steps;
         const x = x1 + (x2 - x1) * ratio;
         const y = y1 + (y2 - y1) * ratio;
-        
-        // 在当前位置执行涂抹
-        smudgeAtPoint(x, y, x2 - x1, y2 - y1);
+        const r = smudgeAtPoint(x, y, x2 - x1, y2 - y1);
+        if (r) unionRect = unionRect ? unionDirtyRect(unionRect, r) : r;
     }
-    
-    // 读取到 Canvas 2D
-    painter.readToCanvas2D();
+
+    painter.readToCanvas2D(unionRect);
 }
 
 /**
@@ -1461,12 +1470,12 @@ function smudgeAtPoint(x, y, dx, dy) {
     // 6. 创建笔刷纹理
     const brushCanvas = brushManager.createBrushTexture(brushSize, currentBrush);
     
-    // 7. 在目标位置绘制混合后的颜色
-    painter.drawBrush(
+    // 7. 在目标位置绘制混合后的颜色（返回脏区）
+    return painter.drawBrush(
         targetX,
         targetY,
         brushSize * 2,
-        sourceRGB,  // 使用采样的颜色
+        sourceRGB,
         brushCanvas
     );
 }
