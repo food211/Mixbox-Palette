@@ -42,8 +42,8 @@ const I18N = {
             paletteName_kuretakeGansai: 'Kuretake Gansai 16',
 
             switchEngine: 'Switch Mixing Engine (Mixbox / KM)',
-            focusHint: 'Click PS canvas to return shortcuts',
-            inst6: 'Click <strong>PS canvas</strong> → Return shortcuts to PS',
+            focusHint: 'Hold Space + click PS canvas to return shortcuts',
+            inst6: 'Hold <strong>Space</strong> + click <strong>PS canvas</strong> → Return shortcuts to PS',
             rectSelectTool: 'Select area to PS',
             statusRectSelect: '• Mode: <strong style="color: #FF9800;">Rect Select → PS</strong>',
             rectSelectNoSelection: 'No active selection in Photoshop. Please create a selection first.',
@@ -94,8 +94,8 @@ const I18N = {
             paletteName_kuretakeGansai: '吴竹 Gansai 16色',
 
             switchEngine: '切换混色引擎 (Mixbox / KM)',
-            focusHint: '点击 PS 画布以切回快捷键',
-            inst6: '点击 <strong>PS 画布</strong> → 将快捷键切回 PS',
+            focusHint: '按住空格 + 点击 PS 画布以切回快捷键',
+            inst6: '按住 <strong>空格</strong> + 点击 <strong>PS 画布</strong> → 将快捷键切回 PS',
             rectSelectTool: '选区传输至PS',
             statusRectSelect: '• 当前模式: <strong style="color: #FF9800;">矩形选取 → PS</strong>',
             rectSelectNoSelection: 'Photoshop 中没有活动选区，请先创建选区。',
