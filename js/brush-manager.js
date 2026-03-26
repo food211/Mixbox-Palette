@@ -59,14 +59,22 @@ class BrushManager {
                 break;
                 
             case 'splatter':
-                for (let i = 0; i < 8; i++) {
-                    const angle = (Math.PI * 2 * i) / 8;
-                    const dist = size * Math.sqrt(Math.random()) * 0.25;
-                    const dotSize = size * (0.2 + Math.random() * 0.3);
+                for (let i = 0; i < 14; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const dist = size * Math.pow(Math.random(), 0.7) * 0.82;
+                    const proximity = 1 - dist / size;
+                    const dotSize = size * (0.03 + proximity * 0.07 + Math.random() * 0.04);
+                    const px = x + Math.cos(angle) * dist;
+                    const py = y + Math.sin(angle) * dist;
+                    const grad = ctx.createRadialGradient(px, py, dotSize * 0.5, px, py, dotSize);
+                    grad.addColorStop(0, 'rgba(255,255,255,1)');
+                    grad.addColorStop(1, 'rgba(255,255,255,0)');
+                    ctx.fillStyle = grad;
                     ctx.beginPath();
-                    ctx.arc(x + Math.cos(angle) * dist, y + Math.sin(angle) * dist, dotSize, 0, Math.PI * 2);
+                    ctx.arc(px, py, dotSize, 0, Math.PI * 2);
                     ctx.fill();
                 }
+                ctx.fillStyle = '#fff';
                 break;
                 
             case 'flat':
@@ -157,23 +165,44 @@ class BrushManager {
                     break;
                     
                 case 'splatter': {
-                    // 中心密集、外围稀疏：用 sqrt 分布让圆点向中心聚集
-                    const totalDots = 18;
+                    // 第一步：在离屏 canvas 上画散落圆点
+                    const dotCanvas = document.createElement('canvas');
+                    dotCanvas.width = size * 2;
+                    dotCanvas.height = size * 2;
+                    const dotCtx = dotCanvas.getContext('2d');
+                    const totalDots = 28;
                     for (let i = 0; i < totalDots; i++) {
                         const angle = Math.random() * Math.PI * 2;
-                        const dist = size * Math.sqrt(Math.random()) * 0.85;
-                        const dotSize = size * (0.04 + Math.random() * 0.08);
+                        // 幂次分布让点向中心聚集；限制在 0.82 以内确保不超出贴图
+                        const dist = size * Math.pow(Math.random(), 0.7) * 0.82;
+                        // 外围的点更小，增强中心密外围稀的视觉感
+                        const proximity = 1 - dist / size;
+                        const dotSize = size * (0.03 + proximity * 0.07 + Math.random() * 0.04);
                         const cx = centerX + Math.cos(angle) * dist;
                         const cy = centerY + Math.sin(angle) * dist;
-                        // 径向渐变：中心完全不透明，边缘1px平滑衰减，实现抗锯齿
-                        const grad = ctx.createRadialGradient(cx, cy, Math.max(0, dotSize - 1), cx, cy, dotSize);
+                        // 每个点用径向渐变实现柔和边缘
+                        const inner = Math.max(0, dotSize * 0.5);
+                        const grad = dotCtx.createRadialGradient(cx, cy, inner, cx, cy, dotSize);
                         grad.addColorStop(0, 'rgba(0,0,0,1)');
                         grad.addColorStop(1, 'rgba(0,0,0,0)');
-                        ctx.fillStyle = grad;
-                        ctx.beginPath();
-                        ctx.arc(cx, cy, dotSize, 0, Math.PI * 2);
-                        ctx.fill();
+                        dotCtx.fillStyle = grad;
+                        dotCtx.beginPath();
+                        dotCtx.arc(cx, cy, dotSize, 0, Math.PI * 2);
+                        dotCtx.fill();
                     }
+
+                    // 第二步：用整体径向 envelope 压暗外缘，消除贴图轮廓感
+                    // destination-in 让点层只保留 envelope 的 alpha 形状
+                    const envGrad = dotCtx.createRadialGradient(centerX, centerY, 0, centerX, centerY, size * 0.9);
+                    envGrad.addColorStop(0,   'rgba(0,0,0,1)');
+                    envGrad.addColorStop(0.55, 'rgba(0,0,0,1)');
+                    envGrad.addColorStop(1,    'rgba(0,0,0,0)');
+                    dotCtx.globalCompositeOperation = 'destination-in';
+                    dotCtx.fillStyle = envGrad;
+                    dotCtx.fillRect(0, 0, size * 2, size * 2);
+
+                    // 第三步：把结果贴到主纹理
+                    ctx.drawImage(dotCanvas, 0, 0);
                     ctx.fillStyle = '#000';
                     ctx.globalAlpha = 1;
                     break;
