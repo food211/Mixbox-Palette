@@ -26,6 +26,7 @@ let rectSelectStart = null;  // { x, y }
 let currentTool = 'brush';  // 'brush' 或 'smudge'
 let smudgeStrength = 50;  // 涂抹强度 (0-100)
 let smudgeBrushSize = 15;  // 涂抹工具的笔刷大小
+let smudgeBrushType = 'watercolor';  // 涂抹工具的笔刷类型
 let savedBrushSettings = null;  // 临时保存笔刷设置（切换到涂抹工具时使用）
 
 // 历史记录 - 基于路径记录
@@ -165,6 +166,7 @@ async function initApp() {
         }
         if (savedAppSettings.smudgeBrushSize != null) smudgeBrushSize = savedAppSettings.smudgeBrushSize;
         if (savedAppSettings.smudgeStrength != null) smudgeStrength = savedAppSettings.smudgeStrength;
+        if (savedAppSettings.smudgeBrushType) smudgeBrushType = savedAppSettings.smudgeBrushType;
         console.log('✅ 已加载保存的应用设置');
     }
 
@@ -215,6 +217,7 @@ function saveBrushSettings() {
         brushSize: brushSize,
         mixStrength: parseInt(brushMixValue.textContent),
     });
+    paletteStorage.saveAppSettings({ smudgeBrushSize, smudgeStrength, smudgeBrushType });
 }
 
 /**
@@ -453,11 +456,12 @@ function bindEvents() {
     const smudgeBtn = document.getElementById('smudgeBtn');
     smudgeBtn.addEventListener('click', () => {
         if (currentTool === 'brush') {
-            // 切换到涂抹工具：先保存当前笔刷设置
+            // 切换到涂抹工具：保存当前笔刷工具设置
             saveBrushSettings();
             savedBrushSettings = {
                 size: brushSize,
-                mixStrength: parseInt(brushMixValue.textContent)
+                mixStrength: parseInt(brushMixValue.textContent),
+                brushType: currentBrush.type,
             };
             currentTool = 'smudge';
             smudgeBtn.classList.add('active');
@@ -467,7 +471,11 @@ function bindEvents() {
             const savedApp = paletteStorage.loadAppSettings();
             if (savedApp && savedApp.smudgeBrushSize != null) smudgeBrushSize = savedApp.smudgeBrushSize;
             if (savedApp && savedApp.smudgeStrength != null) smudgeStrength = savedApp.smudgeStrength;
+            if (savedApp && savedApp.smudgeBrushType) smudgeBrushType = savedApp.smudgeBrushType;
 
+            // 切换到涂抹工具的笔刷
+            currentBrush = { type: smudgeBrushType, image: null };
+            updateBrushPreview();
             brushSize = smudgeBrushSize;
             brushSizeInput.value = smudgeBrushSize;
             brushSizeValue.textContent = smudgeBrushSize;
@@ -478,7 +486,8 @@ function bindEvents() {
             // 切换回笔刷工具：保存涂抹工具设置
             smudgeBrushSize = brushSize;
             smudgeStrength = parseInt(brushMixValue.textContent);
-            paletteStorage.saveAppSettings({ smudgeBrushSize, smudgeStrength });
+            smudgeBrushType = currentBrush.type;
+            paletteStorage.saveAppSettings({ smudgeBrushSize, smudgeStrength, smudgeBrushType });
 
             currentTool = 'brush';
             smudgeBtn.classList.remove('active');
@@ -486,6 +495,8 @@ function bindEvents() {
 
             // 恢复笔刷工具设置
             if (savedBrushSettings) {
+                currentBrush = { type: savedBrushSettings.brushType, image: null };
+                updateBrushPreview();
                 brushSize = savedBrushSettings.size;
                 brushSizeInput.value = savedBrushSettings.size;
                 brushSizeValue.textContent = savedBrushSettings.size;
@@ -995,6 +1006,8 @@ function initBrushSelector() {
         
         option.addEventListener('click', () => {
             currentBrush = { type: brush.type, image: null };
+            // 同步到对应工具的笔刷类型
+            if (currentTool === 'smudge') smudgeBrushType = brush.type;
             updateBrushPreview();
             brushModal.classList.remove('active');
             saveBrushSettings(); // 保存笔刷设置

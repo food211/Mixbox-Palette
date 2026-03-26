@@ -1,5 +1,16 @@
 # 更新日志 / Changelog
 
+== V1.1.7 ==
+[ZH]
+### 改进
+- **笔刷材质重新设计** — 喷溅笔刷全面重制，圆点更柔和自然，中心密集边缘稀疏，整体过渡更平滑，笔触更有水彩感
+- **工具独立记忆笔刷** — 画笔和涂抹工具现在各自记住上次使用的笔刷，切换工具时自动恢复
+
+[EN]
+### Improvements
+- **Brush texture redesign** — Splatter brush completely rebuilt with softer, more natural dots, denser at center and sparser at edges, smoother overall transition and more watercolor-like strokes
+- **Per-tool brush memory** — Brush and smudge tools now each remember their last selected brush, automatically restored when switching tools
+
 == V1.1.6 ==
 [ZH]
 ### 改进
