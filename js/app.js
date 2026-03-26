@@ -35,6 +35,7 @@ const MAX_HISTORY = 50;
 
 // 当前笔画路径
 let currentStroke = null;  // { type: 'brush'|'smudge'|'clear', points: [], color, brushSize, brushType, ... }
+let currentStrokeBrushCanvas = null;  // 当前笔画的笔刷纹理（落笔时生成，整笔复用）
 
 // 混色引擎: 'mixbox' (默认) 或 'km'
 let currentEngine = 'mixbox';
@@ -850,9 +851,11 @@ function bindEvents() {
                 const distance = Math.sqrt(Math.pow(x - lastX, 2) + Math.pow(y - lastY, 2));
                 const activeColor = currentStroke ? currentStroke.color : currentBrushColor;
 
-                // 纹理笔刷用更大间距避免过度叠加
+                // dry 笔刷用极小间距（1-2px），splatter 用较大间距避免过度叠加
                 const brushType = currentBrush.type;
-                const effectiveMinDist = (brushType === 'splatter' || brushType === 'dry')
+                const effectiveMinDist = brushType === 'dry'
+                    ? Math.max(1, Math.min(2, minDistance))
+                    : brushType === 'splatter'
                     ? Math.max(minDistance, brushSize * 0.1)
                     : minDistance;
 
@@ -1123,6 +1126,7 @@ function beginStroke(type, color = null) {
         brushType: currentBrush.type,
         mixStrength: painter ? painter.getMixStrength() : 0.5
     };
+    currentStrokeBrushCanvas = brushManager.createBrushTexture(brushSize, currentBrush);
 }
 
 /**
@@ -1396,20 +1400,27 @@ function unionDirtyRect(a, b) {
  */
 function drawBrush(x, y, color) {
     if (!color || !painter) return;
-    
+
     // 1. 转换颜色为 RGB (0-1)
     const colorRGB = hexToRgb(color);
-    
-    // 2. 创建笔刷纹理
-    const brushCanvas = brushManager.createBrushTexture(brushSize, currentBrush);
-    
+
+    // splatter 每次都重新生成（拖动时持续随机）；dry 复用落笔时的纹理（整笔保持同一形状）
+    const isSplatter = currentBrush.type === 'splatter';
+    // useFalloff: 0=硬边二值化, 1=软边+radialFalloff, 2=喷溅（保留alpha抗锯齿，无radialFalloff）
+    const isSoftBrush = isSplatter ? 2 : 1;
+    const brushCanvas = isSplatter
+        ? brushManager.createBrushTexture(brushSize, currentBrush)
+        : (currentStrokeBrushCanvas || brushManager.createBrushTexture(brushSize, currentBrush));
+
     // 3. 使用 WebGL 绘制（物理混色）
+    // useFalloff=true（软边）：保留渐变alpha + radialFalloff；false（硬边）：二值化alpha，无falloff
     const dirtyRect = painter.drawBrush(
         x,
         y,
         brushSize * 2,  // WebGL 笔刷尺寸需要 *2
         colorRGB,
         brushCanvas,
+        isSoftBrush,
     );
 
     // 4. 读取到 Canvas 2D（仅回读脏区，提升性能）

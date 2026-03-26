@@ -107,6 +107,7 @@ class KMWebGLPainter {
         uniform vec2 u_currentPosition;
         uniform float u_brushRadius;
         uniform float u_baseMixStrength;
+        uniform float u_useFalloff;
 
         // XYZ→RGB 矩阵（列优先）
         const mat3 XYZ_TO_RGB = mat3(
@@ -259,7 +260,12 @@ class KMWebGLPainter {
 
         void main() {
             vec4 brushSample = texture2D(u_brushTexture, v_texCoord);
-            float brushAlpha = brushSample.a;
+            // 硬边笔刷（useFalloff=0）：二值化 alpha，消除抗锯齿半透明噪声
+            // 软边笔刷（useFalloff=1）：保留渐变 alpha + radialFalloff
+            // 喷溅笔刷（useFalloff=2）：保留渐变 alpha（抗锯齿），无 radialFalloff
+            float brushAlpha = u_useFalloff < 0.5
+                ? step(0.5, brushSample.a)
+                : brushSample.a;
 
             if (brushAlpha < 0.01) {
                 discard;
@@ -270,7 +276,9 @@ class KMWebGLPainter {
             vec4 canvasColor = texture2D(u_canvasTexture, canvasUV);
 
             float distToCenter = length(v_canvasCoord - u_currentPosition);
-            float radialFalloff = 1.0 - smoothstep(0.0, u_brushRadius, distToCenter);
+            float radialFalloff = (u_useFalloff > 0.5 && u_useFalloff < 1.5)
+                ? 1.0 - smoothstep(0.0, u_brushRadius, distToCenter)
+                : 1.0;
 
             float mixAmount = radialFalloff * brushAlpha * u_baseMixStrength;
             float edgeWeight = clamp(mixAmount, 0.0, 1.0);
@@ -299,6 +307,7 @@ class KMWebGLPainter {
             u_currentPosition: gl.getUniformLocation(this.program, 'u_currentPosition'),
             u_brushRadius:     gl.getUniformLocation(this.program, 'u_brushRadius'),
             u_baseMixStrength: gl.getUniformLocation(this.program, 'u_baseMixStrength'),
+            u_useFalloff:      gl.getUniformLocation(this.program, 'u_useFalloff'),
         };
     }
 
@@ -601,7 +610,7 @@ class KMWebGLPainter {
         gl.bufferData(gl.ARRAY_BUFFER, texCoords, gl.STATIC_DRAW);
     }
 
-    drawBrush(x, y, size, colorRGB, brushCanvas) {
+    drawBrush(x, y, size, colorRGB, brushCanvas, useFalloff = true) {
         const gl = this.gl;
         const cw = this.canvas.width;
         const ch = this.canvas.height;
@@ -623,20 +632,9 @@ class KMWebGLPainter {
             this.lastBrushCanvas = brushCanvas;
         }
 
-        // 渲染前先把 canvas 当前脏区拷贝到 temp，防止 swap 后旧数据污染画布
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, this.textures.temp);
-        gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, rx0, ch - ry1, rx0, ch - ry1, rw, rh);
-        gl.bindTexture(gl.TEXTURE_2D, null);
-
         gl.useProgram(this.program);
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.temp);
         gl.viewport(0, 0, cw, ch);
-
-        // scissor 裁剪：只处理笔刷覆盖区域
-        gl.enable(gl.SCISSOR_TEST);
-        gl.scissor(rx0, ch - ry1, rw, rh);
 
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, this.textures.canvas);
@@ -655,6 +653,7 @@ class KMWebGLPainter {
         gl.uniform2f(this.locations.u_currentPosition, x, y);
         gl.uniform1f(this.locations.u_brushRadius, size / 2);
         gl.uniform1f(this.locations.u_baseMixStrength, this.baseMixStrength);
+        gl.uniform1f(this.locations.u_useFalloff, +useFalloff);
 
         const positions = new Float32Array([
             x-halfSize, y-halfSize,
@@ -674,7 +673,6 @@ class KMWebGLPainter {
 
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-        gl.disable(gl.SCISSOR_TEST);
         this.swapTextures();
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 

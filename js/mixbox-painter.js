@@ -121,27 +121,33 @@ class MixboxWebGLPainter {
         uniform vec2 u_resolution;
         uniform vec2 u_currentPosition;
         uniform float u_brushRadius;
-        uniform float u_baseMixStrength;  // ✅ 添加这个 uniform
+        uniform float u_baseMixStrength;
+        uniform float u_useFalloff;
 
         ${mixbox.glsl()}
 
         void main() {
             vec4 brushSample = texture2D(u_brushTexture, v_texCoord);
-            float brushAlpha = brushSample.a;
-            
+            // 硬边笔刷（useFalloff=0）：二值化 alpha，消除抗锯齿半透明噪声
+            // 软边笔刷（useFalloff=1）：保留渐变 alpha + radialFalloff
+            // 喷溅笔刷（useFalloff=2）：保留渐变 alpha（抗锯齿），无 radialFalloff
+            float brushAlpha = u_useFalloff < 0.5
+                ? step(0.5, brushSample.a)
+                : brushSample.a;
+
             if (brushAlpha < 0.01) {
                 discard;
             }
-            
+
             vec2 canvasUV = v_canvasCoord / u_resolution;
             canvasUV.y = 1.0 - canvasUV.y;
             vec4 canvasColor = texture2D(u_canvasTexture, canvasUV);
-            
+
             float distToCenter = length(v_canvasCoord - u_currentPosition);
-            float brushRadius = u_brushRadius;
-            
-            float radialFalloff = 1.0 - smoothstep(0.0, brushRadius, distToCenter);
-            
+            float radialFalloff = (u_useFalloff > 0.5 && u_useFalloff < 1.5)
+                ? 1.0 - smoothstep(0.0, u_brushRadius, distToCenter)
+                : 1.0;
+
             float mixAmount = radialFalloff * brushAlpha * u_baseMixStrength;
             
             vec3 mixedColor = mixbox_lerp(
@@ -170,7 +176,8 @@ class MixboxWebGLPainter {
             u_brushColor: gl.getUniformLocation(this.program, 'u_brushColor'),
             u_currentPosition: gl.getUniformLocation(this.program, 'u_currentPosition'),
             u_brushRadius: gl.getUniformLocation(this.program, 'u_brushRadius'),
-            u_baseMixStrength: gl.getUniformLocation(this.program, 'u_baseMixStrength')
+            u_baseMixStrength: gl.getUniformLocation(this.program, 'u_baseMixStrength'),
+            u_useFalloff: gl.getUniformLocation(this.program, 'u_useFalloff'),
         };
     }
     
@@ -308,7 +315,7 @@ class MixboxWebGLPainter {
      * 绘制笔触 (核心方法)
      * 返回脏区矩形 {x, y, w, h}，供 readToCanvas2D 局部回读
      */
-    drawBrush(x, y, size, colorRGB, brushCanvas) {
+    drawBrush(x, y, size, colorRGB, brushCanvas, useFalloff = true) {
         const gl = this.gl;
         const cw = this.canvas.width;
         const ch = this.canvas.height;
@@ -333,23 +340,11 @@ class MixboxWebGLPainter {
             this.lastBrushCanvas = brushCanvas;
         }
 
-        // 渲染前先把 canvas 当前脏区拷贝到 temp，防止 swap 后旧数据污染画布
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, this.textures.temp);
-        gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, rx0, ch - ry1, rx0, ch - ry1, rw, rh);
-        gl.bindTexture(gl.TEXTURE_2D, null);
-
         gl.useProgram(this.program);
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.temp);
 
         // 全 viewport（保证顶点坐标→裁剪坐标的变换与 shader 中 canvasUV 计算一致）
         gl.viewport(0, 0, cw, ch);
-
-        // scissor 裁剪：只让片段着色器处理笔刷覆盖区域
-        // WebGL Y 轴从底部起，需要翻转
-        gl.enable(gl.SCISSOR_TEST);
-        gl.scissor(rx0, ch - ry1, rw, rh);
 
         // 清除纹理绑定
         for (let i = 0; i < 8; i++) {
@@ -376,6 +371,7 @@ class MixboxWebGLPainter {
         gl.uniform2f(this.locations.u_currentPosition, x, y);
         gl.uniform1f(this.locations.u_brushRadius, size / 2);
         gl.uniform1f(this.locations.u_baseMixStrength, this.baseMixStrength);
+        gl.uniform1f(this.locations.u_useFalloff, +useFalloff);
 
         // 更新几何体
         const positions = new Float32Array([
@@ -396,9 +392,6 @@ class MixboxWebGLPainter {
 
         // 绘制
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-
-        // 关闭 scissor
-        gl.disable(gl.SCISSOR_TEST);
 
         // 交换纹理
         this.swapTextures();
