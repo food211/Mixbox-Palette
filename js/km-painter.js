@@ -623,6 +623,13 @@ class KMWebGLPainter {
             this.lastBrushCanvas = brushCanvas;
         }
 
+        // 渲染前先把 canvas 当前脏区拷贝到 temp，防止 swap 后旧数据污染画布
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, this.textures.temp);
+        gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, rx0, ch - ry1, rx0, ch - ry1, rw, rh);
+        gl.bindTexture(gl.TEXTURE_2D, null);
+
         gl.useProgram(this.program);
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.temp);
         gl.viewport(0, 0, cw, ch);
