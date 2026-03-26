@@ -61,7 +61,7 @@ class BrushManager {
             case 'splatter':
                 for (let i = 0; i < 8; i++) {
                     const angle = (Math.PI * 2 * i) / 8;
-                    const dist = size * (0.5 + Math.random() * 0.5);
+                    const dist = size * Math.sqrt(Math.random()) * 0.25;
                     const dotSize = size * (0.2 + Math.random() * 0.3);
                     ctx.beginPath();
                     ctx.arc(x + Math.cos(angle) * dist, y + Math.sin(angle) * dist, dotSize, 0, Math.PI * 2);
@@ -109,16 +109,18 @@ class BrushManager {
         canvas.width = size * 2;
         canvas.height = size * 2;
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        
+        ctx.clearRect(0, 0, size * 2, size * 2);
+
         const centerX = size;
         const centerY = size;
-        
+
         if (brush.image) {
             // 自定义图片笔刷
             ctx.drawImage(brush.image, 0, 0, size * 2, size * 2);
         } else {
             // 预设笔刷（简化版，保留核心形状）
-            ctx.fillStyle = '#fff';
+            // 填黑色：shader 只用 alpha 通道，黑色不会对混色产生白色偏移
+            ctx.fillStyle = '#000';
             
             switch(brush.type) {
                 case 'circle':
@@ -154,16 +156,28 @@ class BrushManager {
                     ctx.globalAlpha = 1;
                     break;
                     
-                case 'splatter':
-                    for (let i = 0; i < 12; i++) {
-                        const angle = (Math.PI * 2 * i) / 12;
-                        const dist = size * (0.3 + Math.random() * 0.6);
-                        const dotSize = size * (0.15 + Math.random() * 0.25);
+                case 'splatter': {
+                    // 中心密集、外围稀疏：用 sqrt 分布让圆点向中心聚集
+                    const totalDots = 18;
+                    for (let i = 0; i < totalDots; i++) {
+                        const angle = Math.random() * Math.PI * 2;
+                        const dist = size * Math.sqrt(Math.random()) * 0.85;
+                        const dotSize = size * (0.04 + Math.random() * 0.08);
+                        const cx = centerX + Math.cos(angle) * dist;
+                        const cy = centerY + Math.sin(angle) * dist;
+                        // 径向渐变：中心完全不透明，边缘1px平滑衰减，实现抗锯齿
+                        const grad = ctx.createRadialGradient(cx, cy, Math.max(0, dotSize - 1), cx, cy, dotSize);
+                        grad.addColorStop(0, 'rgba(0,0,0,1)');
+                        grad.addColorStop(1, 'rgba(0,0,0,0)');
+                        ctx.fillStyle = grad;
                         ctx.beginPath();
-                        ctx.arc(centerX + Math.cos(angle) * dist, centerY + Math.sin(angle) * dist, dotSize, 0, Math.PI * 2);
+                        ctx.arc(cx, cy, dotSize, 0, Math.PI * 2);
                         ctx.fill();
                     }
+                    ctx.fillStyle = '#000';
+                    ctx.globalAlpha = 1;
                     break;
+                }
                     
                 case 'flat':
                     ctx.save();
@@ -177,8 +191,8 @@ class BrushManager {
                     ctx.globalAlpha = 0.8;
                     for (let i = 0; i < 40; i++) {
                         const angle = Math.random() * Math.PI * 2;
-                        const dist = Math.random() * size * 0.9;
-                        const dotSize = size * (0.05 + Math.random() * 0.15);
+                        const dist = Math.random() * size * 0.85;
+                        const dotSize = size * (0.03 + Math.random() * 0.07);
                         ctx.beginPath();
                         ctx.arc(centerX + Math.cos(angle) * dist, centerY + Math.sin(angle) * dist, dotSize, 0, Math.PI * 2);
                         ctx.fill();
