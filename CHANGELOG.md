@@ -1,5 +1,14 @@
 # 更新日志 / Changelog
 
+== V1.1.8 ==
+[ZH]
+### 修复
+- **修复全选后传输异常** — 修复在 Photoshop 中使用 Ctrl+A 全选画布后，插件无法正确识别选区范围的问题
+
+[EN]
+### Fixes
+- **Fix transfer after Select All** — Fixed an issue where using Ctrl+A to select the entire canvas in Photoshop caused the plugin to fail to recognize the selection bounds correctly
+
 == V1.1.7 ==
 [ZH]
 ### 改进

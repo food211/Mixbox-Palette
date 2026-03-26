@@ -5,7 +5,7 @@ const { action, core } = require("photoshop");
 const shell = require("uxp").shell;
 
 // ============ Global Variables ============
-const HOST_VERSION = "1.1.0";
+const HOST_VERSION = "1.1.1";
 const SOURCES = [
   "https://mixbox-palette.pages.dev/",
   "https://food211.github.io/Mixbox-Palette/"
@@ -293,10 +293,10 @@ async function handlePastePixels(data) {
         const sel = result[0]?.selection;
         if (sel && sel.top !== undefined) {
           selBounds = {
-            top: sel.top._value || sel.top,
-            left: sel.left._value || sel.left,
-            bottom: sel.bottom._value || sel.bottom,
-            right: sel.right._value || sel.right
+            top: sel.top._value ?? sel.top,
+            left: sel.left._value ?? sel.left,
+            bottom: sel.bottom._value ?? sel.bottom,
+            right: sel.right._value ?? sel.right
           };
         }
       } catch (err) {
