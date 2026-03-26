@@ -4,10 +4,98 @@
     <meta charset="UTF-8">
     <title>Mixbox Palette</title>
     <style>
-        body { margin: 0; background: #2b2b2b; }
+        body { 
+            margin: 0; 
+            background: #2b2b2b; 
+            color: #f0f0f0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        
+        .loader-container {
+            width: 80%;
+            max-width: 400px;
+            text-align: center;
+        }
+        
+        h1 {
+            margin-bottom: 30px;
+            font-size: 24px;
+        }
+        
+        .loading-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        
+        .progress-container {
+            width: 100%;
+            height: 4px;
+            background: #404040;
+            border-radius: 2px;
+            overflow: hidden;
+            margin-bottom: 15px;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #4a9eff, #7b68ee);
+            border-radius: 2px;
+            transition: width 0.3s ease;
+        }
+        
+        .status-text {
+            font-size: 14px;
+            color: #aaa;
+            margin-top: 10px;
+            min-height: 20px;
+        }
+        
+        .error-message {
+            color: #ff6b6b;
+            font-size: 13px;
+            margin-top: 16px;
+            display: none;
+        }
+        
+        .error-message.show {
+            display: block;
+        }
+        
+        .retry-btn {
+            margin-top: 12px;
+            padding: 8px 20px;
+            background: #4a9eff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            display: none;
+        }
+        
+        .retry-btn.show {
+            display: inline-block;
+        }
     </style>
 </head>
 <body>
+    <div class="loader-container">
+        <div class="loading-icon">🎨</div>
+        <h1>Mixbox Palette</h1>
+        <div class="progress-container">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+        <div class="status-text" id="statusText">检测最快的服务器...</div>
+        <div class="error-message" id="errorMessage">加载失败，请检查网络连接。</div>
+        <button class="retry-btn" id="retryBtn">重试</button>
+    </div>
+
 <script>
 const SOURCES = [
     "https://mixbox-palette.pages.dev/",
@@ -17,12 +105,106 @@ const SOURCES = [
 const PROBE_FILE = "js/updater.js";
 const TIMEOUT_MS = 4000;
 
+// 核心文件列表 - 这些文件会在跳转前预加载
+const CORE_FILES = [
+    "js/i18n.js",
+    "js/mixbox.js",
+    "js/mixbox-painter.js",
+    "js/km-lut-data.js",
+    "js/km-painter.js",
+    "js/brush-manager.js",
+    "js/palette-storage.js",
+    "js/ps-bridge.js",
+    "js/app.js"
+];
+
+// 更新进度条
+function updateProgress(percent, message) {
+    document.getElementById('progressBar').style.width = `${percent}%`;
+    if (message) {
+        document.getElementById('statusText').textContent = message;
+    }
+}
+
+// 显示错误信息
+function showError(message) {
+    document.getElementById('errorMessage').textContent = message;
+    document.getElementById('errorMessage').classList.add('show');
+    document.getElementById('retryBtn').classList.add('show');
+}
+
+// 检测WebGL支持
+function isWebGLSupported() {
+    try {
+        const canvas = document.createElement('canvas');
+        return !!(window.WebGLRenderingContext && 
+            (canvas.getContext('webgl') || canvas.getContext('experimental-webgl')));
+    } catch(e) {
+        return false;
+    }
+}
+
+// 预加载文件
+async function preloadFiles(baseUrl) {
+    // 确定需要加载的引擎文件
+    let filesToLoad = [...CORE_FILES];
+    
+    if (!isWebGLSupported()) {
+        // WebGL不支持时，移除KM引擎相关文件，添加Canvas 2D回退
+        filesToLoad = filesToLoad.filter(file => !file.includes('km-'));
+        filesToLoad.push('js/mixbox-canvas-painter.js');
+        updateProgress(10, "检测到WebGL不可用，将使用Canvas 2D引擎");
+    } else {
+        updateProgress(10, "检测到WebGL支持，加载全部引擎");
+    }
+    
+    const totalFiles = filesToLoad.length;
+    let loadedFiles = 0;
+    let failedFiles = 0;
+    
+    // 并行加载所有文件
+    const promises = filesToLoad.map(file => {
+        return fetch(baseUrl + file, { cache: 'no-store' })
+            .then(response => {
+                if (!response.ok) throw new Error(`Failed to load ${file}`);
+                return response.blob(); // 预加载文件内容
+            })
+            .then(() => {
+                loadedFiles++;
+                const percent = 10 + Math.floor(loadedFiles / totalFiles * 85);
+                updateProgress(percent, `加载中: ${file.split('/').pop()}`);
+            })
+            .catch(err => {
+                console.error(`Failed to preload ${file}:`, err);
+                failedFiles++;
+                // 如果失败文件不多，继续尝试
+                if (failedFiles <= 2) {
+                    return Promise.resolve(); // 不中断整体加载
+                } else {
+                    return Promise.reject(new Error('Too many files failed to load'));
+                }
+            });
+    });
+    
+    try {
+        await Promise.all(promises);
+        updateProgress(95, "加载完成，准备启动应用...");
+        return true;
+    } catch (error) {
+        console.error("预加载文件失败:", error);
+        showError("部分核心文件加载失败，请检查网络连接后重试。");
+        return false;
+    }
+}
+
 async function race() {
     // 透传 URL 参数（如 ?host=1.0.4）到 app.html
     const params = new URLSearchParams(window.location.search);
     const suffix = params.toString() ? '?' + params.toString() : '';
 
     try {
+        updateProgress(0, "检测最快的服务器...");
+        
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
@@ -37,14 +219,48 @@ async function race() {
         );
 
         clearTimeout(timeout);
-        window.location.replace(SOURCES[fastest] + "app.html" + suffix);
+        const baseUrl = SOURCES[fastest];
+        updateProgress(5, `已选择最快的服务器: ${baseUrl.replace(/https:\/\/|\/$/g, '')}`);
+        
+        // 预加载核心文件
+        const preloadSuccess = await preloadFiles(baseUrl);
+        
+        if (preloadSuccess) {
+            // 给用户一点时间看到100%
+            setTimeout(() => {
+                updateProgress(100, "启动应用...");
+                // 跳转到应用页面
+                window.location.replace(baseUrl + "app.html" + suffix);
+            }, 500);
+        }
     } catch (e) {
-        // All failed, fallback to first source
-        window.location.replace(SOURCES[0] + "app.html" + suffix);
+        console.error("服务器检测失败:", e);
+        updateProgress(5, "无法连接到服务器，使用默认源");
+        
+        // 尝试使用第一个源进行预加载
+        try {
+            const preloadSuccess = await preloadFiles(SOURCES[0]);
+            if (preloadSuccess) {
+                setTimeout(() => {
+                    window.location.replace(SOURCES[0] + "app.html" + suffix);
+                }, 500);
+            }
+        } catch (err) {
+            showError("无法连接到服务器，请检查网络连接后重试。");
+        }
     }
 }
 
+// 初始化
 race();
+
+// 重试按钮事件监听
+document.getElementById('retryBtn').addEventListener('click', () => {
+    document.getElementById('errorMessage').classList.remove('show');
+    document.getElementById('retryBtn').classList.remove('show');
+    updateProgress(0, "重新连接...");
+    race();
+});
 </script>
 </body>
 </html>
