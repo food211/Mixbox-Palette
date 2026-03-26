@@ -699,8 +699,11 @@ function bindEvents() {
     }
 
     document.addEventListener('keydown', (e) => {
-        // 阻止空格滚动页面（空格在PS中用于移动画布）
-        if (e.key === ' ') e.preventDefault();
+        // 阻止空格滚动页面；主动释放焦点让 PS 可以接管
+        if (e.key === ' ') {
+            e.preventDefault();
+            if (document.activeElement) document.activeElement.blur();
+        }
 
         // Escape 退出矩形选取模式
         if (e.key === 'Escape' && isRectSelectMode) {
@@ -758,6 +761,7 @@ function bindEvents() {
             shiftSmudgeActive = false;
             document.getElementById('smudgeBtn').click(); // 切换回画笔
         }
+
     });
 
     // 窗口失焦时重置临时快捷键状态（Alt吸管、Shift涂抹）
