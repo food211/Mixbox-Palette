@@ -108,6 +108,8 @@ class KMWebGLPainter {
         uniform float u_brushRadius;
         uniform float u_baseMixStrength;
         uniform float u_useFalloff;
+        uniform vec2 u_smearDir;
+        uniform float u_smearLen;
 
         // XYZ→RGB 矩阵（列优先）
         const mat3 XYZ_TO_RGB = mat3(
@@ -280,13 +282,37 @@ class KMWebGLPainter {
                 ? 1.0 - smoothstep(0.0, u_brushRadius, distToCenter)
                 : 1.0;
 
-            float mixAmount = radialFalloff * brushAlpha * u_baseMixStrength;
-            float edgeWeight = clamp(mixAmount, 0.0, 1.0);
+            float aBrush = radialFalloff * brushAlpha;
+            float density = u_baseMixStrength * u_baseMixStrength;
 
-            // km_mix 用固定的 u_baseMixStrength 计算混色，补偿不受边缘衰减影响
-            // 再用 edgeWeight 线性插值回画布色，边缘平滑无跳断
-            vec3 mixedColor = km_mix(canvasColor.rgb, u_brushColor.rgb, clamp(u_baseMixStrength, 0.0, 1.0));
-            vec3 finalColor = mix(canvasColor.rgb, mixedColor, edgeWeight / max(u_baseMixStrength, 0.001));
+            // 采样上游颜色（笔划来的方向）
+            float smearReach = clamp(u_smearLen, 1.0, u_brushRadius) * 0.8;
+            vec2 smearUV = (v_canvasCoord - u_smearDir * smearReach) / u_resolution;
+            smearUV.y = 1.0 - smearUV.y;
+            smearUV = clamp(smearUV, 0.0, 1.0);
+            vec4 smearSample = texture2D(u_canvasTexture, smearUV);
+
+            vec3 safeCanvasRGB = (canvasColor.a > 0.1) ? canvasColor.rgb : u_brushColor.rgb;
+            vec3 safeSmearRGB  = (smearSample.a > 0.1) ? smearSample.rgb : safeCanvasRGB;
+
+            vec3 smearTarget = km_mix(safeCanvasRGB, safeSmearRGB, aBrush * 0.6);
+
+            vec3 finalColor;
+            if (density > 0.98) {
+                // 高浓度：纯上色
+                float edgeWeight = clamp(aBrush * u_baseMixStrength, 0.0, 1.0);
+                vec3 mixedColor = km_mix(canvasColor.rgb, u_brushColor.rgb, clamp(u_baseMixStrength, 0.0, 1.0));
+                finalColor = mix(canvasColor.rgb, mixedColor, edgeWeight / max(u_baseMixStrength, 0.001));
+            } else if (density < 0.01) {
+                // 极低浓度：纯涂抹
+                finalColor = smearTarget;
+            } else {
+                // 中间值：上色和涂抹按 density 过渡
+                float edgeWeight = clamp(aBrush * u_baseMixStrength, 0.0, 1.0);
+                vec3 mixedColor = km_mix(canvasColor.rgb, u_brushColor.rgb, clamp(u_baseMixStrength, 0.0, 1.0));
+                vec3 paintResult = mix(canvasColor.rgb, mixedColor, edgeWeight / max(u_baseMixStrength, 0.001));
+                finalColor = mix(smearTarget, paintResult, density);
+            }
 
             gl_FragColor = vec4(clamp(finalColor, 0.0, 1.0), 1.0);
         }
@@ -308,6 +334,8 @@ class KMWebGLPainter {
             u_brushRadius:     gl.getUniformLocation(this.program, 'u_brushRadius'),
             u_baseMixStrength: gl.getUniformLocation(this.program, 'u_baseMixStrength'),
             u_useFalloff:      gl.getUniformLocation(this.program, 'u_useFalloff'),
+            u_smearDir:        gl.getUniformLocation(this.program, 'u_smearDir'),
+            u_smearLen:        gl.getUniformLocation(this.program, 'u_smearLen'),
         };
     }
 
@@ -610,7 +638,7 @@ class KMWebGLPainter {
         gl.bufferData(gl.ARRAY_BUFFER, texCoords, gl.STATIC_DRAW);
     }
 
-    drawBrush(x, y, size, colorRGB, brushCanvas, useFalloff = true) {
+    drawBrush(x, y, size, colorRGB, brushCanvas, useFalloff = true, smearDir = { x: 0, y: 0 }, smearLen = 0) {
         const gl = this.gl;
         const cw = this.canvas.width;
         const ch = this.canvas.height;
@@ -654,6 +682,8 @@ class KMWebGLPainter {
         gl.uniform1f(this.locations.u_brushRadius, size / 2);
         gl.uniform1f(this.locations.u_baseMixStrength, this.baseMixStrength);
         gl.uniform1f(this.locations.u_useFalloff, +useFalloff);
+        gl.uniform2f(this.locations.u_smearDir, smearDir.x, smearDir.y);
+        gl.uniform1f(this.locations.u_smearLen, smearLen);
 
         const positions = new Float32Array([
             x-halfSize, y-halfSize,

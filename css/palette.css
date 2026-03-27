@@ -1,8 +1,9 @@
 
 .color-picker {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(36px, 1fr));
-    gap: 2px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
     margin-bottom: 15px;
     padding: 5px;
     border-radius: 8px;
@@ -10,6 +11,7 @@
 }
 
 .color-circle {
+    flex-shrink: 0;
     width: 36px;
     height: 36px;
     border-radius: 50%;

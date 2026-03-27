@@ -1,7 +1,7 @@
 // 颜料浓度滑条值(1-100) → 实际混色强度(0.01-0.5) 的非线性映射
 // 使用平方曲线使低浓度区域变化更平缓
 function mixSliderToStrength(sliderValue) {
-    return 0.5 * Math.pow(sliderValue / 100, 2);
+    return 0.5 * Math.sqrt(sliderValue / 100);
 }
 
 // 当前颜料预设
@@ -13,6 +13,8 @@ let foregroundColor = '#000000';
 let backgroundColor = '#ffffff';
 let currentBrushColor = foregroundColor;
 let brushSize = 15;
+let brushSpacingRatio = 1.0;  // 笔刷工具间距系数
+let smudgeSpacingRatio = 1.0; // 涂抹工具间距系数
 let isDrawing = false;
 let isEyedropperMode = false;
 let currentBrush = { type: 'watercolor', image: null };
@@ -114,6 +116,8 @@ const paletteBtn = document.getElementById('paletteBtn');
 const paletteInfo = document.querySelector('.palette-info');
 const brushMixSlider = document.getElementById('brushMix');
 const brushMixValue = document.getElementById('brushMixStrength');
+const brushSpacingSlider = document.getElementById('brushSpacing');
+const brushSpacingValue = document.getElementById('brushSpacingValue');
 
 /**
  * 初始化应用
@@ -150,6 +154,11 @@ async function initApp() {
         if (savedBrushSettings.mixStrength != null) {
             if (brushMixSlider) brushMixSlider.value = savedBrushSettings.mixStrength;
             if (brushMixValue) brushMixValue.textContent = savedBrushSettings.mixStrength;
+        }
+        if (savedBrushSettings.brushSpacing != null) {
+            brushSpacingRatio = savedBrushSettings.brushSpacing / 100;
+            if (brushSpacingSlider) brushSpacingSlider.value = savedBrushSettings.brushSpacing;
+            if (brushSpacingValue) brushSpacingValue.textContent = savedBrushSettings.brushSpacing;
         }
         console.log('✅ 已加载保存的笔刷设置');
     }
@@ -216,6 +225,7 @@ function saveBrushSettings() {
         brushType: currentBrush.type,
         brushSize: brushSize,
         mixStrength: parseInt(brushMixValue.textContent),
+        brushSpacing: Math.round(brushSpacingRatio * 100),
     });
     paletteStorage.saveAppSettings({ smudgeBrushSize, smudgeStrength, smudgeBrushType });
 }
@@ -224,8 +234,8 @@ function saveBrushSettings() {
  * 初始化画布
  */
 async function initCanvas() {
-    mixCanvas.width = 380;
-    mixCanvas.height = 320;
+    mixCanvas.width = 680;
+    mixCanvas.height = 572;
     // 先获取2D上下文，这样它就会被保留
     const ctx2d = mixCanvas.getContext('2d', { willReadFrequently: true });
     if (!ctx2d) {
@@ -431,6 +441,13 @@ function bindEvents() {
         }
     });
     
+    brushSpacingSlider.addEventListener('input', (e) => {
+        const value = parseInt(e.target.value);
+        brushSpacingValue.textContent = value;
+        brushSpacingRatio = value / 100;
+        saveBrushSettings();
+    });
+
     // 清空按钮
     clearBtn.addEventListener('click', () => {
         if (painter) {
@@ -458,11 +475,14 @@ function bindEvents() {
         if (currentTool === 'brush') {
             // 切换到涂抹工具：保存当前笔刷工具设置
             saveBrushSettings();
+            brushSpacingRatio = parseInt(brushSpacingSlider.value) / 100;
             savedBrushSettings = {
                 size: brushSize,
                 mixStrength: parseInt(brushMixValue.textContent),
                 brushType: currentBrush.type,
+                brushSpacing: Math.round(brushSpacingRatio * 100),
             };
+
             currentTool = 'smudge';
             smudgeBtn.classList.add('active');
             document.getElementById('mixLabel').textContent = t('smudgeStrength');
@@ -472,6 +492,7 @@ function bindEvents() {
             if (savedApp && savedApp.smudgeBrushSize != null) smudgeBrushSize = savedApp.smudgeBrushSize;
             if (savedApp && savedApp.smudgeStrength != null) smudgeStrength = savedApp.smudgeStrength;
             if (savedApp && savedApp.smudgeBrushType) smudgeBrushType = savedApp.smudgeBrushType;
+            if (savedApp && savedApp.smudgeSpacing != null) smudgeSpacingRatio = savedApp.smudgeSpacing / 100;
 
             // 切换到涂抹工具的笔刷
             currentBrush = { type: smudgeBrushType, image: null };
@@ -481,13 +502,17 @@ function bindEvents() {
             brushSizeValue.textContent = smudgeBrushSize;
             brushMixSlider.value = smudgeStrength;
             brushMixValue.textContent = smudgeStrength;
+            if (painter) painter.setMixStrength(mixSliderToStrength(smudgeStrength));
+            brushSpacingSlider.value = Math.round(smudgeSpacingRatio * 100);
+            brushSpacingValue.textContent = Math.round(smudgeSpacingRatio * 100);
             console.log('✅ 切换到涂抹工具');
         } else {
             // 切换回笔刷工具：保存涂抹工具设置
             smudgeBrushSize = brushSize;
             smudgeStrength = parseInt(brushMixValue.textContent);
             smudgeBrushType = currentBrush.type;
-            paletteStorage.saveAppSettings({ smudgeBrushSize, smudgeStrength, smudgeBrushType });
+            smudgeSpacingRatio = parseInt(brushSpacingSlider.value) / 100;
+            paletteStorage.saveAppSettings({ smudgeBrushSize, smudgeStrength, smudgeBrushType, smudgeSpacing: Math.round(smudgeSpacingRatio * 100) });
 
             currentTool = 'brush';
             smudgeBtn.classList.remove('active');
@@ -503,6 +528,11 @@ function bindEvents() {
                 brushMixSlider.value = savedBrushSettings.mixStrength;
                 brushMixValue.textContent = savedBrushSettings.mixStrength;
                 painter.setMixStrength(mixSliderToStrength(savedBrushSettings.mixStrength));
+                if (savedBrushSettings.brushSpacing != null) {
+                    brushSpacingRatio = savedBrushSettings.brushSpacing / 100;
+                    brushSpacingSlider.value = savedBrushSettings.brushSpacing;
+                    brushSpacingValue.textContent = savedBrushSettings.brushSpacing;
+                }
             }
             console.log('✅ 切换回笔刷工具');
         }
@@ -784,7 +814,6 @@ function bindEvents() {
     let strokeStarted = false;
     let lastX = 0;
     let lastY = 0;
-    let minDistance = 2; // 笔触之间的最小距离，会根据笔刷类型动态调整
 
     mixCanvas.addEventListener('mousedown', (e) => {
         const rect = mixCanvas.getBoundingClientRect();
@@ -866,38 +895,46 @@ function bindEvents() {
                 const distance = Math.sqrt(Math.pow(x - lastX, 2) + Math.pow(y - lastY, 2));
                 const activeColor = currentStroke ? currentStroke.color : currentBrushColor;
 
-                // dry 笔刷用极小间距（1-2px），splatter 用较大间距避免过度叠加
+                // 步长跟笔刷大小挂钩，乘以间距系数（1%时趋近1px，100%时为最大间距）
                 const brushType = currentBrush.type;
-                const effectiveMinDist = brushType === 'dry'
-                    ? Math.max(1, Math.min(2, minDistance))
+                const baseSpacing = brushType === 'dry'
+                    ? brushSize * 0.15
                     : brushType === 'splatter'
-                    ? Math.max(minDistance, brushSize * 0.1)
-                    : minDistance;
+                    ? brushSize * 0.3
+                    : brushSize * 0.25;
+                const effectiveMinDist = Math.max(1, baseSpacing * brushSpacingRatio);
 
                 if (distance >= effectiveMinDist) {
                     const steps = Math.floor(distance / effectiveMinDist);
+                    let unionRect = null;
 
                     if (steps > 1) {
+                        let prevIX = lastX, prevIY = lastY;
                         for (let i = 1; i <= steps; i++) {
                             const ratio = i / steps;
                             const interpX = lastX + (x - lastX) * ratio;
                             const interpY = lastY + (y - lastY) * ratio;
-                            drawBrush(interpX, interpY, activeColor);
+                            const r = drawBrush(interpX, interpY, activeColor, false, prevIX, prevIY);
+                            if (r) unionRect = unionRect ? unionDirtyRect(unionRect, r) : r;
                             addStrokePoint(interpX, interpY);
+                            prevIX = interpX; prevIY = interpY;
                         }
                     } else {
-                        drawBrush(x, y, activeColor);
+                        const r = drawBrush(x, y, activeColor, false, lastX, lastY);
+                        unionRect = r;
                         addStrokePoint(x, y);
                     }
 
+                    if (unionRect) painter.readToCanvas2D(unionRect);
                     lastX = x;
                     lastY = y;
                 }
             } else if (currentTool === 'smudge') {
                 // 涂抹工具模式
                 const distance = Math.sqrt(Math.pow(x - lastX, 2) + Math.pow(y - lastY, 2));
+                const smudgeMinDist = Math.max(1, brushSize * 0.25 * smudgeSpacingRatio);
 
-                if (distance >= minDistance) {
+                if (distance >= smudgeMinDist) {
                     // 记录路径点
                     addStrokePoint(x, y);
 
@@ -1415,33 +1452,35 @@ function unionDirtyRect(a, b) {
 /**
  * 绘制笔刷
  */
-function drawBrush(x, y, color) {
-    if (!color || !painter) return;
+function drawBrush(x, y, color, flush = true, prevX = x, prevY = y) {
+    if (!color || !painter) return null;
 
-    // 1. 转换颜色为 RGB (0-1)
     const colorRGB = hexToRgb(color);
 
-    // splatter 每次都重新生成（拖动时持续随机）；dry 复用落笔时的纹理（整笔保持同一形状）
     const isSplatter = currentBrush.type === 'splatter';
-    // useFalloff: 0=硬边二值化, 1=软边+radialFalloff, 2=喷溅（保留alpha抗锯齿，无radialFalloff）
     const isSoftBrush = isSplatter ? 2 : 1;
     const brushCanvas = isSplatter
         ? brushManager.createBrushTexture(brushSize, currentBrush)
         : (currentStrokeBrushCanvas || brushManager.createBrushTexture(brushSize, currentBrush));
 
-    // 3. 使用 WebGL 绘制（物理混色）
-    // useFalloff=true（软边）：保留渐变alpha + radialFalloff；false（硬边）：二值化alpha，无falloff
+    const dx = x - prevX;
+    const dy = y - prevY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const smearDir = dist > 0 ? { x: dx / dist, y: dy / dist } : { x: 0, y: 0 };
+
     const dirtyRect = painter.drawBrush(
         x,
         y,
-        brushSize * 2,  // WebGL 笔刷尺寸需要 *2
+        brushSize * 2,
         colorRGB,
         brushCanvas,
         isSoftBrush,
+        smearDir,
+        dist,
     );
 
-    // 4. 读取到 Canvas 2D（仅回读脏区，提升性能）
-    painter.readToCanvas2D(dirtyRect);
+    if (flush) painter.readToCanvas2D(dirtyRect);
+    return dirtyRect;
 }
 
 /**
@@ -1451,7 +1490,8 @@ function smudgeAlongPath(x1, y1, x2, y2) {
     if (!painter) return;
 
     const distance = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
-    const steps = Math.max(1, Math.floor(distance / 2));
+    const smudgeStep = Math.max(1, brushSize * 0.25 * smudgeSpacingRatio);
+    const steps = Math.max(1, Math.floor(distance / smudgeStep));
 
     // 累积所有步骤的脏区
     let unionRect = null;
@@ -1471,41 +1511,24 @@ function smudgeAlongPath(x1, y1, x2, y2) {
  */
 function smudgeAtPoint(x, y, dx, dy) {
     if (!painter) return;
-    
-    const ctx = mixCanvas.getContext('2d', { willReadFrequently: true });
+
     const radius = brushSize / 2;
-    
-    // 1. 采样起点颜色（当前位置的颜色）
-    const sourceColor = pickColor(Math.floor(x), Math.floor(y));
-    
-    // 2. 计算推移方向（单位化）
     const length = Math.sqrt(dx * dx + dy * dy);
     const dirX = length > 0 ? dx / length : 0;
     const dirY = length > 0 ? dy / length : 0;
-    
-    // 3. 计算目标位置（沿着方向推移）
-    const pushDistance = radius * (smudgeStrength / 100);  // 根据强度计算推移距离
+
+    // 采样当前位置的颜色
+    const sourceColor = pickColor(Math.floor(x), Math.floor(y));
+    const sourceRGB = hexToRgb(sourceColor);
+
+    // 沿方向推移到目标位置绘制
+    const pushDistance = radius * (smudgeStrength / 100);
     const targetX = x + dirX * pushDistance;
     const targetY = y + dirY * pushDistance;
-    
-    // 4. 采样目标位置的颜色
-    const targetColor = pickColor(Math.floor(targetX), Math.floor(targetY));
-    
-    // 5. 混合两个颜色
-    const sourceRGB = hexToRgb(sourceColor);
-    const targetRGB = hexToRgb(targetColor);
-    
-    // 6. 创建笔刷纹理
-    const brushCanvas = brushManager.createBrushTexture(brushSize, currentBrush);
-    
-    // 7. 在目标位置绘制混合后的颜色（返回脏区）
-    return painter.drawBrush(
-        targetX,
-        targetY,
-        brushSize * 2,
-        sourceRGB,
-        brushCanvas
-    );
+
+    // 用正常混色强度在目标位置绘制采样色（产生混合感）
+    const brushCanvas = currentStrokeBrushCanvas || brushManager.createBrushTexture(brushSize, currentBrush);
+    return painter.drawBrush(targetX, targetY, brushSize * 2, sourceRGB, brushCanvas);
 }
 
 // ============ 语言切换 ============

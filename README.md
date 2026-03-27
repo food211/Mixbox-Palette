@@ -24,13 +24,17 @@ Both engines produce realistic subtractive color mixing (e.g., yellow + blue = g
 To compare both engines side by side, try the [KM Tuner](https://food211.github.io/Mixbox-Palette/km-tuner.html) tool included in this repository.
 
 ### Realistic Mixing
-- **Adjustable paint concentration** (1-50%) - Control color opacity and blending strength
+- **Adjustable paint concentration** (1-100) - Smooth curve mapping for finer control at low values
 - **Brush size control** (2-50px)
-- **6 brush presets** - Circle, Soft, Watercolor, Splatter, Flat, Dry
-- **Smudge tool** - Blend colors directly on canvas
+- **6 brush presets** - Circle, Soft, Watercolor, Splatter, Flat, Dry; each tool remembers its last selected brush
+- **Smudge tool** - Blend colors directly on canvas, with independent strength parameter
+- **Right-click paint** - Right-click drag to paint with background color
 
 ### Tools & Shortcuts
 - **Eyedropper** - `Alt + Left Click` for foreground, `Alt + Right Click` for background
+- **Rect Select** - Select a region and transfer pixels to Photoshop active layer selection (useful for Mixer Brush sampling)
+- **Zoom control** - 60%–150% zoom via the top-right dropdown
+- **Focus indicator** - Blue bar at top when plugin captures keyboard focus
 - **Undo/Redo** - Up to 50 steps of history
 - **Auto-save** - Canvas, settings, and history automatically preserved
 - **Bidirectional color sync** - Colors sync both ways: plugin selections update Photoshop, and Photoshop color changes (color picker, swatches, X to swap, D to reset) update the plugin
@@ -89,6 +93,7 @@ The plugin loads from Cloudflare Pages (`mixbox-palette.pages.dev`) by default, 
 | `Alt` (hold) | Temporary eyedropper |
 | `Alt + Left Click` | Pick foreground color |
 | `Alt + Right Click` | Pick background color |
+| `Right Click` (drag) | Paint with background color |
 | `Esc` | Exit rectangle select |
 
 ## Tech Stack
@@ -137,10 +142,14 @@ Adobe Photoshop UXP 调色板插件，内置双混色引擎，模拟真实水彩
   - **Mixbox (MB)** - 默认引擎，基于 [Mixbox](https://scrtwpns.com/mixbox/) LUT 算法（CC BY-NC 4.0）
   - **KM** - 自研引擎，基于 Kubelka-Munk 物理公式，无外部依赖（GPL v3）
   - 切换引擎后画布会自动用笔画历史重绘，可使用 [KM Tuner](https://food211.github.io/Mixbox-Palette/km-tuner.html) 工具对比两种引擎的混色效果
-- **可调节颜料浓度** (1-50%)
-- **6 种笔刷预设** - 圆形、柔和、水彩、飞溅、平头、干笔
-- **涂抹工具** - 在画布上直接混合颜色
+- **可调节颜料浓度** (1-100)，低浓度区域平滑曲线映射，调节更细腻
+- **6 种笔刷预设** - 圆形、柔和、水彩、飞溅、平头、干笔；画笔和涂抹工具各自记忆上次使用的笔刷
+- **涂抹工具** - 在画布上直接混合颜色，独立强度参数
+- **右键绘制** - 右键拖拽使用背景色绘制
 - **吸管工具** - Alt + 左键/右键取色
+- **矩形选取传输至PS** - 框选混色区域自动传输到 Photoshop 活动图层的选区内，可配合混合器画笔使用
+- **缩放控制** - 右上角下拉菜单，60%–150%
+- **焦点指示条** - 插件捕获键盘焦点时顶部亮起蓝色指示条
 - **50 步撤销/重做**
 - **自动保存** - 画布、历史记录和设置自动保存
 - **双向颜色同步** - 插件选色自动同步到 Photoshop；反之，在 PS 中更改颜色（拾色器、色板、X 键交换、D 键复位）也会同步更新插件

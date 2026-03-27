@@ -55,13 +55,19 @@
             <div class="brush-size">
                 <label data-i18n="brushSize">Brush Size</label>
                 <input type="range" id="brushSize" min="2" max="50" value="15">
-                <span id="brushSizeValue">15</span>px
+                <span id="brushSizeValue">15</span><span class="unit">px</span>
             </div>
             <div class="brush-size">
                 <label id="mixLabel" data-i18n="paintConcentration">Concentration</label>
                 <input type="range" id="brushMix" min="1" max="100" value="77">
-                <span id="brushMixStrength">77</span>%
+                <span id="brushMixStrength">77</span><span class="unit">%</span>
             </div>
+            <div class="brush-size">
+                <label data-i18n="brushSpacing">Spacing</label>
+                <input type="range" id="brushSpacing" min="1" max="100" value="100">
+                <span id="brushSpacingValue">100</span><span class="unit">%</span>
+            </div>
+            <div class="controls-break"></div>
             <div class="brush-preview-group">
                 <span class="brush-label" data-i18n="brushLabel">Brush</span>
                 <div class="brush-preview-btn" id="brushPreviewBtn" data-i18n-title="selectBrush" title="Select Brush">
