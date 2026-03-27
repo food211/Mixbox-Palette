@@ -1,5 +1,14 @@
 # 更新日志 / Changelog
 
+== V1.1.9 ==
+[ZH]
+### 改进
+- **笔刷工具与涂抹工具重新设计** — 全面重新设计画笔和涂抹工具的交互体验，笔触更流畅自然，涂抹过渡更柔和
+
+[EN]
+### Improvements
+- **Brush and smudge tool redesign** — Completely redesigned the brush and smudge tool interaction for smoother, more natural strokes and softer smudge transitions
+
 == V1.1.8 ==
 [ZH]
 ### 修复
