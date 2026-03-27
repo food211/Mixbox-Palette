@@ -107,7 +107,7 @@ class MixboxWebGLPainter {
         }
         `;
         
-        // 片段着色器 - 使用官方Mixbox库，添加方向性混色
+        // 片段着色器 - 使用官方Mixbox库，低浓度时切换为涂抹模式
         const fsSource = `
         precision highp float;
 
@@ -123,14 +123,13 @@ class MixboxWebGLPainter {
         uniform float u_brushRadius;
         uniform float u_baseMixStrength;
         uniform float u_useFalloff;
+        uniform vec2 u_smearDir;
+        uniform float u_smearLen;
 
         ${mixbox.glsl()}
 
         void main() {
             vec4 brushSample = texture2D(u_brushTexture, v_texCoord);
-            // 硬边笔刷（useFalloff=0）：二值化 alpha，消除抗锯齿半透明噪声
-            // 软边笔刷（useFalloff=1）：保留渐变 alpha + radialFalloff
-            // 喷溅笔刷（useFalloff=2）：保留渐变 alpha（抗锯齿），无 radialFalloff
             float brushAlpha = u_useFalloff < 0.5
                 ? step(0.5, brushSample.a)
                 : brushSample.a;
@@ -148,15 +147,38 @@ class MixboxWebGLPainter {
                 ? 1.0 - smoothstep(0.0, u_brushRadius, distToCenter)
                 : 1.0;
 
-            float mixAmount = radialFalloff * brushAlpha * u_baseMixStrength;
-            
-            vec3 mixedColor = mixbox_lerp(
-                canvasColor.rgb,
-                u_brushColor.rgb,
-                mixAmount
-            );
-            
-            gl_FragColor = vec4(mixedColor, 1.0);
+            float aBrush = radialFalloff * brushAlpha;
+
+            // density: 0=纯涂抹, 1=纯上色。pow 映射让低浓度区间更灵敏
+            float density = u_baseMixStrength * u_baseMixStrength;
+
+            // 采样上游颜色（笔划来的方向）
+            float smearReach = clamp(u_smearLen, 1.0, u_brushRadius) * 0.8;
+            vec2 smearUV = (v_canvasCoord - u_smearDir * smearReach) / u_resolution;
+            smearUV.y = 1.0 - smearUV.y;
+            smearUV = clamp(smearUV, 0.0, 1.0);
+            vec4 smearSample = texture2D(u_canvasTexture, smearUV);
+
+            vec3 safeCanvasRGB = (canvasColor.a > 0.1) ? canvasColor.rgb : u_brushColor.rgb;
+            vec3 safeSmearRGB  = (smearSample.a > 0.1) ? smearSample.rgb : safeCanvasRGB;
+
+            // 涂抹目标色：当前位置与上游颜色的 mixbox 混合
+            vec3 smearTarget = mixbox_lerp(safeCanvasRGB, safeSmearRGB, aBrush * 0.6);
+
+            vec3 outRGB;
+            if (density > 0.98) {
+                // 高浓度：纯上色
+                outRGB = mixbox_lerp(canvasColor.rgb, u_brushColor.rgb, aBrush * u_baseMixStrength);
+            } else if (density < 0.01) {
+                // 极低浓度：纯涂抹，mixbox 混合上游色
+                outRGB = smearTarget;
+            } else {
+                // 中间值：上色和涂抹按 density 过渡
+                vec3 paintResult = mixbox_lerp(canvasColor.rgb, u_brushColor.rgb, aBrush * u_baseMixStrength);
+                outRGB = mixbox_lerp(smearTarget, paintResult, density);
+            }
+
+            gl_FragColor = vec4(outRGB, 1.0);
         }
         `;
         
@@ -178,6 +200,8 @@ class MixboxWebGLPainter {
             u_brushRadius: gl.getUniformLocation(this.program, 'u_brushRadius'),
             u_baseMixStrength: gl.getUniformLocation(this.program, 'u_baseMixStrength'),
             u_useFalloff: gl.getUniformLocation(this.program, 'u_useFalloff'),
+            u_smearDir: gl.getUniformLocation(this.program, 'u_smearDir'),
+            u_smearLen: gl.getUniformLocation(this.program, 'u_smearLen'),
         };
     }
     
@@ -315,7 +339,7 @@ class MixboxWebGLPainter {
      * 绘制笔触 (核心方法)
      * 返回脏区矩形 {x, y, w, h}，供 readToCanvas2D 局部回读
      */
-    drawBrush(x, y, size, colorRGB, brushCanvas, useFalloff = true) {
+    drawBrush(x, y, size, colorRGB, brushCanvas, useFalloff = true, smearDir = { x: 0, y: 0 }, smearLen = 0) {
         const gl = this.gl;
         const cw = this.canvas.width;
         const ch = this.canvas.height;
@@ -346,12 +370,6 @@ class MixboxWebGLPainter {
         // 全 viewport（保证顶点坐标→裁剪坐标的变换与 shader 中 canvasUV 计算一致）
         gl.viewport(0, 0, cw, ch);
 
-        // 清除纹理绑定
-        for (let i = 0; i < 8; i++) {
-            gl.activeTexture(gl.TEXTURE0 + i);
-            gl.bindTexture(gl.TEXTURE_2D, null);
-        }
-
         // 绑定纹理
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, this.textures.mixbox_lut);
@@ -372,6 +390,8 @@ class MixboxWebGLPainter {
         gl.uniform1f(this.locations.u_brushRadius, size / 2);
         gl.uniform1f(this.locations.u_baseMixStrength, this.baseMixStrength);
         gl.uniform1f(this.locations.u_useFalloff, +useFalloff);
+        gl.uniform2f(this.locations.u_smearDir, smearDir.x, smearDir.y);
+        gl.uniform1f(this.locations.u_smearLen, smearLen);
 
         // 更新几何体
         const positions = new Float32Array([
@@ -406,14 +426,6 @@ class MixboxWebGLPainter {
      * 交换双缓冲纹理
      */
     swapTextures() {
-        const gl = this.gl;
-        
-        // 清除所有纹理绑定
-        for (let i = 0; i < 8; i++) {
-            gl.activeTexture(gl.TEXTURE0 + i);
-            gl.bindTexture(gl.TEXTURE_2D, null);
-        }
-        
         // 交换引用
         const tempTex = this.textures.canvas;
         this.textures.canvas = this.textures.temp;

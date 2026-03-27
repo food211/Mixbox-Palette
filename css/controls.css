@@ -7,6 +7,11 @@
     gap: 8px;
 }
 
+.controls-break {
+    flex-basis: 100%;
+    height: 0;
+}
+
 .clear {
     background-color: #f44336;
     color: white;
@@ -22,7 +27,7 @@
 }
 
 #brushSizeValue, #brushMixStrength {
-    font-size: 11px;
+    font-size: 12px;
     color: #a0a0a0;
     min-width: 16px;
     display: inline-block;
@@ -45,8 +50,8 @@
     background-color: #3c3c3c;
 }
 
-.brush-size label + input + span + span {
-    font-size: 5px;
+.brush-size .unit {
+    font-size: 10px;
     color: #a0a0a0;
 }
 
