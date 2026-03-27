@@ -30,6 +30,7 @@ let smudgeStrength = 50;  // 涂抹强度 (0-100)
 let smudgeBrushSize = 15;  // 涂抹工具的笔刷大小
 let smudgeBrushType = 'watercolor';  // 涂抹工具的笔刷类型
 let savedBrushSettings = null;  // 临时保存笔刷设置（切换到涂抹工具时使用）
+let smudgeSnapshotCache = null;
 
 // 历史记录 - 基于路径记录
 let history = [];  // 存储操作记录
@@ -444,8 +445,14 @@ function bindEvents() {
     brushSpacingSlider.addEventListener('input', (e) => {
         const value = parseInt(e.target.value);
         brushSpacingValue.textContent = value;
-        brushSpacingRatio = value / 100;
-        saveBrushSettings();
+
+        if (currentTool === 'smudge') {
+            smudgeSpacingRatio = value / 100;  // ← 涂抹工具更新自己的变量
+            paletteStorage.saveAppSettings({ smudgeBrushSize, smudgeStrength, smudgeBrushType, smudgeSpacing: value });
+        } else {
+            brushSpacingRatio = value / 100;
+            saveBrushSettings();
+        }
     });
 
     // 清空按钮
@@ -874,8 +881,8 @@ function bindEvents() {
             isDrawing = true;
             strokeStarted = true;
 
-            // 开始新涂抹笔画，记录涂抹强度
-            beginStroke('smudge');
+            // 开始新涂抹笔画，落笔时采样一次颜色，整笔复用
+            beginStroke('smudge', null, x, y);
             currentStroke.smudgeStrength = smudgeStrength;
             addStrokePoint(x, y);
 
@@ -932,7 +939,12 @@ function bindEvents() {
             } else if (currentTool === 'smudge') {
                 // 涂抹工具模式
                 const distance = Math.sqrt(Math.pow(x - lastX, 2) + Math.pow(y - lastY, 2));
-                const smudgeMinDist = Math.max(1, brushSize * 0.25 * smudgeSpacingRatio);
+                const smudgeBaseSpacing = currentBrush.type === 'dry'
+                    ? brushSize * 0.15
+                    : currentBrush.type === 'splatter'
+                    ? brushSize * 0.3
+                    : brushSize * 0.25;
+                const smudgeMinDist = Math.max(1, smudgeBaseSpacing * smudgeSpacingRatio);
 
                 if (distance >= smudgeMinDist) {
                     // 记录路径点
@@ -1171,9 +1183,9 @@ function updateStatus(mode) {
 /**
  * 开始新笔画
  */
-function beginStroke(type, color = null) {
+function beginStroke(type, color = null, startX = 0, startY = 0) {
     currentStroke = {
-        type: type,  // 'brush', 'smudge', 'clear'
+        type: type,
         points: [],
         color: color,
         brushSize: brushSize,
@@ -1181,6 +1193,41 @@ function beginStroke(type, color = null) {
         mixStrength: painter ? painter.getMixStrength() : 0.5
     };
     currentStrokeBrushCanvas = brushManager.createBrushTexture(brushSize, currentBrush);
+
+    if (type === 'smudge') {
+        const r = Math.ceil(brushSize / 2);
+        const sx = Math.max(0, Math.floor(startX) - r);
+        const sy = Math.max(0, Math.floor(startY) - r);
+        const sw = Math.min(mixCanvas.width - sx, r * 2);
+        const sh = Math.min(mixCanvas.height - sy, r * 2);
+        const imageData = ctx.getImageData(sx, sy, sw, sh);
+        const localX = Math.floor(startX) - sx;
+        const localY = Math.floor(startY) - sy;
+        // 只存落笔点的颜色，不存整块数据
+        smudgeSnapshotCache = {
+            color: pickColorFromSnapshot(
+                { data: imageData.data, width: sw, height: sh },
+                localX, localY
+            ),
+            startX,
+            startY,
+        };
+        currentStroke.canvasSnapshot = smudgeSnapshotCache;
+    }
+}
+
+/**
+ * 从快照取色
+ */
+function pickColorFromSnapshot(snapshot, x, y) {
+    const ix = Math.max(0, Math.min(Math.floor(x), snapshot.width - 1));
+    const iy = Math.max(0, Math.min(Math.floor(y), snapshot.height - 1));
+    const idx = (iy * snapshot.width + ix) * 4;
+    return {
+        r: snapshot.data[idx] / 255,
+        g: snapshot.data[idx + 1] / 255,
+        b: snapshot.data[idx + 2] / 255,
+    };
 }
 
 /**
@@ -1207,6 +1254,7 @@ function endStroke() {
             historyStep++;
         }
 
+        smudgeSnapshotCache = null;
         currentStroke = null;
         updateHistoryButtons();
 
@@ -1331,8 +1379,8 @@ function replaySmudgeStroke(stroke) {
         // 每次涂抹前先同步到 2D canvas，以便正确取色
         painter.readToCanvas2D();
 
-        // 执行涂抹段
-        replaySmudgeSegment(prev.x, prev.y, curr.x, curr.y, stroke.brushSize, stroke.brushType, stroke.smudgeStrength);
+        // 执行涂抹段（使用落笔时记录的初始颜色）
+        replaySmudgeSegment(prev.x, prev.y, curr.x, curr.y, stroke.brushSize, stroke.brushType, stroke.smudgeStrength, stroke.smudgeSourceColor);
     }
 
     painter.setMixStrength(savedMixStrength);
@@ -1341,7 +1389,7 @@ function replaySmudgeStroke(stroke) {
 /**
  * 重放涂抹段
  */
-function replaySmudgeSegment(x1, y1, x2, y2, size, brushType, strength) {
+function replaySmudgeSegment(x1, y1, x2, y2, size, brushType, strength, sourceRGB = null) {
     const distance = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
     const steps = Math.max(1, Math.floor(distance / 2));
 
@@ -1362,9 +1410,8 @@ function replaySmudgeSegment(x1, y1, x2, y2, size, brushType, strength) {
         const x = x1 + (x2 - x1) * ratio;
         const y = y1 + (y2 - y1) * ratio;
 
-        // 采样当前位置颜色（从已混色的画布上取色）
-        const sourceColor = pickColor(Math.floor(x), Math.floor(y));
-        const sourceRGB = hexToRgb(sourceColor);
+        // 用传入的初始颜色，避免逐步重采样导致颜色无限传递
+        const rgb = sourceRGB || hexToRgb(pickColor(Math.floor(x), Math.floor(y)));
 
         // 计算目标位置（使用记录的涂抹强度）
         const pushDistance = (size / 2) * (strength / 100);
@@ -1372,7 +1419,7 @@ function replaySmudgeSegment(x1, y1, x2, y2, size, brushType, strength) {
         const targetY = y + dirY * pushDistance;
 
         // 绘制到目标位置（会与画布上已有颜色混色）
-        const r = painter.drawBrush(targetX, targetY, size * 2, sourceRGB, brushCanvas);
+        const r = painter.drawBrush(targetX, targetY, size * 2, rgb, brushCanvas, true, { x: 0, y: 0 }, 0, true);
 
         // 每次绘制后同步到 2D canvas，以便下一次取色正确（局部回读）
         painter.readToCanvas2D(r);
@@ -1490,7 +1537,12 @@ function smudgeAlongPath(x1, y1, x2, y2) {
     if (!painter) return;
 
     const distance = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
-    const smudgeStep = Math.max(1, brushSize * 0.25 * smudgeSpacingRatio);
+    const smudgeBaseSpacing = currentBrush.type === 'dry'
+        ? brushSize * 0.15
+        : currentBrush.type === 'splatter'
+        ? brushSize * 0.3
+        : brushSize * 0.25;
+    const smudgeStep = Math.max(1, smudgeBaseSpacing * smudgeSpacingRatio);
     const steps = Math.max(1, Math.floor(distance / smudgeStep));
 
     // 累积所有步骤的脏区
@@ -1512,23 +1564,43 @@ function smudgeAlongPath(x1, y1, x2, y2) {
 function smudgeAtPoint(x, y, dx, dy) {
     if (!painter) return;
 
-    const radius = brushSize / 2;
+    const snapshot = currentStroke?.canvasSnapshot;
+    if (!snapshot) return;
+
+    const distFromStart = Math.sqrt(
+        (x - snapshot.startX) ** 2 + (y - snapshot.startY) ** 2
+    );
+
+    const maxPushDistance = (brushSize / 2) * (smudgeStrength / 100) * 5;
+    if (distFromStart > maxPushDistance) return;  // 超出就停
+
+    // 越接近边界越淡
+    const alpha = 1 - distFromStart / maxPushDistance;
+    const baseStrength = mixSliderToStrength(smudgeStrength);
+
     const length = Math.sqrt(dx * dx + dy * dy);
     const dirX = length > 0 ? dx / length : 0;
     const dirY = length > 0 ? dy / length : 0;
 
-    // 采样当前位置的颜色
-    const sourceColor = pickColor(Math.floor(x), Math.floor(y));
-    const sourceRGB = hexToRgb(sourceColor);
+    const brushCanvas = currentStrokeBrushCanvas
+        || brushManager.createBrushTexture(brushSize, currentBrush);
 
-    // 沿方向推移到目标位置绘制
-    const pushDistance = radius * (smudgeStrength / 100);
-    const targetX = x + dirX * pushDistance;
-    const targetY = y + dirY * pushDistance;
+    painter.setMixStrength(baseStrength * alpha);
 
-    // 用正常混色强度在目标位置绘制采样色（产生混合感）
-    const brushCanvas = currentStrokeBrushCanvas || brushManager.createBrushTexture(brushSize, currentBrush);
-    return painter.drawBrush(targetX, targetY, brushSize * 2, sourceRGB, brushCanvas);
+    const result = painter.drawBrush(
+        x, y,
+        brushSize * 2,
+        snapshot.color,
+        brushCanvas,
+        true,
+        { x: dirX, y: dirY },
+        0,
+        true,
+        alpha //距离衰减值，越远越小
+    );
+
+    painter.setMixStrength(baseStrength);
+    return result;
 }
 
 // ============ 语言切换 ============

@@ -83,6 +83,7 @@ class KMWebGLPainter {
         varying vec2 v_canvasCoord;
 
         uniform vec2 u_resolution;
+        uniform float u_smudgeAlpha;
 
         void main() {
             vec2 clipSpace = (a_position / u_resolution) * 2.0 - 1.0;
@@ -110,6 +111,8 @@ class KMWebGLPainter {
         uniform float u_useFalloff;
         uniform vec2 u_smearDir;
         uniform float u_smearLen;
+        uniform float u_disableSmear;
+        uniform float u_smudgeAlpha;
 
         // XYZ→RGB 矩阵（列优先）
         const mat3 XYZ_TO_RGB = mat3(
@@ -283,35 +286,40 @@ class KMWebGLPainter {
                 : 1.0;
 
             float aBrush = radialFalloff * brushAlpha;
-            float density = u_baseMixStrength * u_baseMixStrength;
-
-            // 采样上游颜色（笔划来的方向）
-            float smearReach = clamp(u_smearLen, 1.0, u_brushRadius) * 0.8;
-            vec2 smearUV = (v_canvasCoord - u_smearDir * smearReach) / u_resolution;
-            smearUV.y = 1.0 - smearUV.y;
-            smearUV = clamp(smearUV, 0.0, 1.0);
-            vec4 smearSample = texture2D(u_canvasTexture, smearUV);
-
-            vec3 safeCanvasRGB = (canvasColor.a > 0.1) ? canvasColor.rgb : u_brushColor.rgb;
-            vec3 safeSmearRGB  = (smearSample.a > 0.1) ? smearSample.rgb : safeCanvasRGB;
-
-            vec3 smearTarget = km_mix(safeCanvasRGB, safeSmearRGB, aBrush * 0.6);
 
             vec3 finalColor;
-            if (density > 0.98) {
-                // 高浓度：纯上色
-                float edgeWeight = clamp(aBrush * u_baseMixStrength, 0.0, 1.0);
-                vec3 mixedColor = km_mix(canvasColor.rgb, u_brushColor.rgb, clamp(u_baseMixStrength, 0.0, 1.0));
-                finalColor = mix(canvasColor.rgb, mixedColor, edgeWeight / max(u_baseMixStrength, 0.001));
-            } else if (density < 0.01) {
-                // 极低浓度：纯涂抹
-                finalColor = smearTarget;
+            if (u_disableSmear > 0.5) {
+                // 涂抹工具模式：强度只控制推移距离
+                float edgeWeight = clamp(aBrush * u_smudgeAlpha, 0.0, 1.0);
+                vec3 mixedColor = km_mix(canvasColor.rgb, u_brushColor.rgb, u_smudgeAlpha * 0.5);
+                finalColor = mix(canvasColor.rgb, mixedColor, edgeWeight);
             } else {
-                // 中间值：上色和涂抹按 density 过渡
-                float edgeWeight = clamp(aBrush * u_baseMixStrength, 0.0, 1.0);
-                vec3 mixedColor = km_mix(canvasColor.rgb, u_brushColor.rgb, clamp(u_baseMixStrength, 0.0, 1.0));
-                vec3 paintResult = mix(canvasColor.rgb, mixedColor, edgeWeight / max(u_baseMixStrength, 0.001));
-                finalColor = mix(smearTarget, paintResult, density);
+                float density = u_baseMixStrength * u_baseMixStrength;
+
+                // 采样上游颜色（笔划来的方向）
+                float smearReach = clamp(u_smearLen, 1.0, u_brushRadius) * 0.8;
+                vec2 smearUV = (v_canvasCoord - u_smearDir * smearReach) / u_resolution;
+                smearUV.y = 1.0 - smearUV.y;
+                smearUV = clamp(smearUV, 0.0, 1.0);
+                vec4 smearSample = texture2D(u_canvasTexture, smearUV);
+
+                vec3 safeCanvasRGB = (canvasColor.a > 0.1) ? canvasColor.rgb : u_brushColor.rgb;
+                vec3 safeSmearRGB  = (smearSample.a > 0.1) ? smearSample.rgb : safeCanvasRGB;
+
+                vec3 smearTarget = km_mix(safeCanvasRGB, safeSmearRGB, aBrush * 0.6);
+
+                if (density > 0.98) {
+                    float edgeWeight = clamp(aBrush * u_baseMixStrength, 0.0, 1.0);
+                    vec3 mixedColor = km_mix(canvasColor.rgb, u_brushColor.rgb, clamp(u_baseMixStrength, 0.0, 1.0));
+                    finalColor = mix(canvasColor.rgb, mixedColor, edgeWeight / max(u_baseMixStrength, 0.001));
+                } else if (density < 0.01) {
+                    finalColor = smearTarget;
+                } else {
+                    float edgeWeight = clamp(aBrush * u_baseMixStrength, 0.0, 1.0);
+                    vec3 mixedColor = km_mix(canvasColor.rgb, u_brushColor.rgb, clamp(u_baseMixStrength, 0.0, 1.0));
+                    vec3 paintResult = mix(canvasColor.rgb, mixedColor, edgeWeight / max(u_baseMixStrength, 0.001));
+                    finalColor = mix(smearTarget, paintResult, density);
+                }
             }
 
             gl_FragColor = vec4(clamp(finalColor, 0.0, 1.0), 1.0);
@@ -336,6 +344,8 @@ class KMWebGLPainter {
             u_useFalloff:      gl.getUniformLocation(this.program, 'u_useFalloff'),
             u_smearDir:        gl.getUniformLocation(this.program, 'u_smearDir'),
             u_smearLen:        gl.getUniformLocation(this.program, 'u_smearLen'),
+            u_disableSmear:    gl.getUniformLocation(this.program, 'u_disableSmear'),
+            u_smudgeAlpha: gl.getUniformLocation(this.program, 'u_smudgeAlpha'),
         };
     }
 
@@ -638,7 +648,7 @@ class KMWebGLPainter {
         gl.bufferData(gl.ARRAY_BUFFER, texCoords, gl.STATIC_DRAW);
     }
 
-    drawBrush(x, y, size, colorRGB, brushCanvas, useFalloff = true, smearDir = { x: 0, y: 0 }, smearLen = 0) {
+    drawBrush(x, y, size, colorRGB, brushCanvas, useFalloff = true, smearDir = { x: 0, y: 0 }, smearLen = 0, disableSmear = false, smudgeAlpha = 1.0) {
         const gl = this.gl;
         const cw = this.canvas.width;
         const ch = this.canvas.height;
@@ -684,6 +694,8 @@ class KMWebGLPainter {
         gl.uniform1f(this.locations.u_useFalloff, +useFalloff);
         gl.uniform2f(this.locations.u_smearDir, smearDir.x, smearDir.y);
         gl.uniform1f(this.locations.u_smearLen, smearLen);
+        gl.uniform1f(this.locations.u_disableSmear, disableSmear ? 1.0 : 0.0);
+        gl.uniform1f(this.locations.u_smudgeAlpha, smudgeAlpha);
 
         const positions = new Float32Array([
             x-halfSize, y-halfSize,
