@@ -16,6 +16,7 @@ body {
     flex-direction: column;
     align-items: center;
     min-height: 100vh;
+    touch-action: none;
     overflow-y: auto;
 }
 

@@ -27,6 +27,7 @@ let rectSelectStart = null;  // { x, y }
 // 工具模式
 let currentTool = 'brush';  // 'brush' 或 'smudge'
 let smudgeStrength = 50;  // 涂抹强度 (0-100)
+let pressureEnabled = false;  // 压感开关
 let smudgeBrushSize = 15;  // 涂抹工具的笔刷大小
 let smudgeBrushType = 'watercolor';  // 涂抹工具的笔刷类型
 let savedBrushSettings = null;  // 临时保存笔刷设置（切换到涂抹工具时使用）
@@ -161,6 +162,7 @@ async function initApp() {
             if (brushSpacingSlider) brushSpacingSlider.value = savedBrushSettings.brushSpacing;
             if (brushSpacingValue) brushSpacingValue.textContent = savedBrushSettings.brushSpacing;
         }
+        syncAllRangeThumbs();
         console.log('✅ 已加载保存的笔刷设置');
     }
 
@@ -177,6 +179,7 @@ async function initApp() {
         if (savedAppSettings.smudgeBrushSize != null) smudgeBrushSize = savedAppSettings.smudgeBrushSize;
         if (savedAppSettings.smudgeStrength != null) smudgeStrength = savedAppSettings.smudgeStrength;
         if (savedAppSettings.smudgeBrushType) smudgeBrushType = savedAppSettings.smudgeBrushType;
+        if (savedAppSettings.pressureEnabled != null) pressureEnabled = savedAppSettings.pressureEnabled;
         console.log('✅ 已加载保存的应用设置');
     }
 
@@ -193,6 +196,7 @@ async function initApp() {
 
     // 7. 绑定事件
     bindEvents();
+    initCustomRanges();
     
     // 8. 初始化调色板下拉菜单
     initPaletteDropdown();
@@ -419,6 +423,61 @@ function updateColorPicker() {
 /**
  * 绑定事件
  */
+/**
+ * 初始化自定义滑条，用 pointer events 接管拖动，绕开 Windows Ink 延迟
+ */
+function syncAllRangeThumbs() {
+    [brushSizeInput, brushMixSlider, brushSpacingSlider].forEach(input => {
+        if (input) input.dispatchEvent(new Event('sync-thumb'));
+    });
+}
+
+function initCustomRanges() {
+    document.querySelectorAll('.custom-range').forEach(track => {
+        const input = document.getElementById(track.dataset.for);
+        if (!input) return;
+
+        const min = parseFloat(input.min);
+        const max = parseFloat(input.max);
+
+        function updateFromPointer(e) {
+            const rect = track.getBoundingClientRect();
+            const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+            const value = Math.round(min + ratio * (max - min));
+            if (parseInt(input.value) !== value) {
+                input.value = value;
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+            // 更新滑块位置
+            track.style.setProperty('--thumb-pos', (ratio * 100) + '%');
+        }
+
+        function syncThumb() {
+            const ratio = (parseFloat(input.value) - min) / (max - min);
+            track.style.setProperty('--thumb-pos', (ratio * 100) + '%');
+        }
+
+        // 初始同步位置
+        syncThumb();
+        // input 值被外部代码改变时同步
+        input.addEventListener('sync-thumb', syncThumb);
+
+        track.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            track.setPointerCapture(e.pointerId);
+            track.classList.add('dragging');
+            updateFromPointer(e);
+        });
+        track.addEventListener('pointermove', (e) => {
+            if (!track.hasPointerCapture(e.pointerId)) return;
+            updateFromPointer(e);
+        });
+        track.addEventListener('pointerup', () => {
+            track.classList.remove('dragging');
+        });
+    });
+}
+
 function bindEvents() {
 
     // 笔刷大小控制
@@ -477,6 +536,14 @@ function bindEvents() {
     redoBtn.addEventListener('click', redo);
     
     // 涂抹工具按钮
+    const pressureBtn = document.getElementById('pressureBtn');
+    pressureBtn.classList.toggle('active', pressureEnabled);
+    pressureBtn.addEventListener('click', () => {
+        pressureEnabled = !pressureEnabled;
+        pressureBtn.classList.toggle('active', pressureEnabled);
+        paletteStorage.saveAppSettings({ smudgeBrushSize, smudgeStrength, smudgeBrushType, pressureEnabled });
+    });
+
     const smudgeBtn = document.getElementById('smudgeBtn');
     smudgeBtn.addEventListener('click', () => {
         if (currentTool === 'brush') {
@@ -512,6 +579,7 @@ function bindEvents() {
             if (painter) painter.setMixStrength(mixSliderToStrength(smudgeStrength));
             brushSpacingSlider.value = Math.round(smudgeSpacingRatio * 100);
             brushSpacingValue.textContent = Math.round(smudgeSpacingRatio * 100);
+            syncAllRangeThumbs();
             console.log('✅ 切换到涂抹工具');
         } else {
             // 切换回笔刷工具：保存涂抹工具设置
@@ -541,6 +609,7 @@ function bindEvents() {
                     brushSpacingValue.textContent = savedBrushSettings.brushSpacing;
                 }
             }
+            syncAllRangeThumbs();
             console.log('✅ 切换回笔刷工具');
         }
     });
@@ -827,10 +896,11 @@ function bindEvents() {
     let lastX = 0;
     let lastY = 0;
 
-    mixCanvas.addEventListener('mousedown', (e) => {
+    mixCanvas.addEventListener('pointerdown', (e) => {
         const rect = mixCanvas.getBoundingClientRect();
         const x = (e.clientX - rect.left) * (mixCanvas.width / rect.width);
         const y = (e.clientY - rect.top) * (mixCanvas.height / rect.height);
+        const pressure = (pressureEnabled && e.pointerType === 'pen') ? (e.pressure > 0 ? e.pressure : 1.0) : 1.0;
 
         if (isEyedropperMode) {
             // 吸管模式下阻止默认行为，但不立即取色
@@ -849,7 +919,7 @@ function bindEvents() {
             const strokeColor = e.button === 2 ? backgroundColor : currentBrushColor;
 
             // 开始新笔画
-            beginStroke('brush', strokeColor);
+            beginStroke('brush', strokeColor, x, y, pressure);
 
             // 检查是否需要插值（连续点击场景）
             if (lastX !== 0 || lastY !== 0) {  // 不是第一次点击
@@ -865,17 +935,17 @@ function bindEvents() {
                         const ratio = i / steps;
                         const interpX = lastX + (x - lastX) * ratio;
                         const interpY = lastY + (y - lastY) * ratio;
-                        drawBrush(interpX, interpY, strokeColor);
+                        drawBrush(interpX, interpY, strokeColor, true, interpX, interpY, pressure);
                         addStrokePoint(interpX, interpY);
                     }
                 } else {
                     // 距离太远或太近，直接绘制
-                    drawBrush(x, y, strokeColor);
+                    drawBrush(x, y, strokeColor, true, x, y, pressure);
                     addStrokePoint(x, y);
                 }
             } else {
                 // 第一次点击，直接绘制
-                drawBrush(x, y, strokeColor);
+                drawBrush(x, y, strokeColor, true, x, y, pressure);
                 addStrokePoint(x, y);
             }
 
@@ -896,11 +966,12 @@ function bindEvents() {
         }
     });
     
-    mixCanvas.addEventListener('mousemove', (e) => {
+    mixCanvas.addEventListener('pointermove', (e) => {
         if (isDrawing && !isEyedropperMode) {
             const rect = mixCanvas.getBoundingClientRect();
             const x = (e.clientX - rect.left) * (mixCanvas.width / rect.width);
             const y = (e.clientY - rect.top) * (mixCanvas.height / rect.height);
+            const pressure = (pressureEnabled && e.pointerType === 'pen') ? (e.pressure > 0 ? e.pressure : 1.0) : 1.0;
 
             if (currentTool === 'brush') {
                 // 笔刷工具模式
@@ -926,13 +997,13 @@ function bindEvents() {
                             const ratio = i / steps;
                             const interpX = lastX + (x - lastX) * ratio;
                             const interpY = lastY + (y - lastY) * ratio;
-                            const r = drawBrush(interpX, interpY, activeColor, false, prevIX, prevIY);
+                            const r = drawBrush(interpX, interpY, activeColor, false, prevIX, prevIY, pressure);
                             if (r) unionRect = unionRect ? unionDirtyRect(unionRect, r) : r;
                             addStrokePoint(interpX, interpY);
                             prevIX = interpX; prevIY = interpY;
                         }
                     } else {
-                        const r = drawBrush(x, y, activeColor, false, lastX, lastY);
+                        const r = drawBrush(x, y, activeColor, false, lastX, lastY, pressure);
                         unionRect = r;
                         addStrokePoint(x, y);
                     }
@@ -965,7 +1036,7 @@ function bindEvents() {
         }
     });
     
-    mixCanvas.addEventListener('mouseup', (e) => {
+    mixCanvas.addEventListener('pointerup', (e) => {
         // 吸管模式：在松开鼠标时取色
         if (isEyedropperMode) {
             const rect = mixCanvas.getBoundingClientRect();
@@ -1004,7 +1075,7 @@ function bindEvents() {
         }
     });
 
-    mixCanvas.addEventListener('mouseleave', () => {
+    mixCanvas.addEventListener('pointerleave', () => {
         if (isDrawing && strokeStarted) {
             isDrawing = false;
             strokeStarted = false;
@@ -1016,6 +1087,18 @@ function bindEvents() {
     mixCanvas.addEventListener('contextmenu', (e) => {
         e.preventDefault();
     });
+
+    // 阻止全局右键菜单，防止数位板笔长按触发 Windows Ink 菜单造成卡顿
+    document.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+    });
+
+    // 非 mixCanvas 区域：pen 输入交给系统当鼠标处理，避免 Windows Ink 延迟
+    document.addEventListener('pointerdown', (e) => {
+        if (e.pointerType === 'pen' && e.target !== mixCanvas) {
+            e.target.releasePointerCapture(e.pointerId);
+        }
+    }, true);
 
     mixCanvas.classList.add('brush');
 }
@@ -1188,7 +1271,8 @@ function updateStatus(mode) {
 /**
  * 开始新笔画
  */
-function beginStroke(type, color = null, startX = 0, startY = 0) {
+function beginStroke(type, color = null, startX = 0, startY = 0, pressure = 1.0) {
+    const effectiveSize = Math.max(brushSize * 0.01, brushSize * pressure);
     currentStroke = {
         type: type,
         points: [],
@@ -1197,7 +1281,7 @@ function beginStroke(type, color = null, startX = 0, startY = 0) {
         brushType: currentBrush.type,
         mixStrength: painter ? painter.getMixStrength() : 0.5
     };
-    currentStrokeBrushCanvas = brushManager.createBrushTexture(brushSize, currentBrush);
+    currentStrokeBrushCanvas = brushManager.createBrushTexture(effectiveSize, currentBrush);
 
     if (type === 'smudge') {
         const r = Math.ceil(brushSize / 2);
@@ -1506,16 +1590,23 @@ function unionDirtyRect(a, b) {
 /**
  * 绘制笔刷
  */
-function drawBrush(x, y, color, flush = true, prevX = x, prevY = y) {
+function drawBrush(x, y, color, flush = true, prevX = x, prevY = y, pressure = 1.0) {
     if (!color || !painter) return null;
 
     const colorRGB = hexToRgb(color);
 
+    // 压感映射：1% ~ 100% 的笔刷大小；鼠标传入 1.0 保持满大小
+    const effectiveSize = Math.max(brushSize * 0.01, brushSize * pressure);
+
     const isSplatter = currentBrush.type === 'splatter';
-    const isSoftBrush = isSplatter ? 2 : 1;
+    const isCircle = currentBrush.type === 'circle';
+    const isWatercolor = currentBrush.type === 'watercolor';
+    // 0=硬边, 1=径向渐变衰减, 2=无衰减(纹理自身决定形状)
+    const isSoftBrush = isSplatter ? 2 : isCircle ? 0 : isWatercolor ? 2 : 1;
+    // splatter 每步随机，其余笔刷复用落笔时生成的纹理
     const brushCanvas = isSplatter
-        ? brushManager.createBrushTexture(brushSize, currentBrush)
-        : (currentStrokeBrushCanvas || brushManager.createBrushTexture(brushSize, currentBrush));
+        ? brushManager.createBrushTexture(effectiveSize, currentBrush)
+        : (currentStrokeBrushCanvas || brushManager.createBrushTexture(effectiveSize, currentBrush));
 
     const dx = x - prevX;
     const dy = y - prevY;
@@ -1525,7 +1616,7 @@ function drawBrush(x, y, color, flush = true, prevX = x, prevY = y) {
     const dirtyRect = painter.drawBrush(
         x,
         y,
-        brushSize * 2,
+        effectiveSize * 2,
         colorRGB,
         brushCanvas,
         isSoftBrush,

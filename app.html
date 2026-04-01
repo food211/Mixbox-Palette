@@ -54,17 +54,27 @@
             <button id="clearBtn" class="clear" data-i18n="clear">Clear</button>
             <div class="brush-size">
                 <label data-i18n="brushSize">Brush Size</label>
-                <input type="range" id="brushSize" min="2" max="50" value="15">
+                <div class="custom-range-wrap">
+                    <input type="range" id="brushSize" min="2" max="50" value="15">
+                    <div class="custom-range" data-for="brushSize"></div>
+                </div>
                 <span id="brushSizeValue">15</span><span class="unit">px</span>
+                <button id="pressureBtn" class="pressure-btn" title="Pressure Sensitivity">✏</button>
             </div>
             <div class="brush-size">
                 <label id="mixLabel" data-i18n="paintConcentration">Concentration</label>
-                <input type="range" id="brushMix" min="1" max="100" value="77">
+                <div class="custom-range-wrap">
+                    <input type="range" id="brushMix" min="1" max="100" value="77">
+                    <div class="custom-range" data-for="brushMix"></div>
+                </div>
                 <span id="brushMixStrength">77</span><span class="unit">%</span>
             </div>
             <div class="brush-size">
                 <label data-i18n="brushSpacing">Spacing</label>
-                <input type="range" id="brushSpacing" min="1" max="100" value="100">
+                <div class="custom-range-wrap">
+                    <input type="range" id="brushSpacing" min="1" max="100" value="100">
+                    <div class="custom-range" data-for="brushSpacing"></div>
+                </div>
                 <span id="brushSpacingValue">100</span><span class="unit">%</span>
             </div>
             <div class="controls-break"></div>
