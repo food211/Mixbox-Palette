@@ -173,6 +173,22 @@ Adobe Photoshop UXP 调色板插件，内置双混色引擎，模拟真实水彩
 3. 加载 `uxp-host/` 目录（注意不是根目录）
 4. 从 Photoshop `插件` 菜单打开
 
+## 快捷键
+
+| 按键 | 功能 |
+|------|------|
+| `B` | 画笔工具 |
+| `S` | 涂抹工具 |
+| `I` | 吸管工具 |
+| `M` | 矩形选取 |
+| `X` | 交换前景/背景色 |
+| `Shift`（按住）| 临时切换为涂抹工具 |
+| `Alt`（按住）| 临时切换为吸管工具 |
+| `Alt + 左键` | 取色为前景色 |
+| `Alt + 右键` | 取色为背景色 |
+| `右键`（拖拽）| 使用背景色绘制 |
+| `Esc` | 退出矩形选取 |
+
 ## 架构说明
 
 插件采用 **WebView 混合架构**：远端（Cloudflare Pages / GitHub Pages）承载完整 UI 和混色引擎，本地 UXP Host 仅负责加载 WebView 和同步颜色到 Photoshop。支持双源自动切换（Cloudflare 优先，GitHub Pages 备用），首次加载后通过 Service Worker 支持离线使用。
