@@ -53,15 +53,27 @@ function initZoomControl() {
         zoomDropdown.classList.remove('show');
     });
 
+    // 窗口大小变化时重新计算容器宽度
+    window.addEventListener('resize', () => {
+        applyZoom(currentZoom);
+    });
+
     function applyZoom(zoom) {
         container.style.transform = `scale(${zoom})`;
         container.style.transformOrigin = 'top center';
         zoomBtn.textContent = `${Math.round(zoom * 100)}%`;
 
-        // 调整 body 的 padding，防止缩放后内容被裁剪
-        if (zoom < 1) {
+        // 缩放 > 1 时，缩小容器实际宽度，使 scale 后不超出窗口
+        if (zoom > 1) {
+            const availableWidth = document.documentElement.clientWidth - 24; // 减去 body padding
+            const adjustedMax = Math.floor(availableWidth / zoom);
+            container.style.maxWidth = `${adjustedMax}px`;
+            document.body.style.padding = '0 12px 12px';
+        } else if (zoom < 1) {
+            container.style.maxWidth = '710px';
             document.body.style.padding = '0 10px 10px';
         } else {
+            container.style.maxWidth = '710px';
             document.body.style.padding = '0 12px 12px';
         }
     }
