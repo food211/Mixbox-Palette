@@ -185,6 +185,12 @@
     // 初始化应用
     async function loadAppScripts() {
         try {
+            // 等待 SW 就绪，确保后续资源请求都能被缓存拦截
+            if ('serviceWorker' in navigator) {
+                await navigator.serviceWorker.ready;
+                console.log('✅ Service Worker 就绪');
+            }
+
             // 首先加载 i18n
             await loadScript('js/i18n.js');
 
