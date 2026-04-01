@@ -146,23 +146,41 @@ class BrushManager {
                     ctx.fillRect(0, 0, size * 2, size * 2);
                     break;
                     
-                case 'watercolor':
-                    // 主圆
-                    ctx.globalAlpha = 0.8;
-                    ctx.beginPath();
-                    ctx.arc(centerX, centerY, size * 0.8, 0, Math.PI * 2);
-                    ctx.fill();
-                    // 边缘扩散
-                    ctx.globalAlpha = 0.3;
-                    for (let i = 0; i < 5; i++) {
-                        const angle = (Math.PI * 2 * i) / 5;
-                        const dist = size * 0.5;
+                case 'watercolor': {
+                    // 边缘堆积水彩：逐像素环形 alpha，中心柔和、边缘堆积
+                    const wcData = ctx.createImageData(size * 2, size * 2);
+                    const wd = wcData.data;
+                    for (let py = 0; py < size * 2; py++) {
+                        for (let px = 0; px < size * 2; px++) {
+                            const dx = px - centerX;
+                            const dy = py - centerY;
+                            const dist = Math.sqrt(dx * dx + dy * dy) / (size * 0.92);
+                            if (dist > 1) continue;
+                            // 中心平缓（smoothstep），边缘快速堆积后收边
+                            const t = dist < 0.7
+                                ? dist * dist * (3 - 2 * dist) / (0.7 * 0.7 * (3 - 2 * 0.7))  // smoothstep 归一化到 0→1
+                                : (1 - dist) / 0.3;  // 边缘快速收边
+                            const alpha = 0.04 + t * t * 0.96;
+                            const idx = (py * size * 2 + px) * 4;
+                            wd[idx + 3] = Math.round(alpha * 255);
+                        }
+                    }
+                    ctx.putImageData(wcData, 0, 0);
+                    // 极少量边缘毛边，只贴在最外圈，不进入中间区域
+                    ctx.fillStyle = '#000';
+                    const edgeCount = 8;
+                    for (let i = 0; i < edgeCount; i++) {
+                        const angle = (Math.PI * 2 * i) / edgeCount + (i % 3) * 0.25;
+                        const r = size * (0.88 + (i % 3) * 0.015);
+                        const blobSize = size * 0.04;
+                        ctx.globalAlpha = 0.4 + (i % 2) * 0.2;
                         ctx.beginPath();
-                        ctx.arc(centerX + Math.cos(angle) * dist, centerY + Math.sin(angle) * dist, size * 0.4, 0, Math.PI * 2);
+                        ctx.arc(centerX + Math.cos(angle) * r, centerY + Math.sin(angle) * r, blobSize, 0, Math.PI * 2);
                         ctx.fill();
                     }
                     ctx.globalAlpha = 1;
                     break;
+                }
                     
                 case 'splatter': {
                     // 第一步：在离屏 canvas 上画散落圆点
@@ -218,9 +236,10 @@ class BrushManager {
                     
                 case 'dry':
                     ctx.globalAlpha = 0.8;
-                    for (let i = 0; i < 40; i++) {
+                    for (let i = 0; i < 60; i++) {
                         const angle = Math.random() * Math.PI * 2;
-                        const dist = Math.random() * size * 0.85;
+                        // 平方根分布让点向中心集中，减少中间空洞感
+                        const dist = Math.sqrt(Math.random()) * size * 0.85;
                         const dotSize = size * (0.03 + Math.random() * 0.07);
                         ctx.beginPath();
                         ctx.arc(centerX + Math.cos(angle) * dist, centerY + Math.sin(angle) * dist, dotSize, 0, Math.PI * 2);

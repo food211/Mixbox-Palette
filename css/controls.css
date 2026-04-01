@@ -45,14 +45,97 @@
     color: #ffffff;
 }
 
-.brush-size input[type="range"] {
+.custom-range-wrap {
+    position: relative;
     width: 50px;
-    background-color: #3c3c3c;
+    height: 18px;
+    display: flex;
+    align-items: center;
+}
+
+.brush-size input[type="range"] {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+    width: 100%;
+}
+
+.custom-range {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    touch-action: none;
+}
+
+/* 轨道：已填充部分蓝色，未填充部分深灰 */
+.custom-range::before {
+    content: '';
+    display: block;
+    width: 100%;
+    height: 3px;
+    border-radius: 2px;
+    background: linear-gradient(
+        to right,
+        #2196F3 var(--thumb-pos, 50%),
+        #484848 var(--thumb-pos, 50%)
+    );
+}
+
+/* 滑块 */
+.custom-range::after {
+    content: '';
+    position: absolute;
+    width: 11px;
+    height: 11px;
+    background: #ccc;
+    border-radius: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    left: var(--thumb-pos, 50%);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+    transition: background 0.1s, transform 0.1s;
+}
+
+.custom-range:hover::after {
+    background: #fff;
+}
+
+.custom-range.dragging::after {
+    background: #2196F3;
+    transform: translate(-50%, -50%) scale(1.2);
 }
 
 .brush-size .unit {
     font-size: 10px;
     color: #a0a0a0;
+}
+
+.pressure-btn {
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    margin-left: 2px;
+    font-size: 12px;
+    line-height: 20px;
+    text-align: center;
+    background: #3c3c3c;
+    border: 1px solid #555;
+    border-radius: 4px;
+    color: #a0a0a0;
+    cursor: pointer;
+    opacity: 0.4;
+    transition: opacity 0.15s, background 0.15s;
+}
+
+.pressure-btn.active {
+    background: #2196F3;
+    border-color: #1976D2;
+    color: #fff;
+    opacity: 1;
 }
 
 .brush-preview-group {

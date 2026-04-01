@@ -54,6 +54,7 @@
     display: block;
     width: 100%;
     cursor: crosshair;
+    touch-action: none;
 }
 
 #mixCanvas.brush {

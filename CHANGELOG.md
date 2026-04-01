@@ -1,5 +1,28 @@
 # 更新日志 / Changelog
 
+== V1.2.0 ==
+[ZH]
+### 新功能
+- **压感支持** — 数位板笔触可根据压力改变笔刷大小（需在 Wacom 驱动中开启 Windows Ink），可通过笔刷大小旁的按钮开关
+- **干笔刷优化** — 落笔时固定材质，整笔过程中不再随机变化；调整点分布使中间区域更饱满
+- **水彩笔优化** — 改为边缘堆积效果，边缘混色更深、中间柔和过渡，更贴近水彩质感
+- **圆笔刷硬边** — 圆形笔刷边缘改为清晰硬边，不再产生渐变
+- **喷溅笔涂抹** — 涂抹工具配合喷溅笔时，改为渐进均匀化效果，多涂几遍颜色逐渐混匀
+
+### 修复
+- **本地打开不再报错** — 用 file:// 协议直接打开时不再显示 Service Worker 注册失败的错误
+
+[EN]
+### New Features
+- **Pressure Sensitivity** — Pen pressure controls brush size (requires Windows Ink enabled in Wacom driver); toggle via button next to brush size
+- **Dry Brush Improvement** — Texture is fixed at stroke start and no longer randomizes mid-stroke; dot distribution improved for a fuller center
+- **Watercolor Brush Improvement** — Reworked to an edge-accumulation effect with deeper edges and soft center transition
+- **Circle Brush Hard Edge** — Circle brush now has a crisp hard edge instead of a gradient falloff
+- **Splatter Smudge** — Smudge tool with splatter brush now gradually blends colors over multiple passes
+
+### Fixes
+- **No error on local open** — No longer shows Service Worker registration error when opened via file:// protocol
+
 == V1.1.9b ==
 [ZH]
 ### 修复
