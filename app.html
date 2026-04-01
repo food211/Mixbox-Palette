@@ -186,7 +186,7 @@
     async function loadAppScripts() {
         try {
             // 等待 SW 就绪，确保后续资源请求都能被缓存拦截
-            if ('serviceWorker' in navigator) {
+            if ('serviceWorker' in navigator && location.protocol !== 'file:') {
                 await navigator.serviceWorker.ready;
                 console.log('✅ Service Worker 就绪');
             }
@@ -252,8 +252,8 @@
     // 页面加载完成后加载脚本
     window.addEventListener('DOMContentLoaded', loadAppScripts);
 
-    // 注册 Service Worker
-    if ('serviceWorker' in navigator) {
+    // 注册 Service Worker（file:// 协议不支持，跳过）
+    if ('serviceWorker' in navigator && location.protocol !== 'file:') {
         window.addEventListener('load', () => {
             navigator.serviceWorker.register('./sw.js')
                 .then((registration) => {
