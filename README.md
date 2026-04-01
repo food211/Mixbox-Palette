@@ -1,6 +1,6 @@
 # 🎨 Mixbox Palette for Adobe Photoshop
 
-A UXP plugin for realistic watercolor mixing in Adobe Photoshop, with dual mixing engines.
+A UXP plugin for realistic pigment mixing in Adobe Photoshop, with dual mixing engines.
 
 ![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg)
 ![Mixbox License](https://img.shields.io/badge/Mixbox-CC%20BY--NC%204.0-lightgrey.svg)
@@ -8,9 +8,9 @@ A UXP plugin for realistic watercolor mixing in Adobe Photoshop, with dual mixin
 ## Features
 
 ### Professional Palettes
-- **Winsor & Newton Cotman 16** - Classic watercolor pigments
-- **Schmincke Horadam 16** - Professional artist-grade pigments
-- **Kuretake Gansai 16** - Traditional Japanese watercolors
+- **Winsor & Newton Cotman 16** - Classic pigment colors
+- **Schmincke Horadam 16** - Professional artist-grade pigment colors
+- **Kuretake Gansai 16** - Traditional Japanese pigment colors
 - **Digital Artist Palette** - Common colors for digital painting
 
 ### Dual Mixing Engines
@@ -32,7 +32,7 @@ To compare both engines side by side, try the [KM Tuner](https://food211.github.
 
 ### Tools & Shortcuts
 - **Eyedropper** - `Alt + Left Click` for foreground, `Alt + Right Click` for background
-- **Rect Select** - Select a region and transfer pixels to Photoshop active layer selection (useful for Mixer Brush sampling)
+- **Transfer to Photoshop** - Export a region of the mixing canvas directly to your active Photoshop layer
 - **Zoom control** - 60%–150% zoom via the top-right dropdown
 - **Focus indicator** - Blue bar at top when plugin captures keyboard focus
 - **Undo/Redo** - Up to 50 steps of history
@@ -80,6 +80,12 @@ The plugin loads from Cloudflare Pages (`mixbox-palette.pages.dev`) by default, 
 3. **Adjust settings** - Brush size and paint concentration sliders
 4. **Paint** - Draw on the mixing canvas to blend colors
 5. **Use in Photoshop** - Selected colors sync to Photoshop foreground/background automatically; conversely, changing colors in Photoshop (via color picker, swatches, or keyboard shortcuts) updates the plugin palette
+
+### Transfer Pixels to Photoshop
+1. Select an area on your Photoshop canvas with any selection tool
+2. In the plugin, switch to the rect select tool (`M`)
+3. Draw a region on the mixing canvas
+4. The selected pixels are automatically transferred to the active layer at the selection bounds
 
 ### Keyboard Shortcuts
 | Key | Action |
@@ -133,7 +139,7 @@ See [Changelog](https://food211.github.io/Mixbox-Palette/changelog.html) for ver
 
 # 🎨 Mixbox 调色板 - Adobe Photoshop 插件
 
-Adobe Photoshop UXP 调色板插件，内置双混色引擎，模拟真实水彩颜料的混合效果。
+Adobe Photoshop UXP 调色板插件，内置双混色引擎，模拟真实颜料的混合效果。
 
 ## 功能特点
 
@@ -147,7 +153,7 @@ Adobe Photoshop UXP 调色板插件，内置双混色引擎，模拟真实水彩
 - **涂抹工具** - 在画布上直接混合颜色，独立强度参数
 - **右键绘制** - 右键拖拽使用背景色绘制
 - **吸管工具** - Alt + 左键/右键取色
-- **矩形选取传输至PS** - 框选混色区域自动传输到 Photoshop 活动图层的选区内，可配合混合器画笔使用
+- **传输至 PS** - 将混色画布的内容传输到 Photoshop 活动图层
 - **缩放控制** - 右上角下拉菜单，60%–150%
 - **焦点指示条** - 插件捕获键盘焦点时顶部亮起蓝色指示条
 - **50 步撤销/重做**
@@ -188,6 +194,20 @@ Adobe Photoshop UXP 调色板插件，内置双混色引擎，模拟真实水彩
 | `Alt + 右键` | 取色为背景色 |
 | `右键`（拖拽）| 使用背景色绘制 |
 | `Esc` | 退出矩形选取 |
+
+## 使用说明
+
+1. **选择调色盘** - 点击"Palette"按钮切换颜料品牌
+2. **选取颜色** - 点击色块设置为前景色
+3. **调整参数** - 笔刷大小和颜料浓度滑块
+4. **混色** - 在混色画布上绘制以混合颜色
+5. **同步到 PS** - 选取的颜色自动同步到 Photoshop 前景/背景色；反之，在 PS 中更改颜色也会同步到插件
+
+### 传输像素到 Photoshop
+1. 在 Photoshop 画布上用任意选区工具选好区域
+2. 在插件中切换到矩形选取工具（`M`）
+3. 在混色画布上框选要传输的内容
+4. 所选像素自动传输到活跃图层的选区范围内
 
 ## 架构说明
 
