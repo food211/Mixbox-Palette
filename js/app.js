@@ -1250,6 +1250,7 @@ function endStroke() {
 
         if (history.length > MAX_HISTORY) {
             history.shift();
+            historyStep = history.length - 1;
         } else {
             historyStep++;
         }
@@ -1272,6 +1273,7 @@ function saveClearAction() {
 
     if (history.length > MAX_HISTORY) {
         history.shift();
+        historyStep = history.length - 1;
     } else {
         historyStep++;
     }

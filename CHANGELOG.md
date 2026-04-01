@@ -1,5 +1,14 @@
 # 更新日志 / Changelog
 
+== V1.1.9b ==
+[ZH]
+### 修复
+- **修复撤销丢失笔触** — 修复画了较多笔触后，点击撤销会一次性丢失多笔的问题
+
+[EN]
+### Fixes
+- **Fix undo losing strokes** — Fixed an issue where clicking undo after many strokes would cause multiple strokes to disappear at once
+
 == V1.1.9 ==
 [ZH]
 ### 改进

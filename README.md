@@ -17,7 +17,7 @@ A UXP plugin for realistic watercolor mixing in Adobe Photoshop, with dual mixin
 The plugin offers two physical color mixing engines, switchable via the **MB/KM** button in the top-left corner:
 
 - **Mixbox (MB)** - Default engine. Uses the [Mixbox](https://scrtwpns.com/mixbox/) LUT-based algorithm for high-quality pigment mixing. Licensed under CC BY-NC 4.0.
-- **KM** - Self-implemented engine based on Kubelka-Munk physical theory. No external dependencies, no LUT. GPL v3 licensed.
+- **KM** - Self-implemented engine. Uses a 32³ LUT to map RGB to 38-wavelength reflectance spectra (derived from [spectral.js](https://github.com/rvanwijnen/spectral.js), MIT), then applies Kubelka-Munk mixing in spectral space and converts back to RGB. GPL v3 licensed.
 
 Both engines produce realistic subtractive color mixing (e.g., yellow + blue = green). You can switch between them at any time - the canvas is automatically repainted using your stroke history.
 
@@ -98,11 +98,11 @@ The plugin loads from Cloudflare Pages (`mixbox-palette.pages.dev`) by default, 
 
 ## Tech Stack
 
-- **Mixing Engines**: Mixbox (LUT-based, CC BY-NC 4.0) + Kubelka-Munk (self-implemented, GPL v3)
+- **Mixing Engines**: Mixbox (LUT-based, CC BY-NC 4.0) + KM (38-wavelength Kubelka-Munk, spectral data from spectral.js MIT, GPL v3)
 - **Rendering**: WebGL + Canvas 2D dual-buffer
 - **Platform**: Adobe UXP + WebView
 - **Hosting**: Cloudflare Pages (primary) / GitHub Pages (fallback)
-- **Offline**: Service Worker with Stale-While-Revalidate caching
+- **Offline**: Service Worker with Cache-First strategy for reliable offline use
 - **Storage**: localStorage for canvas, history, and settings persistence
 
 ## License
@@ -140,7 +140,7 @@ Adobe Photoshop UXP 调色板插件，内置双混色引擎，模拟真实水彩
 - **4 套专业调色盘预设** - 温莎牛顿 Cotman、施美尔 Horadam、吴竹 Gansai、数字艺术家
 - **双混色引擎** - 左上角 MB/KM 按钮可随时切换：
   - **Mixbox (MB)** - 默认引擎，基于 [Mixbox](https://scrtwpns.com/mixbox/) LUT 算法（CC BY-NC 4.0）
-  - **KM** - 自研引擎，基于 Kubelka-Munk 物理公式，无外部依赖（GPL v3）
+  - **KM** - 自研引擎。使用 32³ LUT 将 RGB 映射到 38 波长反射率光谱（光谱数据来自 [spectral.js](https://github.com/rvanwijnen/spectral.js)，MIT 许可），在光谱空间中应用 Kubelka-Munk 公式混色后转回 RGB（GPL v3）
   - 切换引擎后画布会自动用笔画历史重绘，可使用 [KM Tuner](https://food211.github.io/Mixbox-Palette/km-tuner.html) 工具对比两种引擎的混色效果
 - **可调节颜料浓度** (1-100)，低浓度区域平滑曲线映射，调节更细腻
 - **6 种笔刷预设** - 圆形、柔和、水彩、飞溅、平头、干笔；画笔和涂抹工具各自记忆上次使用的笔刷
@@ -191,7 +191,7 @@ Adobe Photoshop UXP 调色板插件，内置双混色引擎，模拟真实水彩
 
 ## 架构说明
 
-插件采用 **WebView 混合架构**：远端（Cloudflare Pages / GitHub Pages）承载完整 UI 和混色引擎，本地 UXP Host 仅负责加载 WebView 和同步颜色到 Photoshop。支持双源自动切换（Cloudflare 优先，GitHub Pages 备用），首次加载后通过 Service Worker 支持离线使用。
+插件采用 **WebView 混合架构**：远端（Cloudflare Pages / GitHub Pages）承载完整 UI 和混色引擎，本地 UXP Host 仅负责加载 WebView 和同步颜色到 Photoshop。支持双源自动切换（Cloudflare 优先，GitHub Pages 备用），首次加载后 Service Worker 以缓存优先策略提供离线支持。
 
 ## 许可证
 
