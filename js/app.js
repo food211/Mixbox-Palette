@@ -1552,17 +1552,22 @@ function smudgeAlongPath(x1, y1, x2, y2) {
     const smudgeStep = Math.max(1, smudgeBaseSpacing * smudgeSpacingRatio);
     const steps = Math.max(1, Math.floor(distance / smudgeStep));
 
-    // 累积所有步骤的脏区
+    // 喷溅笔均匀化模式：每步都回读，保证采样到最新混合结果
+    const isSplatterBlend = currentBrush.type === 'splatter';
+
     let unionRect = null;
     for (let i = 0; i <= steps; i++) {
         const ratio = i / steps;
         const x = x1 + (x2 - x1) * ratio;
         const y = y1 + (y2 - y1) * ratio;
         const r = smudgeAtPoint(x, y, x2 - x1, y2 - y1);
-        if (r) unionRect = unionRect ? unionDirtyRect(unionRect, r) : r;
+        if (r) {
+            unionRect = unionRect ? unionDirtyRect(unionRect, r) : r;
+            if (isSplatterBlend) painter.readToCanvas2D(r);
+        }
     }
 
-    painter.readToCanvas2D(unionRect);
+    if (!isSplatterBlend) painter.readToCanvas2D(unionRect);
 }
 
 /**
@@ -1574,6 +1579,35 @@ function smudgeAtPoint(x, y, dx, dy) {
     const snapshot = currentStroke?.canvasSnapshot;
     if (!snapshot) return;
 
+    const baseStrength = mixSliderToStrength(smudgeStrength);
+
+    const length = Math.sqrt(dx * dx + dy * dy);
+    const dirX = length > 0 ? dx / length : 0;
+    const dirY = length > 0 ? dy / length : 0;
+
+    // 喷溅笔：均匀化模式——每笔只混合一点，多涂几遍才收敛
+    if (currentBrush.type === 'splatter') {
+        const avgColor = sampleAreaAvgColor(Math.floor(x), Math.floor(y), brushSize);
+        // 每次只混合一小步，强度约为正常的 35%，重复涂抹逐渐均匀
+        const blendStrength = baseStrength * 0.35;
+        // 喷溅笔每步重新生成纹理，保留随机感
+        const brushCanvas = brushManager.createBrushTexture(brushSize, currentBrush);
+        painter.setMixStrength(blendStrength);
+        const result = painter.drawBrush(
+            x, y,
+            brushSize * 2,
+            avgColor,
+            brushCanvas,
+            true,
+            { x: 0, y: 0 },
+            0,
+            true,
+            1.0
+        );
+        painter.setMixStrength(baseStrength);
+        return result;
+    }
+
     const distFromStart = Math.sqrt(
         (x - snapshot.startX) ** 2 + (y - snapshot.startY) ** 2
     );
@@ -1583,11 +1617,6 @@ function smudgeAtPoint(x, y, dx, dy) {
 
     // 越接近边界越淡
     const alpha = 1 - distFromStart / maxPushDistance;
-    const baseStrength = mixSliderToStrength(smudgeStrength);
-
-    const length = Math.sqrt(dx * dx + dy * dy);
-    const dirX = length > 0 ? dx / length : 0;
-    const dirY = length > 0 ? dy / length : 0;
 
     const brushCanvas = currentStrokeBrushCanvas
         || brushManager.createBrushTexture(brushSize, currentBrush);
@@ -1608,6 +1637,33 @@ function smudgeAtPoint(x, y, dx, dy) {
 
     painter.setMixStrength(baseStrength);
     return result;
+}
+
+/**
+ * 采样指定点周围区域的平均颜色（从 2D canvas 实时读取）
+ */
+function sampleAreaAvgColor(cx, cy, radius) {
+    const r = Math.max(1, Math.ceil(radius * 0.6));
+    const sx = Math.max(0, cx - r);
+    const sy = Math.max(0, cy - r);
+    const sw = Math.min(mixCanvas.width - sx, r * 2);
+    const sh = Math.min(mixCanvas.height - sy, r * 2);
+    if (sw <= 0 || sh <= 0) return { r: 0.5, g: 0.5, b: 0.5 };
+
+    const imageData = ctx.getImageData(sx, sy, sw, sh);
+    const data = imageData.data;
+    let sumR = 0, sumG = 0, sumB = 0, count = 0;
+    for (let i = 0; i < data.length; i += 4) {
+        sumR += data[i];
+        sumG += data[i + 1];
+        sumB += data[i + 2];
+        count++;
+    }
+    return {
+        r: sumR / count / 255,
+        g: sumG / count / 255,
+        b: sumB / count / 255,
+    };
 }
 
 // ============ 语言切换 ============
