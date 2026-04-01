@@ -742,6 +742,11 @@ function bindEvents() {
             if (document.activeElement) document.activeElement.blur();
         }
 
+        // 阻止 Ctrl+F / Ctrl+G 弹出查找框
+        if (e.ctrlKey && (e.key === 'f' || e.key === 'g' || e.key === 'F' || e.key === 'G')) {
+            e.preventDefault();
+        }
+
         // Escape 退出矩形选取模式
         if (e.key === 'Escape' && isRectSelectMode) {
             exitRectSelectMode();
