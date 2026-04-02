@@ -1,7 +1,8 @@
-// 颜料浓度滑条值(1-100) → 实际混色强度(0.01-0.5) 的非线性映射
-// 使用平方曲线使低浓度区域变化更平缓
+// 颜料浓度滑条值(1-100) → 实际混色强度(0.01-0.85) 的非线性映射
+// 使用1.5次幂曲线：低段平缓（涂抹感强），高段陡升（上色能力强）
+// 100% → 0.85 (density=0.72, 强上色), 50% → 0.30 (density=0.09, 涂抹为主)
 function mixSliderToStrength(sliderValue) {
-    return 0.5 * Math.sqrt(sliderValue / 100);
+    return 0.85 * Math.pow(sliderValue / 100, 1.5);
 }
 
 // 当前颜料预设
@@ -13,11 +14,11 @@ let foregroundColor = '#000000';
 let backgroundColor = '#ffffff';
 let currentBrushColor = foregroundColor;
 let brushSize = 15;
-let brushSpacingRatio = 1.0;  // 笔刷工具间距系数
-let smudgeSpacingRatio = 1.0; // 涂抹工具间距系数
+let brushSpacingRatio = 0.01;  // 笔刷工具间距系数
+let smudgeSpacingRatio = 0.01; // 涂抹工具间距系数
 let isDrawing = false;
 let isEyedropperMode = false;
-let currentBrush = { type: 'watercolor', image: null };
+let currentBrush = { type: 'dry', image: null };
 
 // 矩形选取模式
 let isRectSelectMode = false;
@@ -29,14 +30,14 @@ let currentTool = 'brush';  // 'brush' 或 'smudge'
 let smudgeStrength = 50;  // 涂抹强度 (0-100)
 let pressureEnabled = false;  // 压感开关
 let smudgeBrushSize = 15;  // 涂抹工具的笔刷大小
-let smudgeBrushType = 'watercolor';  // 涂抹工具的笔刷类型
+let smudgeBrushType = 'dry';  // 涂抹工具的笔刷类型
 let savedBrushSettings = null;  // 临时保存笔刷设置（切换到涂抹工具时使用）
 let smudgeSnapshotCache = null;
 
-// 历史记录 - 基于路径记录
-let history = [];  // 存储操作记录
+// 历史记录 - 基于画布快照
+let history = [];  // 存储快照记录 { imageData: ImageData }
 let historyStep = -1;
-const MAX_HISTORY = 50;
+const MAX_HISTORY = 30;
 
 // 当前笔画路径
 let currentStroke = null;  // { type: 'brush'|'smudge'|'clear', points: [], color, brushSize, brushType, ... }
@@ -68,6 +69,7 @@ function createPainter(engine, canvas) {
 async function switchEngine(engine) {
     if (engine === currentEngine) return;
     const oldMixStrength = painter ? painter.getMixStrength() : 0.3;
+    const oldPixels = painter ? painter.readPixelRegion(0, 0, mixCanvas.width, mixCanvas.height) : null;
 
     painter = createPainter(engine, mixCanvas);
     await painter.init();
@@ -75,17 +77,10 @@ async function switchEngine(engine) {
     currentEngine = engine;
     localStorage.setItem('mixbox_engine', engine);
 
-    // 用历史记录重绘画布
-    painter.clear(CANVAS_BG);
-    for (let i = 0; i <= historyStep; i++) {
-        const action = history[i];
-        if (!action) continue;
-        if (action.type === 'init') continue;
-        else if (action.type === 'clear') painter.clear(CANVAS_BG);
-        else if (action.type === 'brush') replayBrushStroke(action);
-        else if (action.type === 'smudge') replaySmudgeStroke(action);
+    if (oldPixels) {
+        painter.writeFromPixels(oldPixels, mixCanvas.width, mixCanvas.height);
+        painter.readToCanvas2D();
     }
-    painter.readToCanvas2D();
 
     // 更新按钮文字
     const engineBtn = document.getElementById('engineBtn');
@@ -99,7 +94,6 @@ async function switchEngine(engine) {
 // DOM元素
 const colorPicker = document.getElementById('colorPicker');
 const mixCanvas = document.getElementById('mixCanvas');
-const ctx = mixCanvas.getContext('2d', { willReadFrequently: true });
 const brushSizeInput = document.getElementById('brushSize');
 const brushSizeValue = document.getElementById('brushSizeValue');
 const clearBtn = document.getElementById('clearBtn');
@@ -256,37 +250,32 @@ async function initCanvas() {
         await painter.init();
         currentEngine = savedEngine;
 
-        // 尝试加载保存的历史记录
-        const savedHistory = paletteStorage.loadHistory();
-
-        if (savedHistory && savedHistory.history && savedHistory.history.length > 0) {
-            // 通过重绘历史记录恢复画布
-            history = savedHistory.history;
-            historyStep = savedHistory.step;
-
-            // 清空画布后重绘所有笔画
-            painter.clear(CANVAS_BG);
-
-            for (let i = 0; i <= historyStep; i++) {
-                const action = history[i];
-                if (!action) continue;
-
-                if (action.type === 'init') {
-                    continue;
-                } else if (action.type === 'clear') {
+        const savedDataURL = paletteStorage.load();
+        if (savedDataURL) {
+            await new Promise(resolve => {
+                const img = new Image();
+                img.onload = () => {
+                    const tmpCanvas = document.createElement('canvas');
+                    tmpCanvas.width = mixCanvas.width;
+                    tmpCanvas.height = mixCanvas.height;
+                    const tmpCtx = tmpCanvas.getContext('2d');
+                    tmpCtx.drawImage(img, 0, 0);
+                    const imageData = tmpCtx.getImageData(0, 0, mixCanvas.width, mixCanvas.height);
+                    painter.writeFromPixels(imageData.data, mixCanvas.width, mixCanvas.height);
+                    painter.readToCanvas2D();
+                    saveState();
+                    resolve();
+                };
+                img.onerror = () => {
                     painter.clear(CANVAS_BG);
-                } else if (action.type === 'brush') {
-                    replayBrushStroke(action);
-                } else if (action.type === 'smudge') {
-                    replaySmudgeStroke(action);
-                }
-            }
-
-            painter.readToCanvas2D();
-            updateHistoryButtons();
-            console.log('✅ 画布内容已通过历史记录恢复');
+                    painter.readToCanvas2D();
+                    saveState();
+                    resolve();
+                };
+                img.src = savedDataURL;
+            });
+            console.log('✅ 画布内容已从快照恢复');
         } else {
-            // 新建画布
             painter.clear(CANVAS_BG);
             painter.readToCanvas2D();
             saveState();
@@ -519,16 +508,13 @@ function bindEvents() {
         if (painter) {
             painter.clear(CANVAS_BG);
             painter.readToCanvas2D();
-        } else {
-            ctx.fillStyle = '#F8F8F5';
-            ctx.fillRect(0, 0, mixCanvas.width, mixCanvas.height);
         }
 
         // 清空历史记录
         history = [];
         historyStep = -1;
-        saveState();  // 重新初始化历史
-        paletteStorage.saveHistory(history, historyStep);
+        saveState();
+        saveCanvasToStorage();
     });
     
     // 撤销/重做
@@ -1221,9 +1207,7 @@ function extractAndSendPixels(sx, sy, sw, sh) {
         return;
     }
 
-    // 从 2D context 提取像素
-    const imageData = ctx.getImageData(sx, sy, sw, sh);
-    const data = imageData.data;
+    const data = painter.readPixelRegion(sx, sy, sw, sh);
 
     // 白色边缘平滑过渡：用与白色的欧氏距离决定透明度，各颜色通道表现一致
     const DIST_THRESHOLD = 60; // 距离低于此值开始渐变透明
@@ -1240,7 +1224,7 @@ function extractAndSendPixels(sx, sy, sw, sh) {
     tempCanvas.width = sw;
     tempCanvas.height = sh;
     const tempCtx = tempCanvas.getContext('2d');
-    tempCtx.putImageData(imageData, 0, 0);
+    tempCtx.putImageData(new ImageData(data, sw, sh), 0, 0);
     const dataURL = tempCanvas.toDataURL('image/png');
 
     // 发送到 UXP host
@@ -1289,13 +1273,13 @@ function beginStroke(type, color = null, startX = 0, startY = 0, pressure = 1.0)
         const sy = Math.max(0, Math.floor(startY) - r);
         const sw = Math.min(mixCanvas.width - sx, r * 2);
         const sh = Math.min(mixCanvas.height - sy, r * 2);
-        const imageData = ctx.getImageData(sx, sy, sw, sh);
+        const pixelData = painter.readPixelRegion(sx, sy, sw, sh);
         const localX = Math.floor(startX) - sx;
         const localY = Math.floor(startY) - sy;
         // 只存落笔点的颜色，不存整块数据
         smudgeSnapshotCache = {
             color: pickColorFromSnapshot(
-                { data: imageData.data, width: sw, height: sh },
+                { data: pixelData, width: sw, height: sh },
                 localX, localY
             ),
             startX,
@@ -1333,22 +1317,10 @@ function addStrokePoint(x, y, extra = {}) {
  */
 function endStroke() {
     if (currentStroke && currentStroke.points.length > 0) {
-        // 截断后面的历史（撤销后新操作会覆盖）
-        history.splice(historyStep + 1);
-        history.push(currentStroke);
-
-        if (history.length > MAX_HISTORY) {
-            history.shift();
-            historyStep = history.length - 1;
-        } else {
-            historyStep++;
-        }
-
+        pushSnapshot();
         smudgeSnapshotCache = null;
         currentStroke = null;
         updateHistoryButtons();
-
-        // 持久化存储
         saveCanvasToStorage();
     }
 }
@@ -1357,16 +1329,7 @@ function endStroke() {
  * 保存清空操作到历史
  */
 function saveClearAction() {
-    history.splice(historyStep + 1);
-    history.push({ type: 'clear' });
-
-    if (history.length > MAX_HISTORY) {
-        history.shift();
-        historyStep = history.length - 1;
-    } else {
-        historyStep++;
-    }
-
+    pushSnapshot();
     updateHistoryButtons();
     saveCanvasToStorage();
 }
@@ -1375,153 +1338,48 @@ function saveClearAction() {
  * 保存状态到历史记录（兼容旧调用，现在只用于初始化）
  */
 function saveState() {
-    // 初始化时保存一个空的初始状态
     if (history.length === 0) {
-        history.push({ type: 'init' });
-        historyStep = 0;
+        pushSnapshot();
         updateHistoryButtons();
     }
 }
 
+/**
+ * 把当前画布状态作为快照压入历史
+ */
+function pushSnapshot() {
+    const pixels = painter.readPixelRegion(0, 0, mixCanvas.width, mixCanvas.height);
+    history.splice(historyStep + 1);
+    history.push({ pixels });
+    if (history.length > MAX_HISTORY) {
+        history.shift();
+        historyStep = history.length - 1;
+    } else {
+        historyStep++;
+    }
+}
 
 /**
- * 恢复历史状态 - 重绘所有笔画到指定步骤
+ * 恢复历史状态
  */
 function restoreState(step) {
     if (step < 0 || step >= history.length) return;
+    const snapshot = history[step];
+    if (!snapshot?.pixels) return;
 
-    // 1. 清空画布到初始状态
-    painter.clear(CANVAS_BG);
-
-    // 2. 重绘从第一步到目标步骤的所有笔画
-    for (let i = 0; i <= step; i++) {
-        const action = history[i];
-        if (!action) continue;
-
-        if (action.type === 'init') {
-            // 初始状态，不需要做任何事
-            continue;
-        } else if (action.type === 'clear') {
-            // 清空操作
-            painter.clear(CANVAS_BG);
-        } else if (action.type === 'brush') {
-            // 重绘笔刷笔画
-            replayBrushStroke(action);
-        } else if (action.type === 'smudge') {
-            // 重绘涂抹笔画（需要逐步更新以正确混色）
-            replaySmudgeStroke(action);
-        }
-    }
-
-    // 3. 读取到 Canvas 2D
+    painter.writeFromPixels(snapshot.pixels, mixCanvas.width, mixCanvas.height);
     painter.readToCanvas2D();
 
     historyStep = step;
     updateHistoryButtons();
 }
 
-/**
- * 重放笔刷笔画
- */
-function replayBrushStroke(stroke) {
-    if (!stroke.points || stroke.points.length === 0) return;
-
-    const colorRGB = hexToRgb(stroke.color);
-    const savedMixStrength = painter.getMixStrength();
-
-    // 设置笔画时的混色强度
-    painter.setMixStrength(stroke.mixStrength);
-
-    // 创建笔刷纹理
-    const brushCanvas = brushManager.createBrushTexture(
-        stroke.brushSize,
-        { type: stroke.brushType, image: null }
-    );
-
-    // 重绘所有点
-    for (const point of stroke.points) {
-        painter.drawBrush(
-            point.x,
-            point.y,
-            stroke.brushSize * 2,
-            colorRGB,
-            brushCanvas
-        );
-    }
-
-    // 恢复混色强度
-    painter.setMixStrength(savedMixStrength);
-}
-
-/**
- * 重放涂抹笔画
- */
-function replaySmudgeStroke(stroke) {
-    if (!stroke.points || stroke.points.length < 2) return;
-
-    const savedMixStrength = painter.getMixStrength();
-    painter.setMixStrength(stroke.mixStrength);
-
-    // 涂抹需要逐点重放，因为每个点依赖前一个点的混色结果
-    for (let i = 1; i < stroke.points.length; i++) {
-        const prev = stroke.points[i - 1];
-        const curr = stroke.points[i];
-
-        // 每次涂抹前先同步到 2D canvas，以便正确取色
-        painter.readToCanvas2D();
-
-        // 执行涂抹段（使用落笔时记录的初始颜色）
-        replaySmudgeSegment(prev.x, prev.y, curr.x, curr.y, stroke.brushSize, stroke.brushType, stroke.smudgeStrength, stroke.smudgeSourceColor);
-    }
-
-    painter.setMixStrength(savedMixStrength);
-}
-
-/**
- * 重放涂抹段
- */
-function replaySmudgeSegment(x1, y1, x2, y2, size, brushType, strength, sourceRGB = null) {
-    const distance = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
-    const steps = Math.max(1, Math.floor(distance / 2));
-
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    const length = Math.sqrt(dx * dx + dy * dy);
-    const dirX = length > 0 ? dx / length : 0;
-    const dirY = length > 0 ? dy / length : 0;
-
-    // 创建笔刷纹理（只创建一次）
-    const brushCanvas = brushManager.createBrushTexture(
-        size,
-        { type: brushType, image: null }
-    );
-
-    for (let i = 0; i <= steps; i++) {
-        const ratio = i / steps;
-        const x = x1 + (x2 - x1) * ratio;
-        const y = y1 + (y2 - y1) * ratio;
-
-        // 用传入的初始颜色，避免逐步重采样导致颜色无限传递
-        const rgb = sourceRGB || hexToRgb(pickColor(Math.floor(x), Math.floor(y)));
-
-        // 计算目标位置（使用记录的涂抹强度）
-        const pushDistance = (size / 2) * (strength / 100);
-        const targetX = x + dirX * pushDistance;
-        const targetY = y + dirY * pushDistance;
-
-        // 绘制到目标位置（会与画布上已有颜色混色）
-        const r = painter.drawBrush(targetX, targetY, size * 2, rgb, brushCanvas, true, { x: 0, y: 0 }, 0, true);
-
-        // 每次绘制后同步到 2D canvas，以便下一次取色正确（局部回读）
-        painter.readToCanvas2D(r);
-    }
-}
 
 /**
  * 保存历史记录（用于撤销/重做恢复）
  */
 function saveCanvasToStorage() {
-    paletteStorage.saveHistory(history, historyStep);
+    paletteStorage.save(mixCanvas.toDataURL('image/png'));
 }
 
 /**
@@ -1550,9 +1408,7 @@ function redo() {
  * 取色函数
  */
 function pickColor(x, y) {
-    // 使用主canvas的2D上下文
-    const imageData = ctx.getImageData(x, y, 1, 1);
-    const [r, g, b] = imageData.data;
+    const { r, g, b } = painter.readPixelByte(x, y);
     return rgbToHex(r, g, b);
 }
 
@@ -1741,8 +1597,7 @@ function sampleAreaAvgColor(cx, cy, radius) {
     const sh = Math.min(mixCanvas.height - sy, r * 2);
     if (sw <= 0 || sh <= 0) return { r: 0.5, g: 0.5, b: 0.5 };
 
-    const imageData = ctx.getImageData(sx, sy, sw, sh);
-    const data = imageData.data;
+    const data = painter.readPixelRegion(sx, sy, sw, sh);
     let sumR = 0, sumG = 0, sumB = 0, count = 0;
     for (let i = 0; i < data.length; i += 4) {
         sumR += data[i];

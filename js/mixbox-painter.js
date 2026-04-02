@@ -7,12 +7,6 @@ class MixboxWebGLPainter {
         this.canvas = canvas;
         this.gl = null;
         
-        // 创建离屏Canvas用于2D操作
-        this.offscreenCanvas = document.createElement('canvas');
-        this.offscreenCanvas.width = canvas.width;
-        this.offscreenCanvas.height = canvas.height;
-        this.offscreenCtx = this.offscreenCanvas.getContext('2d', { willReadFrequently: true });
-        
         this.program = null;
         this.textures = {};
         this.framebuffers = {};
@@ -498,11 +492,8 @@ class MixboxWebGLPainter {
                 flipped.set(pixels.subarray(srcRow, srcRow + rowSize), dstRow);
             }
 
-            const imageData = new ImageData(flipped, cw, ch);
-            this.offscreenCtx.putImageData(imageData, 0, 0);
             if (displayCtx) {
-                displayCtx.clearRect(0, 0, cw, ch);
-                displayCtx.drawImage(this.offscreenCanvas, 0, 0);
+                displayCtx.putImageData(new ImageData(flipped, cw, ch), 0, 0);
             }
         }
 
@@ -510,40 +501,57 @@ class MixboxWebGLPainter {
     }
 
     /**
-     * 从 Canvas 2D 写入到 WebGL
+     * 从像素数据写入 WebGL 纹理（屏幕坐标排列，Y向下）
      */
-    writeFromCanvas2D() {
+    writeFromPixels(pixels, w, h) {
         const gl = this.gl;
-        // 使用离屏canvas的2D上下文
-        const ctx = this.offscreenCtx;
-        
-        // 先从显示Canvas复制到离屏Canvas
-        const displayCtx = this.canvas.getContext('2d', { willReadFrequently: true });
-        if (displayCtx) {
-            ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-            ctx.drawImage(this.canvas, 0, 0);
-        }
-        
-        const imageData = ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
-        
-        // 清除纹理绑定
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, null);
-        
-        // 绑定并更新画布纹理
+        // pixels 是屏幕坐标排列（第0行=顶），UNPACK_FLIP_Y_WEBGL 翻转后与 shader UV 坐标对应
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
         gl.bindTexture(gl.TEXTURE_2D, this.textures.canvas);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, imageData);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        gl.bindTexture(gl.TEXTURE_2D, this.textures.temp);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
         gl.bindTexture(gl.TEXTURE_2D, null);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     }
-    
-    // 添加方法获取离屏Canvas的2D上下文
-    getOffscreenContext() {
-        return this.offscreenCtx;
+
+    /**
+     * 从 framebuffer 读单像素（屏幕坐标）
+     */
+    readPixelByte(x, y) {
+        const gl = this.gl;
+        const glY = this.canvas.height - 1 - y;
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
+        const pixels = new Uint8Array(4);
+        gl.readPixels(x, glY, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        return { r: pixels[0], g: pixels[1], b: pixels[2] };
     }
-    
-    // 添加方法获取离屏Canvas
-    getOffscreenCanvas() {
-        return this.offscreenCanvas;
+
+    /**
+     * 从 framebuffer 读矩形区域（屏幕坐标），返回 Y 轴翻转后的 Uint8ClampedArray
+     */
+    readPixelRegion(x, y, w, h) {
+        const gl = this.gl;
+        const cw = this.canvas.width;
+        const ch = this.canvas.height;
+        const sx = Math.max(0, x);
+        const sy = Math.max(0, y);
+        const sw = Math.min(w, cw - sx);
+        const sh = Math.min(h, ch - sy);
+        const glY = ch - sy - sh;
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
+        const pixels = new Uint8Array(sw * sh * 4);
+        gl.readPixels(sx, glY, sw, sh, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        const flipped = new Uint8ClampedArray(pixels.length);
+        const rowSize = sw * 4;
+        for (let row = 0; row < sh; row++) {
+            flipped.set(pixels.subarray((sh - 1 - row) * rowSize, (sh - row) * rowSize), row * rowSize);
+        }
+        return flipped;
     }
 
     /**
