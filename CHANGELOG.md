@@ -1,5 +1,15 @@
 # 更新日志 / Changelog
 
+== V1.3.0 ==
+[ZH]
+### 性能优化
+- **历史记录提速** — 撤销/重做改为全程在显卡内存中操作，每次笔触结束不再卡顿
+- **后台自动保存** — 画布存档改为在浏览器空闲时异步写入，不占用绘画响应时间
+[EN]
+### Performance
+- **Faster history** — Undo/redo now operates entirely in GPU memory, eliminating the stutter after each stroke
+- **Background auto-save** — Canvas snapshots are now written to storage asynchronously during browser idle time
+
 == V1.2.0 ==
 [ZH]
 ### 新功能
