@@ -19,10 +19,6 @@ class KMWebGLPainter {
         this.canvas = canvas;
         this.gl = null;
 
-        this.offscreenCanvas = document.createElement('canvas');
-        this.offscreenCanvas.width = canvas.width;
-        this.offscreenCanvas.height = canvas.height;
-        this.offscreenCtx = this.offscreenCanvas.getContext('2d', { willReadFrequently: true });
 
         this.program = null;
         this.textures = {};
@@ -782,37 +778,57 @@ class KMWebGLPainter {
                 flipped.set(pixels.subarray(srcRow, srcRow + rowSize), dstRow);
             }
 
-            this.offscreenCtx.putImageData(new ImageData(flipped, cw, ch), 0, 0);
             if (displayCtx) {
-                displayCtx.clearRect(0, 0, cw, ch);
-                displayCtx.drawImage(this.offscreenCanvas, 0, 0);
+                displayCtx.putImageData(new ImageData(flipped, cw, ch), 0, 0);
             }
         }
 
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     }
 
-    writeFromCanvas2D() {
+    writeFromPixels(pixels, w, h) {
         const gl = this.gl;
-        const ctx = this.offscreenCtx;
-
-        const displayCtx = this.canvas.getContext('2d', { willReadFrequently: true });
-        if (displayCtx) {
-            ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-            ctx.drawImage(this.canvas, 0, 0);
-        }
-
-        const imageData = ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
-
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, null);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
         gl.bindTexture(gl.TEXTURE_2D, this.textures.canvas);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, imageData);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        gl.bindTexture(gl.TEXTURE_2D, this.textures.temp);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
         gl.bindTexture(gl.TEXTURE_2D, null);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     }
 
-    getOffscreenContext() { return this.offscreenCtx; }
-    getOffscreenCanvas() { return this.offscreenCanvas; }
+    readPixelByte(x, y) {
+        const gl = this.gl;
+        const glY = this.canvas.height - 1 - y;
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
+        const pixels = new Uint8Array(4);
+        gl.readPixels(x, glY, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        return { r: pixels[0], g: pixels[1], b: pixels[2] };
+    }
+
+    readPixelRegion(x, y, w, h) {
+        const gl = this.gl;
+        const cw = this.canvas.width;
+        const ch = this.canvas.height;
+        const sx = Math.max(0, x);
+        const sy = Math.max(0, y);
+        const sw = Math.min(w, cw - sx);
+        const sh = Math.min(h, ch - sy);
+        const glY = ch - sy - sh;
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
+        const pixels = new Uint8Array(sw * sh * 4);
+        gl.readPixels(sx, glY, sw, sh, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        const flipped = new Uint8ClampedArray(pixels.length);
+        const rowSize = sw * 4;
+        for (let row = 0; row < sh; row++) {
+            flipped.set(pixels.subarray((sh - 1 - row) * rowSize, (sh - row) * rowSize), row * rowSize);
+        }
+        return flipped;
+    }
 
     clear(color = { r: 1, g: 1, b: 1 }) {
         const gl = this.gl;

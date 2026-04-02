@@ -2,7 +2,12 @@
   "permissions": {
     "allow": [
       "WebSearch",
-      "Bash(node -e \":*)"
+      "Bash(node -e \":*)",
+      "WebFetch(domain:github.com)",
+      "Bash(grep -rn \"componentSize\\\\|Uint16\\\\|16.bit\\\\|float\\\\|precision\" /d/image/2022/同人/mixbox-palette --include=\"*.js\" --include=\"*.md\" ! -path \"*/node_modules/*\")",
+      "Bash(grep -rn \"toDataURL\\\\|getImageData\" /d/image/2022/同人/mixbox-palette --include=\"*.js\" ! -path \"*/node_modules/*\")",
+      "Bash(grep -r \"getImageData\\\\|toDataURL\\\\|putImageData\" /d/image/2022/同人/mixbox-palette --include=\"*.js\" ! -path \"*/node_modules/*\")",
+      "Bash(find /d/image/2022/同人/mixbox-palette -name \"*.js\" ! -path \"*/node_modules/*\" -exec grep -l \"getImageData\\\\|toDataURL\" {} \\\\;)"
     ]
   }
 }
