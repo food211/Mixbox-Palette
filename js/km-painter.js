@@ -1,8 +1,9 @@
 /**
- * KM 混色引擎 (Kubelka-Munk Mixing Engine)
- * 使用 38波长光谱 Kubelka-Munk 物理公式进行颜料混色
- * RGB → 38波长反射率LUT查表 → KM混合 → RGB
- * WebGL1 兼容，使用单张合并LUT纹理（1024×320）
+ * KMWebGLPainter — Kubelka-Munk 物理混色引擎
+ * 继承 BaseWebGLPainter，只包含 KM 专有部分：
+ *  - 38波长光谱 KM 片段着色器
+ *  - 纯 JS PNG 解码 + LUT 加载（绕开浏览器颜色管理）
+ *  - LUT 绑定到纹理槽 2
  *
  * Copyright (C) 2026 food211
  * License: GPL-3.0 (https://www.gnu.org/licenses/gpl-3.0.html)
@@ -14,83 +15,17 @@
  * https://github.com/rvanwijnen/spectral.js
  * Copyright (c) Ronald van Wijnen
  */
-class KMWebGLPainter {
-    constructor(canvas) {
-        this.canvas = canvas;
-        this.gl = null;
-
-
-        this.program = null;
-        this.textures = {};
-        this.framebuffers = {};
-        this.buffers = {};
-        this.locations = {};
-        this.currentBrushTexture = null;
-
-        this.baseMixStrength = 0.2;
-    }
-
-    setMixStrength(strength) {
-        this.baseMixStrength = Math.max(0.01, Math.min(1.0, strength));
-    }
-
-    getMixStrength() {
-        return this.baseMixStrength;
-    }
+class KMWebGLPainter extends BaseWebGLPainter {
 
     async init() {
-        this.initWebGL();
-        this.compileShaders();
-        await this.loadLUT();
-        this.setupTextures();
-        this.setupFramebuffers();
-        this.setupGeometry();
-
+        await super.init();
         console.log('✅ KMWebGLPainter 初始化完成（38波长光谱KM，WebGL1，32³LUT）');
     }
 
-    initWebGL() {
-        this.webglCanvas = document.createElement('canvas');
-        this.webglCanvas.width = this.canvas.width;
-        this.webglCanvas.height = this.canvas.height;
+    // ─── 片段着色器 ───────────────────────────────
 
-        this.gl = this.webglCanvas.getContext('webgl', {
-            alpha: false,
-            premultipliedAlpha: false,
-            preserveDrawingBuffer: true
-        });
-
-        if (!this.gl) {
-            throw new Error('WebGL 不支持');
-        }
-
-        const gl = this.gl;
-        gl.disable(gl.BLEND);
-    }
-
-    compileShaders() {
-        const gl = this.gl;
-
-        const vsSource = `
-        attribute vec2 a_position;
-        attribute vec2 a_texCoord;
-
-        varying vec2 v_texCoord;
-        varying vec2 v_canvasCoord;
-
-        uniform vec2 u_resolution;
-        uniform float u_smudgeAlpha;
-
-        void main() {
-            vec2 clipSpace = (a_position / u_resolution) * 2.0 - 1.0;
-            gl_Position = vec4(clipSpace * vec2(1, -1), 0, 1);
-            v_texCoord = a_texCoord;
-            v_canvasCoord = a_position;
-        }
-        `;
-
-        // WebGL1 不支持数组索引变量，用宏展开10次采样
-        const fsSource = `
+    _buildFragmentShader() {
+        return `
         precision highp float;
 
         varying vec2 v_texCoord;
@@ -156,10 +91,6 @@ class KMWebGLPainter {
             return x > 0.0031308 ? 1.055 * pow(x, 1.0/2.4) - 0.055 : x * 12.92;
         }
 
-        // LUT采样：RGB → 10个vec4（38波长反射率）
-        // 纹理布局: x = gi*32+ri, y = band*32+bi，共1024×320
-        // LUT存储sqrt(R)以提高暗色精度，采样后平方还原
-        // r/b轴在各自段内连续，LINEAR自动插值；g轴跨段手动插值
         void sampleLUT(vec3 c,
             out vec4 R0, out vec4 R1, out vec4 R2, out vec4 R3, out vec4 R4,
             out vec4 R5, out vec4 R6, out vec4 R7, out vec4 R8, out vec4 R9)
@@ -169,7 +100,6 @@ class KMWebGLPainter {
             float u0 = (g0 * 32.0 + f.r + 0.5) / 1024.0;
             float u1 = (g1 * 32.0 + f.r + 0.5) / 1024.0;
 
-            // 在sqrt域采样并插值，然后平方还原反射率
             #define SAMPLE_BAND(band) mix( \
                 texture2D(u_lut, vec2(u0, (float(band)*32.0 + f.b + 0.5) / 320.0)), \
                 texture2D(u_lut, vec2(u1, (float(band)*32.0 + f.b + 0.5) / 320.0)), \
@@ -188,7 +118,6 @@ class KMWebGLPainter {
             #undef SAMPLE_BAND
         }
 
-        // 38波长反射率 → XYZ → RGB
         vec3 reflectanceToRGB(
             vec4 R0, vec4 R1, vec4 R2, vec4 R3, vec4 R4,
             vec4 R5, vec4 R6, vec4 R7, vec4 R8, vec4 R9)
@@ -203,16 +132,6 @@ class KMWebGLPainter {
             return vec3(compand(lin.r), compand(lin.g), compand(lin.b));
         }
 
-        float luminance(
-            vec4 R0, vec4 R1, vec4 R2, vec4 R3, vec4 R4,
-            vec4 R5, vec4 R6, vec4 R7, vec4 R8, vec4 R9)
-        {
-            float Y = dot(CMF_Y_0,R0)+dot(CMF_Y_1,R1)+dot(CMF_Y_2,R2)+dot(CMF_Y_3,R3)+dot(CMF_Y_4,R4)
-                     +dot(CMF_Y_5,R5)+dot(CMF_Y_6,R6)+dot(CMF_Y_7,R7)+dot(CMF_Y_8,R8)+dot(CMF_Y_9,R9);
-            return max(Y, 1e-7);
-        }
-
-        // KM混色（内联展开，避免WebGL1 loop限制）
         vec4 km_band(vec4 r1, vec4 r2, float conc1, float conc2, float totalConc) {
             vec4 rc1 = clamp(r1, 0.01, 1.0);
             vec4 rc2 = clamp(r2, 0.01, 1.0);
@@ -228,7 +147,6 @@ class KMWebGLPainter {
             sampleLUT(c1, A0,A1,A2,A3,A4,A5,A6,A7,A8,A9);
             sampleLUT(c2, B0,B1,B2,B3,B4,B5,B6,B7,B8,B9);
 
-            // 用 t 直接控制颜料浓度比，使深浅方向都对称
             float conc1 = 1.0 - t;
             float conc2 = t;
             float totalConc = 1.0;
@@ -246,7 +164,6 @@ class KMWebGLPainter {
                 km_band(A9,B9,conc1,conc2,totalConc)
             );
 
-            // 提亮补偿：仅修正KM算法本身的变暗偏差，不随笔刷衰减变化
             vec3 linearMix = mix(c1, c2, t);
             const vec3 LUM_COEFF = vec3(0.2126, 0.7152, 0.0722);
             float linearLum = dot(linearMix, LUM_COEFF);
@@ -261,16 +178,11 @@ class KMWebGLPainter {
 
         void main() {
             vec4 brushSample = texture2D(u_brushTexture, v_texCoord);
-            // 硬边笔刷（useFalloff=0）：二值化 alpha，消除抗锯齿半透明噪声
-            // 软边笔刷（useFalloff=1）：保留渐变 alpha + radialFalloff
-            // 喷溅笔刷（useFalloff=2）：保留渐变 alpha（抗锯齿），无 radialFalloff
             float brushAlpha = u_useFalloff < 0.5
                 ? step(0.5, brushSample.a)
                 : brushSample.a;
 
-            if (brushAlpha < 0.01) {
-                discard;
-            }
+            if (brushAlpha < 0.01) discard;
 
             vec2 canvasUV = v_canvasCoord / u_resolution;
             canvasUV.y = 1.0 - canvasUV.y;
@@ -285,14 +197,12 @@ class KMWebGLPainter {
 
             vec3 finalColor;
             if (u_disableSmear > 0.5) {
-                // 涂抹工具模式：强度只控制推移距离
                 float edgeWeight = clamp(aBrush * u_smudgeAlpha, 0.0, 1.0);
                 vec3 mixedColor = km_mix(canvasColor.rgb, u_brushColor.rgb, u_smudgeAlpha * 0.5);
                 finalColor = mix(canvasColor.rgb, mixedColor, edgeWeight);
             } else {
                 float density = u_baseMixStrength * u_baseMixStrength;
 
-                // 采样上游颜色（笔划来的方向）
                 float smearReach = clamp(u_smearLen, 1.0, u_brushRadius) * 0.8;
                 vec2 smearUV = (v_canvasCoord - u_smearDir * smearReach) / u_resolution;
                 smearUV.y = 1.0 - smearUV.y;
@@ -321,93 +231,76 @@ class KMWebGLPainter {
             gl_FragColor = vec4(clamp(finalColor, 0.0, 1.0), 1.0);
         }
         `;
-
-        const vs = this.createShader(gl.VERTEX_SHADER, vsSource);
-        const fs = this.createShader(gl.FRAGMENT_SHADER, fsSource);
-        this.program = this.createProgram(vs, fs);
-
-        this.locations = {
-            a_position:        gl.getAttribLocation(this.program, 'a_position'),
-            a_texCoord:        gl.getAttribLocation(this.program, 'a_texCoord'),
-            u_resolution:      gl.getUniformLocation(this.program, 'u_resolution'),
-            u_canvasTexture:   gl.getUniformLocation(this.program, 'u_canvasTexture'),
-            u_brushTexture:    gl.getUniformLocation(this.program, 'u_brushTexture'),
-            u_lut:             gl.getUniformLocation(this.program, 'u_lut'),
-            u_brushColor:      gl.getUniformLocation(this.program, 'u_brushColor'),
-            u_currentPosition: gl.getUniformLocation(this.program, 'u_currentPosition'),
-            u_brushRadius:     gl.getUniformLocation(this.program, 'u_brushRadius'),
-            u_baseMixStrength: gl.getUniformLocation(this.program, 'u_baseMixStrength'),
-            u_useFalloff:      gl.getUniformLocation(this.program, 'u_useFalloff'),
-            u_smearDir:        gl.getUniformLocation(this.program, 'u_smearDir'),
-            u_smearLen:        gl.getUniformLocation(this.program, 'u_smearLen'),
-            u_disableSmear:    gl.getUniformLocation(this.program, 'u_disableSmear'),
-            u_smudgeAlpha: gl.getUniformLocation(this.program, 'u_smudgeAlpha'),
-        };
     }
 
-    createShader(type, source) {
+    // ─── LUT ─────────────────────────────────────
+
+    _getExtraUniformNames() {
+        return ['u_lut'];
+    }
+
+    async _loadLUT() {
+        const b64 = KM_LUT_DATA.split(',')[1];
+        const bin = atob(b64);
+        const u8  = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+
+        const { width, height, pixels } = this._decodePNG(u8);
+
         const gl = this.gl;
-        const shader = gl.createShader(type);
-        gl.shaderSource(shader, source);
-        gl.compileShader(shader);
-
-        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-            console.error('着色器编译错误:', gl.getShaderInfoLog(shader));
-            gl.deleteShader(shader);
-            return null;
-        }
-        return shader;
+        const tex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.bindTexture(gl.TEXTURE_2D, null);
+        this.textures.lut = tex;
+        console.log(`✅ KM LUT 加载完成（${width}×${height}，纯JS解码）`);
     }
 
-    createProgram(vs, fs) {
+    _bindLUT() {
         const gl = this.gl;
-        const program = gl.createProgram();
-        gl.attachShader(program, vs);
-        gl.attachShader(program, fs);
-        gl.linkProgram(program);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, this.textures.canvas);
+        gl.uniform1i(this.locations.u_canvasTexture, 0);
 
-        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-            console.error('程序链接错误:', gl.getProgramInfoLog(program));
-            return null;
-        }
-        return program;
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, this.currentBrushTexture);
+        gl.uniform1i(this.locations.u_brushTexture, 1);
+
+        gl.activeTexture(gl.TEXTURE2);
+        gl.bindTexture(gl.TEXTURE_2D, this.textures.lut);
+        gl.uniform1i(this.locations.u_lut, 2);
     }
 
-    // 纯JS PNG解码器：绕开 <img> 颜色管理，直接读取原始字节
-    // 支持 RGBA8 deflate PNG，不依赖任何外部库
+    // ─── PNG 解码器（绕开浏览器颜色管理）────────────
+
     _decodePNG(u8) {
-        // 工具函数
         const u32 = (b, o) => ((b[o]<<24)|(b[o+1]<<16)|(b[o+2]<<8)|b[o+3])>>>0;
 
-        // 收集所有 IDAT 数据
         let width = 0, height = 0;
         const idatChunks = [];
-        let pos = 8; // 跳过PNG签名
+        let pos = 8;
         while (pos < u8.length) {
-            const len = u32(u8, pos);
+            const len  = u32(u8, pos);
             const type = String.fromCharCode(u8[pos+4],u8[pos+5],u8[pos+6],u8[pos+7]);
             const data = u8.subarray(pos+8, pos+8+len);
-            if (type === 'IHDR') {
-                width  = u32(data, 0);
-                height = u32(data, 4);
-            } else if (type === 'IDAT') {
-                idatChunks.push(data);
-            } else if (type === 'IEND') {
-                break;
-            }
+            if      (type === 'IHDR') { width = u32(data, 0); height = u32(data, 4); }
+            else if (type === 'IDAT') { idatChunks.push(data); }
+            else if (type === 'IEND') { break; }
             pos += 12 + len;
         }
 
-        // 合并 IDAT
         let totalLen = idatChunks.reduce((s, c) => s + c.length, 0);
         const zlibData = new Uint8Array(totalLen);
         let off = 0;
         for (const c of idatChunks) { zlibData.set(c, off); off += c.length; }
 
-        // zlib inflate（存储模式 / deflate）— 手写inflate解析
         const raw = this._inflate(zlibData, width, height);
 
-        // PNG filter 还原 → 输出 RGBA 像素
         const rowBytes = width * 4;
         const pixels = new Uint8Array(width * height * 4);
         for (let y = 0; y < height; y++) {
@@ -434,22 +327,18 @@ class KMWebGLPainter {
         return { width, height, pixels };
     }
 
-    // zlib/deflate inflate，支持存储块和固定/动态霍夫曼
     _inflate(zlib, width, height) {
-        // 跳过zlib头(2字节)，忽略尾部adler32(4字节)
         const deflate = zlib.subarray(2, zlib.length - 4);
         const rowBytes = width * 4;
         const out = new Uint8Array(height * (rowBytes + 1));
         let inPos = 0, outPos = 0;
 
-        // 位读取器
         let bitBuf = 0, bitLen = 0;
         const readBits = (n) => {
             while (bitLen < n) { bitBuf |= deflate[inPos++] << bitLen; bitLen += 8; }
             const val = bitBuf & ((1<<n)-1); bitBuf >>= n; bitLen -= n; return val;
         };
 
-        // 固定霍夫曼码长
         const fixedLitLen = new Array(288);
         for (let i=0;i<144;i++) fixedLitLen[i]=8;
         for (let i=144;i<256;i++) fixedLitLen[i]=9;
@@ -457,10 +346,9 @@ class KMWebGLPainter {
         for (let i=280;i<288;i++) fixedLitLen[i]=8;
         const fixedDist = new Array(32).fill(5);
 
-        // 改用正确的霍夫曼读取（带码长的table）
         const buildTree2 = (lens) => {
             const maxLen = lens.reduce((a,b)=>Math.max(a,b),0);
-            if (maxLen === 0) return { sym: new Int32Array(0), len: new Int32Array(0), maxLen: 0 };
+            if (maxLen === 0) return { symTable: new Int32Array(0), lenTable: new Int32Array(0), maxLen: 0 };
             const counts = new Int32Array(maxLen+1);
             for (const l of lens) if (l) counts[l]++;
             const nextCode = new Int32Array(maxLen+1);
@@ -477,6 +365,7 @@ class KMWebGLPainter {
             }
             return { symTable, lenTable, maxLen };
         };
+
         const peekRead = (tree) => {
             while (bitLen < tree.maxLen) {
                 if (inPos < deflate.length) { bitBuf |= deflate[inPos++] << bitLen; bitLen += 8; }
@@ -516,16 +405,13 @@ class KMWebGLPainter {
             const bfinal = readBits(1);
             const btype  = readBits(2);
             if (btype === 0) {
-                // 存储块
                 bitBuf = 0; bitLen = 0;
-                const len  = deflate[inPos] | (deflate[inPos+1]<<8); inPos+=4;
+                const len = deflate[inPos] | (deflate[inPos+1]<<8); inPos+=4;
                 out.set(deflate.subarray(inPos, inPos+len), outPos);
                 inPos += len; outPos += len;
             } else if (btype === 1) {
-                // 固定霍夫曼
                 inflate_block(buildTree2(fixedLitLen), buildTree2(fixedDist));
             } else if (btype === 2) {
-                // 动态霍夫曼
                 const hlit  = readBits(5) + 257;
                 const hdist = readBits(5) + 1;
                 const hclen = readBits(4) + 4;
@@ -547,309 +433,7 @@ class KMWebGLPainter {
         }
         return out;
     }
-
-    loadLUT() {
-        return new Promise((resolve) => {
-            const gl = this.gl;
-            // 把 data:image/png;base64,... 解码为原始字节，绕开 <img> 颜色管理
-            const b64 = KM_LUT_DATA.split(',')[1];
-            const bin = atob(b64);
-            const u8  = new Uint8Array(bin.length);
-            for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-
-            const { width, height, pixels } = this._decodePNG(u8);
-
-            const tex = gl.createTexture();
-            gl.bindTexture(gl.TEXTURE_2D, tex);
-            gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-            gl.bindTexture(gl.TEXTURE_2D, null);
-            this.textures.lut = tex;
-            console.log(`✅ LUT纹理加载完成（${width}×${height}，纯JS解码，无颜色管理）`);
-            resolve();
-        });
-    }
-
-    setupTextures() {
-        const gl = this.gl;
-        const w = this.canvas.width;
-        const h = this.canvas.height;
-
-        this.textures.canvas = this.createEmptyTexture(w, h);
-        this.textures.temp   = this.createEmptyTexture(w, h);
-    }
-
-    createEmptyTexture(width, height) {
-        const gl = this.gl;
-        const texture = gl.createTexture();
-
-        gl.bindTexture(gl.TEXTURE_2D, texture);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-        return texture;
-    }
-
-    createTextureFromImage(image) {
-        const gl = this.gl;
-        const texture = gl.createTexture();
-
-        gl.bindTexture(gl.TEXTURE_2D, texture);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-        return texture;
-    }
-
-    createBrushTextureFromCanvas(brushCanvas) {
-        return this.createTextureFromImage(brushCanvas);
-    }
-
-    setupFramebuffers() {
-        const gl = this.gl;
-
-        this.framebuffers.canvas = gl.createFramebuffer();
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
-        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.textures.canvas, 0);
-
-        this.framebuffers.temp = gl.createFramebuffer();
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.temp);
-        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.textures.temp, 0);
-
-        if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
-            console.error('Framebuffer 创建失败');
-        }
-
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    }
-
-    setupGeometry() {
-        const gl = this.gl;
-
-        this.buffers.position = gl.createBuffer();
-
-        const texCoords = new Float32Array([0,0, 1,0, 0,1, 1,1]);
-        this.buffers.texCoord = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.texCoord);
-        gl.bufferData(gl.ARRAY_BUFFER, texCoords, gl.STATIC_DRAW);
-    }
-
-    drawBrush(x, y, size, colorRGB, brushCanvas, useFalloff = true, smearDir = { x: 0, y: 0 }, smearLen = 0, disableSmear = false, smudgeAlpha = 1.0) {
-        const gl = this.gl;
-        const cw = this.canvas.width;
-        const ch = this.canvas.height;
-
-        // 计算笔刷 AABB，clamp 到画布范围
-        const halfSize = size / 2;
-        const rx0 = Math.max(0, Math.floor(x - halfSize));
-        const ry0 = Math.max(0, Math.floor(y - halfSize));
-        const rx1 = Math.min(cw, Math.ceil(x + halfSize));
-        const ry1 = Math.min(ch, Math.ceil(y + halfSize));
-        const rw = rx1 - rx0;
-        const rh = ry1 - ry0;
-
-        if (rw <= 0 || rh <= 0) return null;
-
-        if (brushCanvas !== this.lastBrushCanvas) {
-            if (this.currentBrushTexture) gl.deleteTexture(this.currentBrushTexture);
-            this.currentBrushTexture = this.createBrushTextureFromCanvas(brushCanvas);
-            this.lastBrushCanvas = brushCanvas;
-        }
-
-        gl.useProgram(this.program);
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.temp);
-        gl.viewport(0, 0, cw, ch);
-
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, this.textures.canvas);
-        gl.uniform1i(this.locations.u_canvasTexture, 0);
-
-        gl.activeTexture(gl.TEXTURE1);
-        gl.bindTexture(gl.TEXTURE_2D, this.currentBrushTexture);
-        gl.uniform1i(this.locations.u_brushTexture, 1);
-
-        gl.activeTexture(gl.TEXTURE2);
-        gl.bindTexture(gl.TEXTURE_2D, this.textures.lut);
-        gl.uniform1i(this.locations.u_lut, 2);
-
-        gl.uniform2f(this.locations.u_resolution, cw, ch);
-        gl.uniform4f(this.locations.u_brushColor, colorRGB.r, colorRGB.g, colorRGB.b, 1.0);
-        gl.uniform2f(this.locations.u_currentPosition, x, y);
-        gl.uniform1f(this.locations.u_brushRadius, size / 2);
-        gl.uniform1f(this.locations.u_baseMixStrength, this.baseMixStrength);
-        gl.uniform1f(this.locations.u_useFalloff, +useFalloff);
-        gl.uniform2f(this.locations.u_smearDir, smearDir.x, smearDir.y);
-        gl.uniform1f(this.locations.u_smearLen, smearLen);
-        gl.uniform1f(this.locations.u_disableSmear, disableSmear ? 1.0 : 0.0);
-        gl.uniform1f(this.locations.u_smudgeAlpha, smudgeAlpha);
-
-        const positions = new Float32Array([
-            x-halfSize, y-halfSize,
-            x+halfSize, y-halfSize,
-            x-halfSize, y+halfSize,
-            x+halfSize, y+halfSize
-        ]);
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.position);
-        gl.bufferData(gl.ARRAY_BUFFER, positions, gl.DYNAMIC_DRAW);
-        gl.enableVertexAttribArray(this.locations.a_position);
-        gl.vertexAttribPointer(this.locations.a_position, 2, gl.FLOAT, false, 0, 0);
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.texCoord);
-        gl.enableVertexAttribArray(this.locations.a_texCoord);
-        gl.vertexAttribPointer(this.locations.a_texCoord, 2, gl.FLOAT, false, 0, 0);
-
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-
-        this.swapTextures();
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-        return { x: rx0, y: ry0, w: rw, h: rh };
-    }
-
-    swapTextures() {
-        const gl = this.gl;
-
-        for (let i = 0; i < 4; i++) {
-            gl.activeTexture(gl.TEXTURE0 + i);
-            gl.bindTexture(gl.TEXTURE_2D, null);
-        }
-
-        const tempTex = this.textures.canvas;
-        this.textures.canvas = this.textures.temp;
-        this.textures.temp = tempTex;
-
-        const tempFB = this.framebuffers.canvas;
-        this.framebuffers.canvas = this.framebuffers.temp;
-        this.framebuffers.temp = tempFB;
-    }
-
-    readToCanvas2D(rect) {
-        const gl = this.gl;
-        const cw = this.canvas.width;
-        const ch = this.canvas.height;
-
-        for (let i = 0; i < 4; i++) {
-            gl.activeTexture(gl.TEXTURE0 + i);
-            gl.bindTexture(gl.TEXTURE_2D, null);
-        }
-
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
-
-        const displayCtx = this.canvas.getContext('2d', { willReadFrequently: true });
-
-        if (rect && rect.w > 0 && rect.h > 0) {
-            // 局部回读：只读脏区
-            const glY = ch - rect.y - rect.h;
-            const pixels = new Uint8Array(rect.w * rect.h * 4);
-            gl.readPixels(rect.x, glY, rect.w, rect.h, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-
-            const flipped = new Uint8ClampedArray(pixels.length);
-            const rowSize = rect.w * 4;
-            for (let row = 0; row < rect.h; row++) {
-                const srcRow = (rect.h - 1 - row) * rowSize;
-                const dstRow = row * rowSize;
-                flipped.set(pixels.subarray(srcRow, srcRow + rowSize), dstRow);
-            }
-
-            if (displayCtx) {
-                displayCtx.putImageData(new ImageData(flipped, rect.w, rect.h), rect.x, rect.y);
-            }
-        } else {
-            // 全量回读（用于 clear / restore 等场景）
-            const pixels = new Uint8Array(cw * ch * 4);
-            gl.readPixels(0, 0, cw, ch, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-
-            const flipped = new Uint8ClampedArray(pixels.length);
-            const rowSize = cw * 4;
-            for (let row = 0; row < ch; row++) {
-                const srcRow = (ch - 1 - row) * rowSize;
-                const dstRow = row * rowSize;
-                flipped.set(pixels.subarray(srcRow, srcRow + rowSize), dstRow);
-            }
-
-            if (displayCtx) {
-                displayCtx.putImageData(new ImageData(flipped, cw, ch), 0, 0);
-            }
-        }
-
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    }
-
-    writeFromPixels(pixels, w, h) {
-        const gl = this.gl;
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, null);
-        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-        gl.bindTexture(gl.TEXTURE_2D, this.textures.canvas);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-        gl.bindTexture(gl.TEXTURE_2D, this.textures.temp);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-        gl.bindTexture(gl.TEXTURE_2D, null);
-        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-    }
-
-    readPixelByte(x, y) {
-        const gl = this.gl;
-        const glY = this.canvas.height - 1 - y;
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
-        const pixels = new Uint8Array(4);
-        gl.readPixels(x, glY, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-        return { r: pixels[0], g: pixels[1], b: pixels[2] };
-    }
-
-    readPixelRegion(x, y, w, h) {
-        const gl = this.gl;
-        const cw = this.canvas.width;
-        const ch = this.canvas.height;
-        const sx = Math.max(0, x);
-        const sy = Math.max(0, y);
-        const sw = Math.min(w, cw - sx);
-        const sh = Math.min(h, ch - sy);
-        const glY = ch - sy - sh;
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
-        const pixels = new Uint8Array(sw * sh * 4);
-        gl.readPixels(sx, glY, sw, sh, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-        const flipped = new Uint8ClampedArray(pixels.length);
-        const rowSize = sw * 4;
-        for (let row = 0; row < sh; row++) {
-            flipped.set(pixels.subarray((sh - 1 - row) * rowSize, (sh - row) * rowSize), row * rowSize);
-        }
-        return flipped;
-    }
-
-    clear(color = { r: 1, g: 1, b: 1 }) {
-        const gl = this.gl;
-
-        for (let i = 0; i < 4; i++) {
-            gl.activeTexture(gl.TEXTURE0 + i);
-            gl.bindTexture(gl.TEXTURE_2D, null);
-        }
-
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
-        gl.clearColor(color.r, color.g, color.b, 1.0);
-        gl.clear(gl.COLOR_BUFFER_BIT);
-
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.temp);
-        gl.clearColor(color.r, color.g, color.b, 1.0);
-        gl.clear(gl.COLOR_BUFFER_BIT);
-
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-        this.readToCanvas2D();
-    }
 }
 
 window.KMWebGLPainter = KMWebGLPainter;
-console.log("KMWebGLPainter 加载成功");
+console.log('KMWebGLPainter 加载成功');

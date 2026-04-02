@@ -1,109 +1,21 @@
 /**
- * WebGL 混色引擎
- * 使用 Mixbox 算法进行颜料物理混色
+ * MixboxWebGLPainter — Mixbox 物理混色引擎
+ * 继承 BaseWebGLPainter，只包含 Mixbox 专有部分：
+ *  - 含 mixbox_lerp 的片段着色器
+ *  - mixbox LUT 纹理加载
+ *  - LUT 绑定到纹理槽 0
  */
-class MixboxWebGLPainter {
-    constructor(canvas) {
-        this.canvas = canvas;
-        this.gl = null;
-        
-        this.program = null;
-        this.textures = {};
-        this.framebuffers = {};
-        this.buffers = {};
-        this.locations = {};
-        this.currentBrushTexture = null;
-        
-        this.baseMixStrength = 0.2; // ✅ 添加这个：基础混合强度
-    }
+class MixboxWebGLPainter extends BaseWebGLPainter {
 
-    /**
-     * 设置混合强度
-     */
-    setMixStrength(strength) {
-        // strength 从 0-1 的范围
-        this.baseMixStrength = Math.max(0.01, Math.min(1.0, strength));
-    }
-
-    /**
-     * 获取当前混合强度
-     */
-    getMixStrength() {
-        return this.baseMixStrength;
-    }
-
-    /**
-     * 初始化
-     */
     async init() {
-        // 2. 初始化 WebGL
-        this.initWebGL();
-        
-        // 3. 编译着色器
-        this.compileShaders();
-        
-        // 4. 创建纹理和 Framebuffer
-        this.setupTextures();
-        this.setupFramebuffers();
-        
-        // 5. 创建几何体
-        this.setupGeometry();
-        
+        await super.init();
         console.log('✅ MixboxWebGLPainter 初始化完成');
     }
-    
-    /**
-     * 初始化 WebGL
-     */
-    initWebGL() {
-        // 创建一个临时canvas用于WebGL渲染
-        this.webglCanvas = document.createElement('canvas');
-        this.webglCanvas.width = this.canvas.width;
-        this.webglCanvas.height = this.canvas.height;
-        
-        this.gl = this.webglCanvas.getContext('webgl', {
-            alpha: false,
-            premultipliedAlpha: false,
-            preserveDrawingBuffer: true
-        });
-        
-        if (!this.gl) {
-            throw new Error('WebGL 不支持');
-        }
-        
-        const gl = this.gl;
-        gl.disable(gl.BLEND);
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    }
-    
-    /**
-     * 编译着色器
-     */
-    compileShaders() {
-        const gl = this.gl;
-        
-        // 顶点着色器
-        const vsSource = `
-        attribute vec2 a_position;
-        attribute vec2 a_texCoord;
-        
-        varying vec2 v_texCoord;
-        varying vec2 v_canvasCoord;
-        
-        uniform vec2 u_resolution;
-        uniform float u_smudgeAlpha;
-        
-        void main() {
-            vec2 clipSpace = (a_position / u_resolution) * 2.0 - 1.0;
-            gl_Position = vec4(clipSpace * vec2(1, -1), 0, 1);
-            
-            v_texCoord = a_texCoord;
-            v_canvasCoord = a_position;
-        }
-        `;
-        
-        // 片段着色器 - 使用官方Mixbox库，低浓度时切换为涂抹模式
-        const fsSource = `
+
+    // ─── 片段着色器 ───────────────────────────────
+
+    _buildFragmentShader() {
+        return `
         precision highp float;
 
         varying vec2 v_texCoord;
@@ -131,9 +43,7 @@ class MixboxWebGLPainter {
                 ? step(0.5, brushSample.a)
                 : brushSample.a;
 
-            if (brushAlpha < 0.01) {
-                discard;
-            }
+            if (brushAlpha < 0.01) discard;
 
             vec2 canvasUV = v_canvasCoord / u_resolution;
             canvasUV.y = 1.0 - canvasUV.y;
@@ -148,15 +58,12 @@ class MixboxWebGLPainter {
 
             vec3 outRGB;
             if (u_disableSmear > 0.5) {
-                // 涂抹工具模式：强度只控制推移距离
                 float edgeWeight = clamp(aBrush * u_smudgeAlpha, 0.0, 1.0);
                 vec3 mixedColor = mixbox_lerp(canvasColor.rgb, u_brushColor.rgb, u_smudgeAlpha * 0.5);
                 outRGB = mix(canvasColor.rgb, mixedColor, edgeWeight);
             } else {
-                // 笔刷工具模式：density 控制上色/涂抹混合
                 float density = u_baseMixStrength * u_baseMixStrength;
 
-                // 采样上游颜色（笔划来的方向）
                 float smearReach = clamp(u_smearLen, 1.0, u_brushRadius) * 0.8;
                 vec2 smearUV = (v_canvasCoord - u_smearDir * smearReach) / u_resolution;
                 smearUV.y = 1.0 - smearUV.y;
@@ -181,200 +88,22 @@ class MixboxWebGLPainter {
             gl_FragColor = vec4(outRGB, 1.0);
         }
         `;
-        
-        // 编译
-        const vs = this.createShader(gl.VERTEX_SHADER, vsSource);
-        const fs = this.createShader(gl.FRAGMENT_SHADER, fsSource);
-        this.program = this.createProgram(vs, fs);
-        
-        // 获取 locations
-        this.locations = {
-            a_position: gl.getAttribLocation(this.program, 'a_position'),
-            a_texCoord: gl.getAttribLocation(this.program, 'a_texCoord'),
-            u_resolution: gl.getUniformLocation(this.program, 'u_resolution'),
-            u_canvasTexture: gl.getUniformLocation(this.program, 'u_canvasTexture'),
-            u_brushTexture: gl.getUniformLocation(this.program, 'u_brushTexture'),
-            mixbox_lut: gl.getUniformLocation(this.program, 'mixbox_lut'),
-            u_brushColor: gl.getUniformLocation(this.program, 'u_brushColor'),
-            u_currentPosition: gl.getUniformLocation(this.program, 'u_currentPosition'),
-            u_brushRadius: gl.getUniformLocation(this.program, 'u_brushRadius'),
-            u_baseMixStrength: gl.getUniformLocation(this.program, 'u_baseMixStrength'),
-            u_useFalloff: gl.getUniformLocation(this.program, 'u_useFalloff'),
-            u_smearDir: gl.getUniformLocation(this.program, 'u_smearDir'),
-            u_smearLen: gl.getUniformLocation(this.program, 'u_smearLen'),
-            u_disableSmear: gl.getUniformLocation(this.program, 'u_disableSmear'),
-            u_smudgeAlpha: gl.getUniformLocation(this.program, 'u_smudgeAlpha'),
-        };
     }
-    
-    createShader(type, source) {
-        const gl = this.gl;
-        const shader = gl.createShader(type);
-        gl.shaderSource(shader, source);
-        gl.compileShader(shader);
-        
-        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        console.error('着色器编译错误:', gl.getShaderInfoLog(shader));
-        gl.deleteShader(shader);
-        return null;
-        }
-        return shader;
-    }
-    
-    createProgram(vs, fs) {
-        const gl = this.gl;
-        const program = gl.createProgram();
-        gl.attachShader(program, vs);
-        gl.attachShader(program, fs);
-        gl.linkProgram(program);
-        
-        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-        console.error('程序链接错误:', gl.getProgramInfoLog(program));
-        return null;
-        }
-        return program;
-    }
-    
-    /**
-     * 设置纹理
-     */
-    setupTextures() {
-        const gl = this.gl;
-        const w = this.canvas.width;
-        const h = this.canvas.height;
-        
-        // 画布纹理 (双缓冲)
-        this.textures.canvas = this.createEmptyTexture(w, h);
-        this.textures.temp = this.createEmptyTexture(w, h);
-        
-        // 使用官方Mixbox LUT纹理
-        this.textures.mixbox_lut = mixbox.lutTexture(gl);
-        
-        console.log('✅ 纹理创建完成');
-    }
-    
-    createEmptyTexture(width, height) {
-        const gl = this.gl;
-        const texture = gl.createTexture();
-        
-        gl.bindTexture(gl.TEXTURE_2D, texture);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-        
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        
-        return texture;
-    }
-    
-    createTextureFromImage(image) {
-        const gl = this.gl;
-        const texture = gl.createTexture();
-        
-        gl.bindTexture(gl.TEXTURE_2D, texture);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-        
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        
-        return texture;
-    }
-    
-    /**
-     * 从 Canvas 创建笔刷纹理
-     */
-    createBrushTextureFromCanvas(brushCanvas) {
-        return this.createTextureFromImage(brushCanvas);
-    }
-    
-    /**
-     * 设置 Framebuffer
-     */
-    setupFramebuffers() {
-        const gl = this.gl;
-        
-        // 创建两个独立的帧缓冲区
-        this.framebuffers.canvas = gl.createFramebuffer();
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
-        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.textures.canvas, 0);
-        
-        this.framebuffers.temp = gl.createFramebuffer();
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.temp);
-        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.textures.temp, 0);
-        
-        if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
-            console.error('Framebuffer 创建失败');
-        }
-        
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    }
-    
-    /**
-     * 设置几何体
-     */
-    setupGeometry() {
-        const gl = this.gl;
-        
-        // 位置缓冲 (动态更新)
-        this.buffers.position = gl.createBuffer();
-        
-        // 纹理坐标缓冲 (固定)
-        const texCoords = new Float32Array([
-            0.0, 0.0,
-            1.0, 0.0,
-            0.0, 1.0,
-            1.0, 1.0
-        ]);
-        
-        this.buffers.texCoord = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.texCoord);
-        gl.bufferData(gl.ARRAY_BUFFER, texCoords, gl.STATIC_DRAW);
-        
-        // 添加像素对齐修正
-        this.pixelAlignmentOffset = 0.0;
-    }
-    
-    /**
-     * 绘制笔触 (核心方法)
-     * 返回脏区矩形 {x, y, w, h}，供 readToCanvas2D 局部回读
-     */
-    drawBrush(x, y, size, colorRGB, brushCanvas, useFalloff = true, smearDir = { x: 0, y: 0 }, smearLen = 0, disableSmear = false, smudgeAlpha = 1.0) {
-        const gl = this.gl;
-        const cw = this.canvas.width;
-        const ch = this.canvas.height;
 
-        // 计算笔刷 AABB，clamp 到画布范围
-        const halfSize = size / 2;
-        const rx0 = Math.max(0, Math.floor(x - halfSize));
-        const ry0 = Math.max(0, Math.floor(y - halfSize));
-        const rx1 = Math.min(cw, Math.ceil(x + halfSize));
-        const ry1 = Math.min(ch, Math.ceil(y + halfSize));
-        const rw = rx1 - rx0;
-        const rh = ry1 - ry0;
+    // ─── LUT ─────────────────────────────────────
 
-        if (rw <= 0 || rh <= 0) return null;
+    _getExtraUniformNames() {
+        return ['mixbox_lut'];
+    }
 
-        // 更新笔刷纹理
-        if (brushCanvas !== this.lastBrushCanvas) {
-            if (this.currentBrushTexture) {
-                gl.deleteTexture(this.currentBrushTexture);
-            }
-            this.currentBrushTexture = this.createBrushTextureFromCanvas(brushCanvas);
-            this.lastBrushCanvas = brushCanvas;
-        }
+    async _loadLUT() {
+        this.textures.lut = mixbox.lutTexture(this.gl);
+    }
 
-        gl.useProgram(this.program);
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.temp);
-
-        // 全 viewport（保证顶点坐标→裁剪坐标的变换与 shader 中 canvasUV 计算一致）
-        gl.viewport(0, 0, cw, ch);
-
-        // 绑定纹理
+    _bindLUT() {
+        const gl = this.gl;
         gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, this.textures.mixbox_lut);
+        gl.bindTexture(gl.TEXTURE_2D, this.textures.lut);
         gl.uniform1i(this.locations.mixbox_lut, 0);
 
         gl.activeTexture(gl.TEXTURE1);
@@ -384,204 +113,8 @@ class MixboxWebGLPainter {
         gl.activeTexture(gl.TEXTURE2);
         gl.bindTexture(gl.TEXTURE_2D, this.currentBrushTexture);
         gl.uniform1i(this.locations.u_brushTexture, 2);
-
-        // 设置 uniform
-        gl.uniform2f(this.locations.u_resolution, cw, ch);
-        gl.uniform4f(this.locations.u_brushColor, colorRGB.r, colorRGB.g, colorRGB.b, 1.0);
-        gl.uniform2f(this.locations.u_currentPosition, x, y);
-        gl.uniform1f(this.locations.u_brushRadius, size / 2);
-        gl.uniform1f(this.locations.u_baseMixStrength, this.baseMixStrength);
-        gl.uniform1f(this.locations.u_useFalloff, +useFalloff);
-        gl.uniform2f(this.locations.u_smearDir, smearDir.x, smearDir.y);
-        gl.uniform1f(this.locations.u_smearLen, smearLen);
-        gl.uniform1f(this.locations.u_disableSmear, disableSmear ? 1.0 : 0.0);
-        gl.uniform1f(this.locations.u_smudgeAlpha, smudgeAlpha); 
-
-        // 更新几何体
-        const positions = new Float32Array([
-            x - halfSize, y - halfSize,
-            x + halfSize, y - halfSize,
-            x - halfSize, y + halfSize,
-            x + halfSize, y + halfSize
-        ]);
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.position);
-        gl.bufferData(gl.ARRAY_BUFFER, positions, gl.DYNAMIC_DRAW);
-        gl.enableVertexAttribArray(this.locations.a_position);
-        gl.vertexAttribPointer(this.locations.a_position, 2, gl.FLOAT, false, 0, 0);
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.texCoord);
-        gl.enableVertexAttribArray(this.locations.a_texCoord);
-        gl.vertexAttribPointer(this.locations.a_texCoord, 2, gl.FLOAT, false, 0, 0);
-
-        // 绘制
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-
-        // 交换纹理
-        this.swapTextures();
-
-        // 恢复默认 Framebuffer
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-        return { x: rx0, y: ry0, w: rw, h: rh };
-    }
-
-    /**
-     * 交换双缓冲纹理
-     */
-    swapTextures() {
-        // 交换引用
-        const tempTex = this.textures.canvas;
-        this.textures.canvas = this.textures.temp;
-        this.textures.temp = tempTex;
-        
-        // 交换帧缓冲区引用
-        const tempFB = this.framebuffers.canvas;
-        this.framebuffers.canvas = this.framebuffers.temp;
-        this.framebuffers.temp = tempFB;
-    }     
-    /**
-     * 从 WebGL 读取到 Canvas 2D
-     * @param {Object|null} rect - 局部脏区 {x, y, w, h}，null 则全量回读
-     */
-    readToCanvas2D(rect) {
-        const gl = this.gl;
-        const cw = this.canvas.width;
-        const ch = this.canvas.height;
-
-        // 清除所有纹理绑定
-        for (let i = 0; i < 8; i++) {
-            gl.activeTexture(gl.TEXTURE0 + i);
-            gl.bindTexture(gl.TEXTURE_2D, null);
-        }
-
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
-
-        const displayCtx = this.canvas.getContext('2d', { willReadFrequently: true });
-
-        if (rect && rect.w > 0 && rect.h > 0) {
-            // 局部回读：只读脏区
-            // WebGL Y 轴从底部起
-            const glY = ch - rect.y - rect.h;
-            const pixels = new Uint8Array(rect.w * rect.h * 4);
-            gl.readPixels(rect.x, glY, rect.w, rect.h, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-
-            // 翻转 Y 轴（局部）
-            const flipped = new Uint8ClampedArray(pixels.length);
-            const rowSize = rect.w * 4;
-            for (let row = 0; row < rect.h; row++) {
-                const srcRow = (rect.h - 1 - row) * rowSize;
-                const dstRow = row * rowSize;
-                flipped.set(pixels.subarray(srcRow, srcRow + rowSize), dstRow);
-            }
-
-            const imageData = new ImageData(flipped, rect.w, rect.h);
-            if (displayCtx) {
-                displayCtx.putImageData(imageData, rect.x, rect.y);
-            }
-        } else {
-            // 全量回读（用于 clear / restore 等场景）
-            const pixels = new Uint8Array(cw * ch * 4);
-            gl.readPixels(0, 0, cw, ch, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-
-            const flipped = new Uint8ClampedArray(pixels.length);
-            const rowSize = cw * 4;
-            for (let row = 0; row < ch; row++) {
-                const srcRow = (ch - 1 - row) * rowSize;
-                const dstRow = row * rowSize;
-                flipped.set(pixels.subarray(srcRow, srcRow + rowSize), dstRow);
-            }
-
-            if (displayCtx) {
-                displayCtx.putImageData(new ImageData(flipped, cw, ch), 0, 0);
-            }
-        }
-
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    }
-
-    /**
-     * 从像素数据写入 WebGL 纹理（屏幕坐标排列，Y向下）
-     */
-    writeFromPixels(pixels, w, h) {
-        const gl = this.gl;
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, null);
-        // pixels 是屏幕坐标排列（第0行=顶），UNPACK_FLIP_Y_WEBGL 翻转后与 shader UV 坐标对应
-        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-        gl.bindTexture(gl.TEXTURE_2D, this.textures.canvas);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-        gl.bindTexture(gl.TEXTURE_2D, this.textures.temp);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-        gl.bindTexture(gl.TEXTURE_2D, null);
-        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-    }
-
-    /**
-     * 从 framebuffer 读单像素（屏幕坐标）
-     */
-    readPixelByte(x, y) {
-        const gl = this.gl;
-        const glY = this.canvas.height - 1 - y;
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
-        const pixels = new Uint8Array(4);
-        gl.readPixels(x, glY, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-        return { r: pixels[0], g: pixels[1], b: pixels[2] };
-    }
-
-    /**
-     * 从 framebuffer 读矩形区域（屏幕坐标），返回 Y 轴翻转后的 Uint8ClampedArray
-     */
-    readPixelRegion(x, y, w, h) {
-        const gl = this.gl;
-        const cw = this.canvas.width;
-        const ch = this.canvas.height;
-        const sx = Math.max(0, x);
-        const sy = Math.max(0, y);
-        const sw = Math.min(w, cw - sx);
-        const sh = Math.min(h, ch - sy);
-        const glY = ch - sy - sh;
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
-        const pixels = new Uint8Array(sw * sh * 4);
-        gl.readPixels(sx, glY, sw, sh, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-        const flipped = new Uint8ClampedArray(pixels.length);
-        const rowSize = sw * 4;
-        for (let row = 0; row < sh; row++) {
-            flipped.set(pixels.subarray((sh - 1 - row) * rowSize, (sh - row) * rowSize), row * rowSize);
-        }
-        return flipped;
-    }
-
-    /**
-     * 清空画布
-     */
-    clear(color = { r: 1, g: 1, b: 1 }) {
-        const gl = this.gl;
-        
-        // 清除所有纹理绑定
-        for (let i = 0; i < 8; i++) {
-            gl.activeTexture(gl.TEXTURE0 + i);
-            gl.bindTexture(gl.TEXTURE_2D, null);
-        }
-        
-        // 清除画布帧缓冲区
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
-        gl.clearColor(color.r, color.g, color.b, 1.0);
-        gl.clear(gl.COLOR_BUFFER_BIT);
-        
-        // 清除临时帧缓冲区
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.temp);
-        gl.clearColor(color.r, color.g, color.b, 1.0);
-        gl.clear(gl.COLOR_BUFFER_BIT);
-        
-        // 恢复默认帧缓冲区
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-        
-        // 更新到Canvas 2D
-        this.readToCanvas2D();
     }
 }
+
 window.MixboxWebGLPainter = MixboxWebGLPainter;
-console.log("MixboxWebGLPainter 加载成功");
+console.log('MixboxWebGLPainter 加载成功');
