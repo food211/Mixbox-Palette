@@ -34,10 +34,7 @@ let smudgeBrushType = 'dry';  // 涂抹工具的笔刷类型
 let savedBrushSettings = null;  // 临时保存笔刷设置（切换到涂抹工具时使用）
 let smudgeSnapshotCache = null;
 
-// 历史记录 - 基于画布快照
-let history = [];  // 存储快照记录 { imageData: ImageData }
-let historyStep = -1;
-const MAX_HISTORY = 30;
+// 历史记录 - 由 painter 的 GPU 纹理池管理，此处不再持有数据
 
 // 当前笔画路径
 let currentStroke = null;  // { type: 'brush'|'smudge'|'clear', points: [], color, brushSize, brushType, ... }
@@ -53,14 +50,10 @@ function createPainter(engine, canvas) {
     if (engine === 'km' && typeof KMWebGLPainter !== 'undefined' && isWebGLSupported()) {
         console.log('使用 KM 渲染器');
         return new KMWebGLPainter(canvas);
-    } else if (typeof MixboxWebGLPainter !== 'undefined' && isWebGLSupported()) {
+    } else {
         console.log('使用 Mixbox 渲染器');
         return new MixboxWebGLPainter(canvas);
-    } else if (typeof MixboxCanvasPainter !== 'undefined') {
-        console.log('使用 Canvas 2D 渲染器');
-        return new MixboxCanvasPainter(canvas);
     }
-    throw new Error('没有可用的渲染器');
 }
 
 /**
@@ -69,8 +62,10 @@ function createPainter(engine, canvas) {
 async function switchEngine(engine) {
     if (engine === currentEngine) return;
     const oldMixStrength = painter ? painter.getMixStrength() : 0.3;
+    // 切换前从当前 GPU 帧读一次像素，用于迁移画布内容
     const oldPixels = painter ? painter.readPixelRegion(0, 0, mixCanvas.width, mixCanvas.height) : null;
 
+    // 旧 painter 的历史池随实例一起废弃
     painter = createPainter(engine, mixCanvas);
     await painter.init();
     painter.setMixStrength(oldMixStrength);
@@ -79,8 +74,9 @@ async function switchEngine(engine) {
 
     if (oldPixels) {
         painter.writeFromPixels(oldPixels, mixCanvas.width, mixCanvas.height);
-        painter.readToCanvas2D();
     }
+    // 以迁移后的画布为起点建立新历史
+    saveState();
 
     // 更新按钮文字
     const engineBtn = document.getElementById('engineBtn');
@@ -235,12 +231,6 @@ function saveBrushSettings() {
 async function initCanvas() {
     mixCanvas.width = 680;
     mixCanvas.height = 572;
-    // 先获取2D上下文，这样它就会被保留
-    const ctx2d = mixCanvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx2d) {
-        console.error('无法获取2D上下文');
-        return;
-    }
 
     // 初始化混色引擎
     const savedEngine = localStorage.getItem('mixbox_engine') || 'mixbox';
@@ -255,6 +245,7 @@ async function initCanvas() {
             await new Promise(resolve => {
                 const img = new Image();
                 img.onload = () => {
+                    // 用临时 2D canvas 解码 PNG → 读取像素 → 上传 WebGL
                     const tmpCanvas = document.createElement('canvas');
                     tmpCanvas.width = mixCanvas.width;
                     tmpCanvas.height = mixCanvas.height;
@@ -262,13 +253,11 @@ async function initCanvas() {
                     tmpCtx.drawImage(img, 0, 0);
                     const imageData = tmpCtx.getImageData(0, 0, mixCanvas.width, mixCanvas.height);
                     painter.writeFromPixels(imageData.data, mixCanvas.width, mixCanvas.height);
-                    painter.readToCanvas2D();
                     saveState();
                     resolve();
                 };
                 img.onerror = () => {
                     painter.clear(CANVAS_BG);
-                    painter.readToCanvas2D();
                     saveState();
                     resolve();
                 };
@@ -277,7 +266,6 @@ async function initCanvas() {
             console.log('✅ 画布内容已从快照恢复');
         } else {
             painter.clear(CANVAS_BG);
-            painter.readToCanvas2D();
             saveState();
         }
 
@@ -507,12 +495,10 @@ function bindEvents() {
     clearBtn.addEventListener('click', () => {
         if (painter) {
             painter.clear(CANVAS_BG);
-            painter.readToCanvas2D();
         }
 
-        // 清空历史记录
-        history = [];
-        historyStep = -1;
+        // 清空历史记录并以当前（空白）画布为起点
+        if (painter) painter.clearHistory();
         saveState();
         saveCanvasToStorage();
     });
@@ -921,17 +907,17 @@ function bindEvents() {
                         const ratio = i / steps;
                         const interpX = lastX + (x - lastX) * ratio;
                         const interpY = lastY + (y - lastY) * ratio;
-                        drawBrush(interpX, interpY, strokeColor, true, interpX, interpY, pressure);
+                        drawBrush(interpX, interpY, strokeColor, interpX, interpY, pressure);
                         addStrokePoint(interpX, interpY);
                     }
                 } else {
                     // 距离太远或太近，直接绘制
-                    drawBrush(x, y, strokeColor, true, x, y, pressure);
+                    drawBrush(x, y, strokeColor, x, y, pressure);
                     addStrokePoint(x, y);
                 }
             } else {
                 // 第一次点击，直接绘制
-                drawBrush(x, y, strokeColor, true, x, y, pressure);
+                drawBrush(x, y, strokeColor, x, y, pressure);
                 addStrokePoint(x, y);
             }
 
@@ -949,9 +935,10 @@ function bindEvents() {
 
             lastX = x;
             lastY = y;
+            if (painter) painter.flush();
         }
     });
-    
+
     mixCanvas.addEventListener('pointermove', (e) => {
         if (isDrawing && !isEyedropperMode) {
             const rect = mixCanvas.getBoundingClientRect();
@@ -983,18 +970,17 @@ function bindEvents() {
                             const ratio = i / steps;
                             const interpX = lastX + (x - lastX) * ratio;
                             const interpY = lastY + (y - lastY) * ratio;
-                            const r = drawBrush(interpX, interpY, activeColor, false, prevIX, prevIY, pressure);
+                            const r = drawBrush(interpX, interpY, activeColor, prevIX, prevIY, pressure);
                             if (r) unionRect = unionRect ? unionDirtyRect(unionRect, r) : r;
                             addStrokePoint(interpX, interpY);
                             prevIX = interpX; prevIY = interpY;
                         }
                     } else {
-                        const r = drawBrush(x, y, activeColor, false, lastX, lastY, pressure);
+                        const r = drawBrush(x, y, activeColor, lastX, lastY, pressure);
                         unionRect = r;
                         addStrokePoint(x, y);
                     }
 
-                    if (unionRect) painter.readToCanvas2D(unionRect);
                     lastX = x;
                     lastY = y;
                 }
@@ -1019,6 +1005,8 @@ function bindEvents() {
                     lastY = y;
                 }
             }
+            // 每个 pointermove 末尾统一 flush 一次，避免中间帧闪烁
+            if (painter) painter.flush();
         }
     });
     
@@ -1335,73 +1323,72 @@ function saveClearAction() {
 }
 
 /**
- * 保存状态到历史记录（兼容旧调用，现在只用于初始化）
+ * 初始化历史记录（首次或引擎切换后调用）
  */
 function saveState() {
-    if (history.length === 0) {
-        pushSnapshot();
+    if (!painter) return;
+    if (painter.getHistoryLength() === 0) {
+        painter.pushHistoryFrame();
         updateHistoryButtons();
     }
 }
 
 /**
- * 把当前画布状态作为快照压入历史
+ * 把当前画布状态压入 GPU 历史池
  */
 function pushSnapshot() {
-    const pixels = painter.readPixelRegion(0, 0, mixCanvas.width, mixCanvas.height);
-    history.splice(historyStep + 1);
-    history.push({ pixels });
-    if (history.length > MAX_HISTORY) {
-        history.shift();
-        historyStep = history.length - 1;
-    } else {
-        historyStep++;
+    if (!painter) return;
+    painter.pushHistoryFrame();
+}
+
+/**
+ * 恢复到指定历史步骤
+ */
+function restoreState(step) {
+    if (!painter) return;
+    if (painter.restoreHistoryFrame(step)) {
+        updateHistoryButtons();
     }
 }
 
 /**
- * 恢复历史状态
- */
-function restoreState(step) {
-    if (step < 0 || step >= history.length) return;
-    const snapshot = history[step];
-    if (!snapshot?.pixels) return;
-
-    painter.writeFromPixels(snapshot.pixels, mixCanvas.width, mixCanvas.height);
-    painter.readToCanvas2D();
-
-    historyStep = step;
-    updateHistoryButtons();
-}
-
-
-/**
- * 保存历史记录（用于撤销/重做恢复）
+ * 异步写入 localStorage（不阻塞当前帧）
  */
 function saveCanvasToStorage() {
-    paletteStorage.save(mixCanvas.toDataURL('image/png'));
+    if (!painter) return;
+    painter.scheduleIdleSave(() => {
+        paletteStorage.save(mixCanvas.toDataURL('image/png'));
+    });
 }
 
 /**
- * 更新历史按钮状态
+ * 更新撤销/重做按钮状态
  */
 function updateHistoryButtons() {
-    undoBtn.disabled = historyStep <= 0;
-    redoBtn.disabled = historyStep >= history.length - 1;
+    if (!painter) return;
+    const step = painter.getHistoryStep();
+    const len  = painter.getHistoryLength();
+    undoBtn.disabled = step <= 0;
+    redoBtn.disabled = step >= len - 1;
 }
 
 /**
  * 撤销
  */
 function undo() {
-    if (historyStep > 0) restoreState(historyStep - 1);
+    if (!painter) return;
+    const step = painter.getHistoryStep();
+    if (step > 0) restoreState(step - 1);
 }
 
 /**
  * 重做
  */
 function redo() {
-    if (historyStep < history.length - 1) restoreState(historyStep + 1);
+    if (!painter) return;
+    const step = painter.getHistoryStep();
+    const len  = painter.getHistoryLength();
+    if (step < len - 1) restoreState(step + 1);
 }
 
 /**
@@ -1446,7 +1433,7 @@ function unionDirtyRect(a, b) {
 /**
  * 绘制笔刷
  */
-function drawBrush(x, y, color, flush = true, prevX = x, prevY = y, pressure = 1.0) {
+function drawBrush(x, y, color, prevX = x, prevY = y, pressure = 1.0) {
     if (!color || !painter) return null;
 
     const colorRGB = hexToRgb(color);
@@ -1480,7 +1467,6 @@ function drawBrush(x, y, color, flush = true, prevX = x, prevY = y, pressure = 1
         dist,
     );
 
-    if (flush) painter.readToCanvas2D(dirtyRect);
     return dirtyRect;
 }
 
@@ -1499,9 +1485,6 @@ function smudgeAlongPath(x1, y1, x2, y2) {
     const smudgeStep = Math.max(1, smudgeBaseSpacing * smudgeSpacingRatio);
     const steps = Math.max(1, Math.floor(distance / smudgeStep));
 
-    // 喷溅笔均匀化模式：每步都回读，保证采样到最新混合结果
-    const isSplatterBlend = currentBrush.type === 'splatter';
-
     let unionRect = null;
     for (let i = 0; i <= steps; i++) {
         const ratio = i / steps;
@@ -1510,11 +1493,8 @@ function smudgeAlongPath(x1, y1, x2, y2) {
         const r = smudgeAtPoint(x, y, x2 - x1, y2 - y1);
         if (r) {
             unionRect = unionRect ? unionDirtyRect(unionRect, r) : r;
-            if (isSplatterBlend) painter.readToCanvas2D(r);
         }
     }
-
-    if (!isSplatterBlend) painter.readToCanvas2D(unionRect);
 }
 
 /**

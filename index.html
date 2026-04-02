@@ -109,6 +109,7 @@ const TIMEOUT_MS = 4000;
 const CORE_FILES = [
     "js/i18n.js",
     "js/mixbox.js",
+    "js/base-painter.js",
     "js/mixbox-painter.js",
     "js/km-lut-data.js",
     "js/km-painter.js",
@@ -133,30 +134,13 @@ function showError(message) {
     document.getElementById('retryBtn').classList.add('show');
 }
 
-// 检测WebGL支持
-function isWebGLSupported() {
-    try {
-        const canvas = document.createElement('canvas');
-        return !!(window.WebGLRenderingContext && 
-            (canvas.getContext('webgl') || canvas.getContext('experimental-webgl')));
-    } catch(e) {
-        return false;
-    }
-}
 
 // 预加载文件
 async function preloadFiles(baseUrl) {
     // 确定需要加载的引擎文件
     let filesToLoad = [...CORE_FILES];
     
-    if (!isWebGLSupported()) {
-        // WebGL不支持时，移除KM引擎相关文件，添加Canvas 2D回退
-        filesToLoad = filesToLoad.filter(file => !file.includes('km-'));
-        filesToLoad.push('js/mixbox-canvas-painter.js');
-        updateProgress(10, "检测到WebGL不可用，将使用Canvas 2D引擎");
-    } else {
-        updateProgress(10, "检测到WebGL支持，加载全部引擎");
-    }
+    updateProgress(10, "加载引擎文件...");
     
     const totalFiles = filesToLoad.length;
     let loadedFiles = 0;

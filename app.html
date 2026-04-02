@@ -209,17 +209,14 @@
                 // 加载 Mixbox（默认引擎）
                 await loadScript('js/mixbox.js');
                 console.log('✅ mixbox.js 已加载');
+                await loadScript('js/base-painter.js');
+                console.log('✅ base-painter.js 已加载');
                 await loadScript('js/mixbox-painter.js');
                 console.log('✅ mixbox-painter.js 已加载');
                 // 加载 KM（可选引擎）
                 await loadScript('js/km-lut-data.js');
                 await loadScript('js/km-painter.js');
                 console.log('✅ km-painter.js 已加载');
-            } else {
-                // WebGL 不可用时用 Canvas 2D 回退
-                await loadScript('js/mixbox.js');
-                await loadScript('js/mixbox-canvas-painter.js');
-                console.log('✅ mixbox-canvas-painter.js 已加载');
             }
             
             // 加载其他依赖
