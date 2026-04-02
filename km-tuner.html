@@ -234,7 +234,7 @@
 
 <p class="note">
   KM Lite = 38波长光谱域KM混合。RGB→7基色光谱分解→38波长KS混合→RGB，线性浓度混合，物理正确，无需hack。<br>
-  Spectral = 基于 spectral.js (MIT) 的光谱域 KM 混色。RGB→8基色光谱分解→38波长KM混合→RGB，无需hack即可实现蓝+黄=绿。<br><br>
+  Spectral = 基于 spectral.js (MIT) 的光谱域 KM 混色。RGB→7基色光谱分解→38波长KM混合→RGB，luminance加权浓度，无需hack即可实现蓝+黄=绿。<br><br>
   <strong style="color:#c8b060;">★ 为插件实际使用的算法。</strong><br>
   KM Lite 与插件的 KM 模式在算法逻辑上一致（38波长光谱KM，线性浓度混合），但实现方式不同：插件使用预计算的 32³ LUT 查表 + WebGL 渲染；此处为实时计算，结果应接近但因浮点精度和插值方式不同可能有细微差异。<br>
   Mixbox 使用完全相同的 JS 库（mixbox.js），结果与插件一致。<br>
