@@ -33,6 +33,7 @@ let smudgeBrushSize = 15;  // 涂抹工具的笔刷大小
 let smudgeBrushType = 'dry';  // 涂抹工具的笔刷类型
 let savedBrushSettings = null;  // 临时保存笔刷设置（切换到涂抹工具时使用）
 let smudgeSnapshotCache = null;
+let _smudgeAngle = 0;  // 涂抹喷溅纹理旋转角，每步随机
 
 // 历史记录 - 由 painter 的 GPU 纹理池管理，此处不再持有数据
 
@@ -923,6 +924,7 @@ function bindEvents() {
 
             lastX = x;
             lastY = y;
+            if (painter) painter.flush();
         } else if (currentTool === 'smudge') {
             // 涂抹工具模式
             isDrawing = true;
@@ -1008,8 +1010,14 @@ function bindEvents() {
             // 每个 pointermove 末尾统一 flush 一次，避免中间帧闪烁
             if (painter) painter.flush();
         }
+
+        // 笔刷光标跟随（无论是否在绘制）
+        {
+            const rect = mixCanvas.getBoundingClientRect();
+            updateBrushCursor(e.clientX - rect.left, e.clientY - rect.top);
+        }
     });
-    
+
     mixCanvas.addEventListener('pointerup', (e) => {
         // 吸管模式：在松开鼠标时取色
         if (isEyedropperMode) {
@@ -1056,7 +1064,89 @@ function bindEvents() {
 
             endStroke();
         }
+        hideBrushCursor();
     });
+
+    // ── 笔刷光标 ──────────────────────────────────────
+    const brushCursorCanvas = document.getElementById('brushCursor');
+    const brushCursorCtx = brushCursorCanvas.getContext('2d');
+    let _cursorCacheKey = null;  // 上次绘制时的 key，用于判断是否需要重绘
+
+    function _rebuildCursorImage(canvasSize, cssDiameter) {
+        const pad = 3; // 给描边留出空间，防止被裁切
+        const totalSize = canvasSize + pad * 2;
+        brushCursorCanvas.width  = totalSize;
+        brushCursorCanvas.height = totalSize;
+        const ctx = brushCursorCtx;
+        ctx.clearRect(0, 0, totalSize, totalSize);
+
+        // 1. 在离屏 canvas 上画出笔刷形状（白色 fill，与背景无关）
+        const offscreen = document.createElement('canvas');
+        offscreen.width  = totalSize;
+        offscreen.height = totalSize;
+        const oc = offscreen.getContext('2d');
+        oc.fillStyle = '#000';
+        const brushSrc = currentBrush.image
+            ? currentBrush.image
+            : brushManager.createBrushTexture(Math.ceil(cssDiameter / 2), currentBrush);
+        oc.drawImage(brushSrc, pad, pad, canvasSize, canvasSize);
+
+        // 2. 黑色外描边：以离屏形状作 shadow，自身透明
+        ctx.save();
+        ctx.shadowColor = 'rgba(0,0,0,0.9)';
+        ctx.shadowBlur  = 2;
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.drawImage(offscreen, 0, 0);
+        ctx.restore();
+
+        // 3. 白色内描边（稍细）
+        ctx.save();
+        ctx.shadowColor = 'rgba(255,255,255,0.95)';
+        ctx.shadowBlur  = 1;
+        ctx.drawImage(offscreen, 0, 0);
+        ctx.restore();
+
+        // 4. 扣掉实心区域，只留描边轮廓
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.drawImage(offscreen, 0, 0);
+        ctx.globalCompositeOperation = 'source-over';
+    }
+
+    function updateBrushCursor(cssX, cssY) {
+        if (!brushManager || isEyedropperMode || isRectSelectMode) {
+            hideBrushCursor();
+            return;
+        }
+
+        const rect = mixCanvas.getBoundingClientRect();
+        const scaleX = rect.width / mixCanvas.width;
+        const activeSize = currentTool === 'smudge' ? smudgeBrushSize : brushSize;
+        const cssDiameter = activeSize * scaleX;
+        const canvasSize = Math.ceil(cssDiameter);
+        const pad = 3;
+        const totalSize = canvasSize + pad * 2;
+
+        // 只在笔刷类型或尺寸变化时重绘（随机笔刷也只重建一次，避免每帧抖动）
+        const brushKey = currentBrush.image ? 'custom' : currentBrush.type;
+        const cacheKey = `${brushKey}_${canvasSize}`;
+        if (cacheKey !== _cursorCacheKey) {
+            _rebuildCursorImage(canvasSize, cssDiameter);
+            _cursorCacheKey = cacheKey;
+        }
+
+        brushCursorCanvas.style.width  = totalSize + 'px';
+        brushCursorCanvas.style.height = totalSize + 'px';
+        // pad 补偿：让笔刷形状中心对准鼠标
+        brushCursorCanvas.style.left = (cssX - canvasSize / 2 - pad) + 'px';
+        brushCursorCanvas.style.top  = (cssY - canvasSize / 2 - pad) + 'px';
+        brushCursorCanvas.style.display = 'block';
+        mixCanvas.style.cursor = 'none';
+    }
+
+    function hideBrushCursor() {
+        brushCursorCanvas.style.display = 'none';
+        mixCanvas.style.cursor = '';
+    }
 
     mixCanvas.addEventListener('contextmenu', (e) => {
         e.preventDefault();
@@ -1253,27 +1343,18 @@ function beginStroke(type, color = null, startX = 0, startY = 0, pressure = 1.0)
         brushType: currentBrush.type,
         mixStrength: painter ? painter.getMixStrength() : 0.5
     };
+    brushManager.refreshRandomBrush(effectiveSize, currentBrush);
     currentStrokeBrushCanvas = brushManager.createBrushTexture(effectiveSize, currentBrush);
 
     if (type === 'smudge') {
-        const r = Math.ceil(brushSize / 2);
-        const sx = Math.max(0, Math.floor(startX) - r);
-        const sy = Math.max(0, Math.floor(startY) - r);
-        const sw = Math.min(mixCanvas.width - sx, r * 2);
-        const sh = Math.min(mixCanvas.height - sy, r * 2);
-        const pixelData = painter.readPixelRegion(sx, sy, sw, sh);
-        const localX = Math.floor(startX) - sx;
-        const localY = Math.floor(startY) - sy;
-        // 只存落笔点的颜色，不存整块数据
-        smudgeSnapshotCache = {
-            color: pickColorFromSnapshot(
-                { data: pixelData, width: sw, height: sh },
-                localX, localY
-            ),
-            startX,
-            startY,
-        };
+        // 角度归零：每笔重新开始旋转，避免每笔开头方向相同
+        _smudgeAngle = 0;
+        // 只记录起始坐标，用于距离衰减计算
+        smudgeSnapshotCache = { startX, startY };
         currentStroke.canvasSnapshot = smudgeSnapshotCache;
+        // 落笔时把当前画布冻结到 smudgeSnapshot 纹理，
+        // 涂抹全程从这张快照采样，颜色不会被反复稀释变灰
+        if (painter) painter.captureSmudgeSnapshot();
     }
 }
 
@@ -1357,7 +1438,7 @@ function restoreState(step) {
 function saveCanvasToStorage() {
     if (!painter) return;
     painter.scheduleIdleSave(() => {
-        paletteStorage.save(mixCanvas.toDataURL('image/png'));
+        paletteStorage.save(painter.toDataURL('image/png'));
     });
 }
 
@@ -1446,15 +1527,15 @@ function drawBrush(x, y, color, prevX = x, prevY = y, pressure = 1.0) {
     const isWatercolor = currentBrush.type === 'watercolor';
     // 0=硬边, 1=径向渐变衰减, 2=无衰减(纹理自身决定形状)
     const isSoftBrush = isSplatter ? 2 : isCircle ? 0 : isWatercolor ? 2 : 1;
-    // splatter 每步随机，其余笔刷复用落笔时生成的纹理
-    const brushCanvas = isSplatter
-        ? brushManager.createBrushTexture(effectiveSize, currentBrush)
-        : (currentStrokeBrushCanvas || brushManager.createBrushTexture(effectiveSize, currentBrush));
+    const brushCanvas = currentStrokeBrushCanvas || brushManager.createBrushTexture(effectiveSize, currentBrush);
 
     const dx = x - prevX;
     const dy = y - prevY;
     const dist = Math.sqrt(dx * dx + dy * dy);
     const smearDir = dist > 0 ? { x: dx / dist, y: dy / dist } : { x: 0, y: 0 };
+
+    // 喷溅笔刷每步用随机角度旋转纹理，模拟喷枪散点无规律感
+    const brushRotation = isSplatter ? Math.random() * Math.PI * 2 : 0;
 
     const dirtyRect = painter.drawBrush(
         x,
@@ -1465,6 +1546,8 @@ function drawBrush(x, y, color, prevX = x, prevY = y, pressure = 1.0) {
         isSoftBrush,
         smearDir,
         dist,
+        false, 1.0, false, 0, 0,
+        brushRotation,
     );
 
     return dirtyRect;
@@ -1499,6 +1582,8 @@ function smudgeAlongPath(x1, y1, x2, y2) {
 
 /**
  * 在指定点执行涂抹
+ * 注意：子类 shader 在 u_isSmudge=1 时应从 u_smudgeSnapshot 采样，
+ * 而不是从 u_canvasTexture 采样，否则颜色会被反复稀释变灰。
  */
 function smudgeAtPoint(x, y, dx, dy) {
     if (!painter) return;
@@ -1507,29 +1592,30 @@ function smudgeAtPoint(x, y, dx, dy) {
     if (!snapshot) return;
 
     const baseStrength = mixSliderToStrength(smudgeStrength);
-
     const length = Math.sqrt(dx * dx + dy * dy);
     const dirX = length > 0 ? dx / length : 0;
     const dirY = length > 0 ? dy / length : 0;
 
-    // 喷溅笔：均匀化模式——每笔只混合一点，多涂几遍才收敛
+    // 每步随机采样角度，产生喷枪散点感
+    _smudgeAngle = Math.random() * Math.PI * 2;
+
+    const sampleRadius = brushSize * 0.8;
+
+    const brushCanvas = currentStrokeBrushCanvas
+        || brushManager.createBrushTexture(brushSize, currentBrush);
+
+    // 喷溅笔：均匀化模式，强度较低，多涂几遍收敛；纹理在 GPU 旋转模拟搅动感
     if (currentBrush.type === 'splatter') {
-        const avgColor = sampleAreaAvgColor(Math.floor(x), Math.floor(y), brushSize);
-        // 每次只混合一小步，强度约为正常的 35%，重复涂抹逐渐均匀
         const blendStrength = baseStrength * 0.35;
-        // 喷溅笔每步重新生成纹理，保留随机感
-        const brushCanvas = brushManager.createBrushTexture(brushSize, currentBrush);
         painter.setMixStrength(blendStrength);
         const result = painter.drawBrush(
-            x, y,
-            brushSize * 2,
-            avgColor,
+            x, y, brushSize * 2,
+            { r: 0, g: 0, b: 0 },  // 颜色由 shader 采样，此值不使用
             brushCanvas,
             true,
-            { x: 0, y: 0 },
-            0,
-            true,
-            1.0
+            { x: 0, y: 0 }, 0,
+            true, 1.0,
+            true, sampleRadius, _smudgeAngle
         );
         painter.setMixStrength(baseStrength);
         return result;
@@ -1538,58 +1624,23 @@ function smudgeAtPoint(x, y, dx, dy) {
     const distFromStart = Math.sqrt(
         (x - snapshot.startX) ** 2 + (y - snapshot.startY) ** 2
     );
-
     const maxPushDistance = (brushSize / 2) * (smudgeStrength / 100) * 5;
-    if (distFromStart > maxPushDistance) return;  // 超出就停
+    if (distFromStart > maxPushDistance) return;
 
-    // 越接近边界越淡
     const alpha = 1 - distFromStart / maxPushDistance;
 
-    const brushCanvas = currentStrokeBrushCanvas
-        || brushManager.createBrushTexture(brushSize, currentBrush);
-
     painter.setMixStrength(baseStrength * alpha);
-
     const result = painter.drawBrush(
-        x, y,
-        brushSize * 2,
-        snapshot.color,
+        x, y, brushSize * 2,
+        { r: 0, g: 0, b: 0 },  // 颜色由 shader 采样，此值不使用
         brushCanvas,
         true,
-        { x: dirX, y: dirY },
-        0,
-        true,
-        alpha //距离衰减值，越远越小
+        { x: dirX, y: dirY }, 0,
+        true, alpha,
+        true, sampleRadius, 0  // dry 不旋转纹理
     );
-
     painter.setMixStrength(baseStrength);
     return result;
-}
-
-/**
- * 采样指定点周围区域的平均颜色（从 2D canvas 实时读取）
- */
-function sampleAreaAvgColor(cx, cy, radius) {
-    const r = Math.max(1, Math.ceil(radius * 0.6));
-    const sx = Math.max(0, cx - r);
-    const sy = Math.max(0, cy - r);
-    const sw = Math.min(mixCanvas.width - sx, r * 2);
-    const sh = Math.min(mixCanvas.height - sy, r * 2);
-    if (sw <= 0 || sh <= 0) return { r: 0.5, g: 0.5, b: 0.5 };
-
-    const data = painter.readPixelRegion(sx, sy, sw, sh);
-    let sumR = 0, sumG = 0, sumB = 0, count = 0;
-    for (let i = 0; i < data.length; i += 4) {
-        sumR += data[i];
-        sumG += data[i + 1];
-        sumB += data[i + 2];
-        count++;
-    }
-    return {
-        r: sumR / count / 255,
-        g: sumG / count / 255,
-        b: sumB / count / 255,
-    };
 }
 
 // ============ 语言切换 ============

@@ -34,11 +34,60 @@ class MixboxWebGLPainter extends BaseWebGLPainter {
         uniform float u_smearLen;
         uniform float u_disableSmear;
         uniform float u_smudgeAlpha;
+        uniform float u_isSmudge;
+        uniform float u_smudgeSampleRadius;
+        uniform float u_smudgeAngle;
 
         ${mixbox.glsl()}
 
+        // 13点环形采样，返回加权平均色（纯 GPU，零 readPixels）
+        vec3 sampleSmudgeColor(vec2 center, float radius, float angle) {
+            vec3 col = vec3(0.0);
+            float totalW = 0.0;
+
+            // 中心点，权重 0.4
+            vec2 uv0 = center / u_resolution;
+            uv0.y = 1.0 - uv0.y;
+            col += texture2D(u_canvasTexture, uv0).rgb * 0.4;
+            totalW += 0.4;
+
+            // 内环 4点，半径 * 0.4，权重各 0.1
+            float r1 = radius * 0.4;
+            for (int i = 0; i < 4; i++) {
+                float a = angle + float(i) * 1.5707963;
+                vec2 offset = vec2(cos(a), -sin(a)) * r1; // Y轴翻转补偿
+                vec2 uv = (center + offset) / u_resolution;
+                uv.y = 1.0 - uv.y;
+                uv = clamp(uv, 0.0, 1.0);
+                col += texture2D(u_canvasTexture, uv).rgb * 0.1;
+                totalW += 0.1;
+            }
+
+            // 外环 8点，半径 * 1.0，权重各 0.025
+            for (int i = 0; i < 8; i++) {
+                float a = angle + float(i) * 0.7853982;
+                vec2 offset = vec2(cos(a), -sin(a)) * radius;
+                vec2 uv = (center + offset) / u_resolution;
+                uv.y = 1.0 - uv.y;
+                uv = clamp(uv, 0.0, 1.0);
+                col += texture2D(u_canvasTexture, uv).rgb * 0.025;
+                totalW += 0.025;
+            }
+
+            return col / totalW;
+        }
+
         void main() {
-            vec4 brushSample = texture2D(u_brushTexture, v_texCoord);
+            // 喷溅笔刷在 GPU 旋转纹理，模拟搅动感；角度为 0 时跳过（其他笔刷不旋转）
+            vec2 brushUV = v_texCoord;
+            if (u_smudgeAngle != 0.0) {
+                vec2 centered = brushUV - 0.5;
+                float s = sin(u_smudgeAngle);
+                float c = cos(u_smudgeAngle);
+                brushUV = vec2(c * centered.x - s * centered.y,
+                               s * centered.x + c * centered.y) + 0.5;
+            }
+            vec4 brushSample = texture2D(u_brushTexture, brushUV);
             float brushAlpha = u_useFalloff < 0.5
                 ? step(0.5, brushSample.a)
                 : brushSample.a;
@@ -56,10 +105,15 @@ class MixboxWebGLPainter extends BaseWebGLPainter {
 
             float aBrush = radialFalloff * brushAlpha;
 
+            // 涂抹模式：从画布采样混色，替代 JS 传入的固定颜色
+            vec3 activeColor = (u_isSmudge > 0.5)
+                ? sampleSmudgeColor(v_canvasCoord, u_smudgeSampleRadius, u_smudgeAngle)
+                : u_brushColor.rgb;
+
             vec3 outRGB;
             if (u_disableSmear > 0.5) {
                 float edgeWeight = clamp(aBrush * u_smudgeAlpha, 0.0, 1.0);
-                vec3 mixedColor = mixbox_lerp(canvasColor.rgb, u_brushColor.rgb, u_smudgeAlpha * 0.5);
+                vec3 mixedColor = mixbox_lerp(canvasColor.rgb, activeColor, u_smudgeAlpha * 0.5);
                 outRGB = mix(canvasColor.rgb, mixedColor, edgeWeight);
             } else {
                 float density = u_baseMixStrength * u_baseMixStrength;
@@ -70,17 +124,17 @@ class MixboxWebGLPainter extends BaseWebGLPainter {
                 smearUV = clamp(smearUV, 0.0, 1.0);
                 vec4 smearSample = texture2D(u_canvasTexture, smearUV);
 
-                vec3 safeCanvasRGB = (canvasColor.a > 0.1) ? canvasColor.rgb : u_brushColor.rgb;
+                vec3 safeCanvasRGB = (canvasColor.a > 0.1) ? canvasColor.rgb : activeColor;
                 vec3 safeSmearRGB  = (smearSample.a > 0.1) ? smearSample.rgb : safeCanvasRGB;
 
                 vec3 smearTarget = mixbox_lerp(safeCanvasRGB, safeSmearRGB, aBrush * 0.6);
 
                 if (density > 0.98) {
-                    outRGB = mixbox_lerp(canvasColor.rgb, u_brushColor.rgb, aBrush * u_baseMixStrength);
+                    outRGB = mixbox_lerp(canvasColor.rgb, activeColor, aBrush * u_baseMixStrength);
                 } else if (density < 0.01) {
                     outRGB = smearTarget;
                 } else {
-                    vec3 paintResult = mixbox_lerp(canvasColor.rgb, u_brushColor.rgb, aBrush * u_baseMixStrength);
+                    vec3 paintResult = mixbox_lerp(canvasColor.rgb, activeColor, aBrush * u_baseMixStrength);
                     outRGB = mixbox_lerp(smearTarget, paintResult, density);
                 }
             }

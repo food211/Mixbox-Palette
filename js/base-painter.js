@@ -145,6 +145,10 @@ class BaseWebGLPainter {
             u_smearLen:        gl.getUniformLocation(this.program, 'u_smearLen'),
             u_disableSmear:    gl.getUniformLocation(this.program, 'u_disableSmear'),
             u_smudgeAlpha:     gl.getUniformLocation(this.program, 'u_smudgeAlpha'),
+            u_isSmudge:        gl.getUniformLocation(this.program, 'u_isSmudge'),
+            u_smudgeSampleRadius: gl.getUniformLocation(this.program, 'u_smudgeSampleRadius'),
+            u_smudgeAngle:        gl.getUniformLocation(this.program, 'u_smudgeAngle'),
+            u_smudgeSnapshot:     gl.getUniformLocation(this.program, 'u_smudgeSnapshot'),
         };
 
         for (const name of this._getExtraUniformNames()) {
@@ -185,8 +189,9 @@ class BaseWebGLPainter {
     setupTextures() {
         const w = this.canvas.width;
         const h = this.canvas.height;
-        this.textures.canvas = this.createEmptyTexture(w, h);
-        this.textures.temp   = this.createEmptyTexture(w, h);
+        this.textures.canvas         = this.createEmptyTexture(w, h);
+        this.textures.temp           = this.createEmptyTexture(w, h);
+        this.textures.smudgeSnapshot = this.createEmptyTexture(w, h);
     }
 
     setupFramebuffers() {
@@ -203,6 +208,10 @@ class BaseWebGLPainter {
         if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
             console.error('Framebuffer 创建失败');
         }
+
+        // 辅助 read FB：仅用于 drawBrush 中 copyTexImage2D，不参与 swapTextures
+        this._copyReadFB = gl.createFramebuffer();
+
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     }
 
@@ -294,13 +303,29 @@ class BaseWebGLPainter {
     }
 
     /**
+     * 落笔时调用：把当前 canvas 纹理复制到 smudgeSnapshot，
+     * 涂抹期间 shader 从此快照采样，避免颜色被反复稀释变灰。
+     */
+    captureSmudgeSnapshot() {
+        const gl = this.gl;
+        const cw = this.canvas.width;
+        const ch = this.canvas.height;
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
+        gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeSnapshot);
+        gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, cw, ch, 0);
+        gl.bindTexture(gl.TEXTURE_2D, null);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    }
+
+    /**
      * 绘制笔触（核心方法）
      * 返回脏区矩形 {x, y, w, h}
      */
     drawBrush(x, y, size, colorRGB, brushCanvas,
               useFalloff = true,
               smearDir = { x: 0, y: 0 }, smearLen = 0,
-              disableSmear = false, smudgeAlpha = 1.0) {
+              disableSmear = false, smudgeAlpha = 1.0, u_isSmudge = false, smudgeSampleRadius = 0, smudgeAngle = 0,
+              brushRotation = 0) {
         const gl = this.gl;
         const cw = this.canvas.width;
         const ch = this.canvas.height;
@@ -320,6 +345,16 @@ class BaseWebGLPainter {
             this.lastBrushCanvas = brushCanvas;
         }
 
+        // 渲染前先把 canvas 完整同步到 temp，保证 temp 笔刷区域之外的像素正确
+        // 注意：不能用 this.framebuffers.canvas（会随 swapTextures 轮换），
+        // 必须用辅助 FB 直接绑定当前 textures.canvas 来读取。
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this._copyReadFB);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.textures.canvas, 0);
+        gl.bindTexture(gl.TEXTURE_2D, this.textures.temp);
+        gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, cw, ch, 0);
+        gl.bindTexture(gl.TEXTURE_2D, null);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
         gl.useProgram(this.program);
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.temp);
         gl.viewport(0, 0, cw, ch);
@@ -337,6 +372,14 @@ class BaseWebGLPainter {
         gl.uniform1f(this.locations.u_smearLen, smearLen);
         gl.uniform1f(this.locations.u_disableSmear, disableSmear ? 1.0 : 0.0);
         gl.uniform1f(this.locations.u_smudgeAlpha, smudgeAlpha);
+        gl.uniform1f(this.locations.u_isSmudge, u_isSmudge ? 1.0 : 0.0);
+        gl.uniform1f(this.locations.u_smudgeSampleRadius, smudgeSampleRadius);
+        gl.uniform1f(this.locations.u_smudgeAngle, u_isSmudge ? smudgeAngle : brushRotation);
+
+        // 涂抹快照纹理固定绑定到 TEXTURE3，供 shader 采样冻结的起始画布
+        gl.activeTexture(gl.TEXTURE3);
+        gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeSnapshot);
+        gl.uniform1i(this.locations.u_smudgeSnapshot, 3);
 
         const positions = new Float32Array([
             x - halfSize, y - halfSize,
@@ -367,7 +410,6 @@ class BaseWebGLPainter {
         const gl = this.gl;
         const cw = this.canvas.width;
         const ch = this.canvas.height;
-
         gl.useProgram(this._blitProgram);
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.viewport(0, 0, cw, ch);
@@ -761,6 +803,36 @@ class BaseWebGLPainter {
         } else {
             setTimeout(callback, 100);
         }
+    }
+
+    /**
+     * 把当前画布内容导出为 dataURL（不读 WebGL canvas，避免触发浏览器合成闪烁）
+     * 通过 readPixels → 离屏 2D canvas → toDataURL 实现
+     */
+    toDataURL(type = 'image/png') {
+        const gl = this.gl;
+        const cw = this.canvas.width;
+        const ch = this.canvas.height;
+
+        // 从离屏 canvas framebuffer 读像素（不碰 default framebuffer）
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
+        const raw = new Uint8Array(cw * ch * 4);
+        gl.readPixels(0, 0, cw, ch, gl.RGBA, gl.UNSIGNED_BYTE, raw);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+        // WebGL 坐标 Y 轴朝上，翻转回屏幕坐标
+        const flipped = new Uint8ClampedArray(cw * ch * 4);
+        const rowSize = cw * 4;
+        for (let row = 0; row < ch; row++) {
+            flipped.set(raw.subarray((ch - 1 - row) * rowSize, (ch - row) * rowSize), row * rowSize);
+        }
+
+        // 用离屏 2D canvas 生成 dataURL，不触碰 WebGL canvas
+        const offscreen = document.createElement('canvas');
+        offscreen.width  = cw;
+        offscreen.height = ch;
+        offscreen.getContext('2d').putImageData(new ImageData(flipped, cw, ch), 0, 0);
+        return offscreen.toDataURL(type);
     }
 }
 
