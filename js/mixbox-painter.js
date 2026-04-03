@@ -40,7 +40,12 @@ class MixboxWebGLPainter extends BaseWebGLPainter {
 
         ${mixbox.glsl()}
 
-        // 13点环形采样，返回加权平均色（纯 GPU，零 readPixels）
+        // 13点环形采样，从实时画布采样（搅动效果）
+        // 颜色与白色的距离（0=纯白，1=最远离白色）
+        float colorness(vec3 rgb) {
+            return length(vec3(1.0) - rgb);
+        }
+
         vec3 sampleSmudgeColor(vec2 center, float radius, float angle) {
             vec3 col = vec3(0.0);
             float totalW = 0.0;
@@ -48,19 +53,21 @@ class MixboxWebGLPainter extends BaseWebGLPainter {
             // 中心点，权重 0.4
             vec2 uv0 = center / u_resolution;
             uv0.y = 1.0 - uv0.y;
-            col += texture2D(u_canvasTexture, uv0).rgb * 0.4;
-            totalW += 0.4;
+            vec3 s0 = texture2D(u_canvasTexture, uv0).rgb;
+            float w0 = 0.4 * colorness(s0);
+            col += s0 * w0; totalW += w0;
 
             // 内环 4点，半径 * 0.4，权重各 0.1
             float r1 = radius * 0.4;
             for (int i = 0; i < 4; i++) {
                 float a = angle + float(i) * 1.5707963;
-                vec2 offset = vec2(cos(a), -sin(a)) * r1; // Y轴翻转补偿
+                vec2 offset = vec2(cos(a), -sin(a)) * r1;
                 vec2 uv = (center + offset) / u_resolution;
                 uv.y = 1.0 - uv.y;
                 uv = clamp(uv, 0.0, 1.0);
-                col += texture2D(u_canvasTexture, uv).rgb * 0.1;
-                totalW += 0.1;
+                vec3 s = texture2D(u_canvasTexture, uv).rgb;
+                float w = 0.1 * colorness(s);
+                col += s * w; totalW += w;
             }
 
             // 外环 8点，半径 * 1.0，权重各 0.025
@@ -70,10 +77,12 @@ class MixboxWebGLPainter extends BaseWebGLPainter {
                 vec2 uv = (center + offset) / u_resolution;
                 uv.y = 1.0 - uv.y;
                 uv = clamp(uv, 0.0, 1.0);
-                col += texture2D(u_canvasTexture, uv).rgb * 0.025;
-                totalW += 0.025;
+                vec3 s = texture2D(u_canvasTexture, uv).rgb;
+                float w = 0.025 * colorness(s);
+                col += s * w; totalW += w;
             }
 
+            if (totalW < 0.001) return vec3(1.0); // 全是白色，返回白色
             return col / totalW;
         }
 
@@ -112,9 +121,7 @@ class MixboxWebGLPainter extends BaseWebGLPainter {
 
             vec3 outRGB;
             if (u_disableSmear > 0.5) {
-                float edgeWeight = clamp(aBrush * u_smudgeAlpha, 0.0, 1.0);
-                vec3 mixedColor = mixbox_lerp(canvasColor.rgb, activeColor, u_smudgeAlpha * 0.5);
-                outRGB = mix(canvasColor.rgb, mixedColor, edgeWeight);
+                outRGB = mixbox_lerp(canvasColor.rgb, activeColor, aBrush * u_baseMixStrength);
             } else {
                 float density = u_baseMixStrength * u_baseMixStrength;
 

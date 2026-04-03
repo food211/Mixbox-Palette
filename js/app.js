@@ -1581,65 +1581,31 @@ function smudgeAlongPath(x1, y1, x2, y2) {
 }
 
 /**
- * 在指定点执行涂抹
- * 注意：子类 shader 在 u_isSmudge=1 时应从 u_smudgeSnapshot 采样，
- * 而不是从 u_canvasTexture 采样，否则颜色会被反复稀释变灰。
+ * 在指定点执行涂抹：复用笔刷 smear 逻辑，把移动方向后方的颜色带到当前位置。
+ * density=0（baseMixStrength=0）→ 纯 smear，不混入新颜料，不会反复混浊。
  */
 function smudgeAtPoint(x, y, dx, dy) {
     if (!painter) return;
 
-    const snapshot = currentStroke?.canvasSnapshot;
-    if (!snapshot) return;
-
-    const baseStrength = mixSliderToStrength(smudgeStrength);
-    const length = Math.sqrt(dx * dx + dy * dy);
-    const dirX = length > 0 ? dx / length : 0;
-    const dirY = length > 0 ? dy / length : 0;
-
-    // 每步随机采样角度，产生喷枪散点感
-    _smudgeAngle = Math.random() * Math.PI * 2;
-
-    const sampleRadius = brushSize * 0.8;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    const dirX = len > 0 ? dx / len : 0;
+    const dirY = len > 0 ? dy / len : 0;
+    const smearLen = brushSize * 0.5 * (smudgeStrength / 100) * 0.3;
 
     const brushCanvas = currentStrokeBrushCanvas
         || brushManager.createBrushTexture(brushSize, currentBrush);
 
-    // 喷溅笔：均匀化模式，强度较低，多涂几遍收敛；纹理在 GPU 旋转模拟搅动感
-    if (currentBrush.type === 'splatter') {
-        const blendStrength = baseStrength * 0.35;
-        painter.setMixStrength(blendStrength);
-        const result = painter.drawBrush(
-            x, y, brushSize * 2,
-            { r: 0, g: 0, b: 0 },  // 颜色由 shader 采样，此值不使用
-            brushCanvas,
-            true,
-            { x: 0, y: 0 }, 0,
-            true, 1.0,
-            true, sampleRadius, _smudgeAngle
-        );
-        painter.setMixStrength(baseStrength);
-        return result;
-    }
-
-    const distFromStart = Math.sqrt(
-        (x - snapshot.startX) ** 2 + (y - snapshot.startY) ** 2
-    );
-    const maxPushDistance = (brushSize / 2) * (smudgeStrength / 100) * 5;
-    if (distFromStart > maxPushDistance) return;
-
-    const alpha = 1 - distFromStart / maxPushDistance;
-
-    painter.setMixStrength(baseStrength * alpha);
+    const prevStrength = painter.getMixStrength();
+    painter.setMixStrength(0); // density=0 → 纯 smear 分支
     const result = painter.drawBrush(
         x, y, brushSize * 2,
-        { r: 0, g: 0, b: 0 },  // 颜色由 shader 采样，此值不使用
+        { r: 0, g: 0, b: 0 },
         brushCanvas,
         true,
-        { x: dirX, y: dirY }, 0,
-        true, alpha,
-        true, sampleRadius, 0  // dry 不旋转纹理
+        { x: dirX, y: dirY }, smearLen,
+        false // disableSmear=false，走 smear 路径
     );
-    painter.setMixStrength(baseStrength);
+    painter.setMixStrength(prevStrength);
     return result;
 }
 
