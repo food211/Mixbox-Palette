@@ -103,11 +103,23 @@ class BrushManager {
     }
 
     /**
+     * 强制重新生成随机笔刷并更新缓存（每笔落笔时调用一次）
+     * 适用于 splatter / dry 这类含随机元素的笔刷
+     */
+    refreshRandomBrush(size, brush) {
+        if (brush.image) return;
+        if (brush.type !== 'splatter' && brush.type !== 'dry') return;
+        const key = `${brush.type}_${size}`;
+        this._brushCache.delete(key);
+        this.createBrushTexture(size, brush);
+    }
+
+    /**
      * 创建笔刷纹理
      */
     createBrushTexture(size, brush) {
-        // splatter/dry 含随机数，不缓存；自定义图片笔刷也不缓存
-        const cacheable = !brush.image && brush.type !== 'splatter' && brush.type !== 'dry';
+        // splatter/dry 现在也走缓存，由 refreshRandomBrush 在落笔时刷新随机
+        const cacheable = !brush.image;
         if (cacheable) {
             const key = `${brush.type}_${size}`;
             if (this._brushCache.has(key)) return this._brushCache.get(key);
@@ -212,7 +224,8 @@ class BrushManager {
                     // 第二步：用整体径向 envelope 压暗外缘，消除贴图轮廓感
                     // destination-in 让点层只保留 envelope 的 alpha 形状
                     const envGrad = dotCtx.createRadialGradient(centerX, centerY, 0, centerX, centerY, size * 0.9);
-                    envGrad.addColorStop(0,   'rgba(0,0,0,1)');
+                    envGrad.addColorStop(0,    'rgba(0,0,0,0.55)');
+                    envGrad.addColorStop(0.3,  'rgba(0,0,0,0.85)');
                     envGrad.addColorStop(0.55, 'rgba(0,0,0,1)');
                     envGrad.addColorStop(1,    'rgba(0,0,0,0)');
                     dotCtx.globalCompositeOperation = 'destination-in';
