@@ -1,5 +1,13 @@
 # 更新日志 / Changelog
 
+== V1.3.1 ==
+[ZH]
+### 优化
+- **涂抹工具重新设计** — 涂抹效果更自然
+[EN]
+### Improvement
+- **Smudge tool redesigned** — More natural smudge effect
+
 == V1.3.0 ==
 [ZH]
 ### 性能优化
