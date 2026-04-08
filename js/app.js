@@ -14,8 +14,8 @@ let foregroundColor = '#000000';
 let backgroundColor = '#ffffff';
 let currentBrushColor = foregroundColor;
 let brushSize = 15;
-let brushSpacingRatio = 0.01;  // 笔刷工具间距系数
-let smudgeSpacingRatio = 0.01; // 涂抹工具间距系数
+let brushSpacingRatio = 0.05;  // 笔刷工具间距系数
+let smudgeSpacingRatio = 0.05; // 涂抹工具间距系数
 let isDrawing = false;
 let isEyedropperMode = false;
 let currentBrush = { type: 'dry', image: null };
@@ -177,9 +177,10 @@ async function initApp() {
     // 5. 初始化画布
     await initCanvas();
 
-    // 5b. 画布初始化完成后将保存的混合强度应用到 painter
-    if (savedBrushSettings && savedBrushSettings.mixStrength != null && painter) {
-        painter.setMixStrength(mixSliderToStrength(savedBrushSettings.mixStrength));
+    // 5b. 画布初始化完成后将混合强度应用到 painter（存档优先，否则用 slider 的 HTML 默认值）
+    if (painter) {
+        const sliderVal = savedBrushSettings?.mixStrength ?? parseInt(brushMixSlider?.value ?? 77);
+        painter.setMixStrength(mixSliderToStrength(sliderVal));
     }
 
     // 6. 初始化UI
@@ -230,8 +231,13 @@ function saveBrushSettings() {
  * 初始化画布
  */
 async function initCanvas() {
-    mixCanvas.width = 680;
-    mixCanvas.height = 572;
+    // 根据已保存的 container 宽度推算 canvas 尺寸（与 _commitResize 保持同一比例）
+    const BASE_CONTAINER = typeof RESIZE_MIN !== 'undefined' ? RESIZE_MIN : 480;
+    const BASE_CANVAS_W  = 680;
+    const BASE_CANVAS_H  = 572;
+    const savedContainerW = parseInt(localStorage.getItem('mixbox_container_width') || String(BASE_CONTAINER));
+    mixCanvas.width  = Math.round(BASE_CANVAS_W * savedContainerW / BASE_CONTAINER);
+    mixCanvas.height = Math.round(BASE_CANVAS_H * savedContainerW / BASE_CONTAINER);
 
     // 初始化混色引擎
     const savedEngine = localStorage.getItem('mixbox_engine') || 'mixbox';
@@ -532,7 +538,10 @@ function bindEvents() {
 
             currentTool = 'smudge';
             smudgeBtn.classList.add('active');
-            document.getElementById('mixLabel').textContent = t('smudgeStrength');
+            updateStatus('smudge');
+            const mixLabelEl = document.getElementById('mixLabel');
+            mixLabelEl.textContent = t('smudgeStrength');
+            mixLabelEl.title = t('smudgeStrengthTitle');
 
             // 读取保存的涂抹工具设置
             const savedApp = paletteStorage.loadAppSettings();
@@ -564,7 +573,10 @@ function bindEvents() {
 
             currentTool = 'brush';
             smudgeBtn.classList.remove('active');
-            document.getElementById('mixLabel').textContent = t('paintConcentration');
+            updateStatus('draw');
+            const mixLabelEl2 = document.getElementById('mixLabel');
+            mixLabelEl2.textContent = t('paintConcentration');
+            mixLabelEl2.title = t('paintConcentrationTitle');
 
             // 恢复笔刷工具设置
             if (savedBrushSettings) {
@@ -626,6 +638,9 @@ function bindEvents() {
                 mixCanvas.classList.remove('brush');
                 mixCanvas.classList.add('rect-select');
                 updateStatus('rect-select');
+                overlayCtx.clearRect(0, 0, selectOverlay.width, selectOverlay.height);
+                overlayCtx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+                overlayCtx.fillRect(0, 0, selectOverlay.width, selectOverlay.height);
             } else {
                 exitRectSelectMode();
             }
@@ -638,7 +653,6 @@ function bindEvents() {
             const y = (e.clientY - rect.top) * (mixCanvas.height / rect.height);
             isRectSelecting = true;
             rectSelectStart = { x, y };
-            overlayCtx.clearRect(0, 0, selectOverlay.width, selectOverlay.height);
         });
 
         selectOverlay.addEventListener('mousemove', (e) => {
@@ -1229,9 +1243,33 @@ let lastSyncedBgColor = null;
 /**
  * 更新颜色显示，并在颜色变化时自动同步到 PS
  */
+/**
+ * 计算颜色的感知亮度 (0~1)，用于 Value Ruler 定位
+ */
+function colorToValue(hex) {
+    const r = parseInt(hex.slice(1,3),16) / 255;
+    const g = parseInt(hex.slice(3,5),16) / 255;
+    const b = parseInt(hex.slice(5,7),16) / 255;
+    return 0.299 * r + 0.587 * g + 0.114 * b;
+}
+
 function updateColorDisplay() {
     if (foregroundColor) fgColorBox.style.backgroundColor = foregroundColor;
     if (backgroundColor) bgColorBox.style.backgroundColor = backgroundColor;
+
+    // 更新 Value Ruler 标记
+    const fgMarker = document.getElementById('fgValueMarker');
+    const bgMarker = document.getElementById('bgValueMarker');
+    if (fgMarker && foregroundColor && foregroundColor.length === 7) {
+        const v = colorToValue(foregroundColor);
+        fgMarker.style.left = (v * 100) + '%';
+        fgMarker.style.backgroundColor = foregroundColor;
+    }
+    if (bgMarker && backgroundColor && backgroundColor.length === 7) {
+        const v = colorToValue(backgroundColor);
+        bgMarker.style.left = (v * 100) + '%';
+        bgMarker.style.backgroundColor = backgroundColor;
+    }
     document.querySelectorAll('.color-circle').forEach(circle => {
         const color = circle.dataset.color;
         circle.classList.toggle('selected-fg', color === foregroundColor);
@@ -1325,6 +1363,8 @@ function updateStatus(mode) {
         statusText.innerHTML = t('statusEyedropperBg');
     } else if (mode === 'rect-select') {
         statusText.innerHTML = t('statusRectSelect');
+    } else if (mode === 'smudge') {
+        statusText.innerHTML = t('statusSmudge');
     } else {
         statusText.innerHTML = t('statusDraw');
     }
@@ -1595,6 +1635,10 @@ function smudgeAtPoint(x, y, dx, dy) {
     const brushCanvas = currentStrokeBrushCanvas
         || brushManager.createBrushTexture(brushSize, currentBrush);
 
+    // smudgeMix：后方颜色参与物理混色的比例，低强度保留更多当前位置颜色感
+    // 映射到原始 smudgeStrength 30~60 对应的区间 0.32~0.44
+    const smudgeMix = 0.32 + (smudgeStrength / 100) * 0.12;
+
     const prevStrength = painter.getMixStrength();
     painter.setMixStrength(0); // density=0 → 纯 smear 分支
     const result = painter.drawBrush(
@@ -1603,7 +1647,8 @@ function smudgeAtPoint(x, y, dx, dy) {
         brushCanvas,
         true,
         { x: dirX, y: dirY }, smearLen,
-        false // disableSmear=false，走 smear 路径
+        false,  // disableSmear=false，走 smear 路径
+        1.0, false, 0, 0, 0, smudgeMix
     );
     painter.setMixStrength(prevStrength);
     return result;

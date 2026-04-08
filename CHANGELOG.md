@@ -1,5 +1,23 @@
 # 更新日志 / Changelog
 
+== V1.3.2 ==
+[ZH]
+### 新功能
+- **画布尺寸调整** — 拖动面板左右两侧边缘可调整画布大小；扩大时四周增加空白画布，缩小时内容整体等比缩小
+- **Value Ruler** — 面板中新增明度标尺，基于感知亮度将颜色的明度值可视化在黑白轴上，帮助你准确感知当前色彩的明暗位置
+- **Send to PS 遮罩提示** — 进入矩形选取模式时画布立即显示暗色遮罩，状态更清晰
+
+### 优化
+- **界面布局** — 切换中英文时控件位置保持一致，不再因文字长短而移位
+[EN]
+### New Features
+- **Canvas resize** — Drag the left or right edge of the panel to resize the canvas; expanding adds blank space around the content, shrinking scales the content down proportionally
+- **Value Ruler** — A value scale in the panel header visualizes the perceptual luminance of your colors on a black-to-white axis, helping you accurately read the value of any color you mix
+- **Rect Select overlay** — Entering rect-select mode immediately shows a dark overlay, making the mode change more obvious
+
+### Improvement
+- **UI layout** — Controls no longer shift position when switching between languages
+
 == V1.3.1 ==
 [ZH]
 ### 优化

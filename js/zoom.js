@@ -1,4 +1,190 @@
+// ============ 画布宽度调整 ============
+const RESIZE_MIN = 480;   // container 最小宽度（同时作为默认值和 canvas 比例基准）
+const RESIZE_MAX = 2000;
+const RESIZE_STORAGE_KEY = 'mixbox_container_width';
+
+// 当前 container max-width（像素，不含 zoom）
+let _containerMaxWidth = parseInt(localStorage.getItem(RESIZE_STORAGE_KEY) || String(RESIZE_MIN));
+
+function getContainerMaxWidth() { return _containerMaxWidth; }
+
+function initResizeHandle() {
+    const container = document.querySelector('.container');
+    const handleLeft  = document.getElementById('resizeHandleLeft');
+    const handleRight = document.getElementById('resizeHandleRight');
+    const modal       = document.getElementById('resizeConfirmModal');
+    const confirmText = document.getElementById('resizeConfirmText');
+    const okBtn       = document.getElementById('resizeConfirmOkBtn');
+    const cancelBtn   = document.getElementById('resizeConfirmCancelBtn');
+
+    // 应用已保存的宽度
+    _applyContainerWidth(_containerMaxWidth);
+
+    let dragSide = null;      // 'left' | 'right'
+    let dragStartX = 0;
+    let dragStartWidth = 0;
+    let pendingWidth = 0;
+
+    function _positionHandles() {
+        const rect = container.getBoundingClientRect();
+        handleLeft.style.left  = (rect.left - 3) + 'px';
+        handleRight.style.left = (rect.right - 3) + 'px';
+    }
+
+    // 每帧同步 handle 位置（container 受 zoom/panel 影响会动）
+    function _rafLoop() {
+        _positionHandles();
+        requestAnimationFrame(_rafLoop);
+    }
+    requestAnimationFrame(_rafLoop);
+
+    function _onPointerMove(e) {
+        if (!dragSide) return;
+        const dx = e.clientX - dragStartX;
+        const zoom = typeof getCurrentZoom === 'function' ? getCurrentZoom() : 1;
+        // 拖动量除以 zoom 还原为逻辑像素
+        const delta = dx / zoom;
+        let newWidth;
+        if (dragSide === 'right') {
+            newWidth = dragStartWidth + delta * 2; // 中心对称，两侧各变一半
+        } else {
+            newWidth = dragStartWidth - delta * 2;
+        }
+        newWidth = Math.round(Math.max(RESIZE_MIN, Math.min(RESIZE_MAX, newWidth)));
+        // 实时预览（不提交）
+        container.style.maxWidth = newWidth + 'px';
+        pendingWidth = newWidth;
+    }
+
+    function _onPointerUp() {
+        if (!dragSide) return;
+        handleLeft.classList.remove('dragging');
+        handleRight.classList.remove('dragging');
+        dragSide = null;
+        document.removeEventListener('pointermove', _onPointerMove);
+        document.removeEventListener('pointerup', _onPointerUp);
+
+        if (pendingWidth === _containerMaxWidth) return; // 没变化
+
+        // 弹出确认框
+        const isGrow = pendingWidth > _containerMaxWidth;
+        const tpl = I18N.t(isGrow ? 'resizeGrow' : 'resizeShrink');
+        const msg = tpl.replace('{from}', _containerMaxWidth).replace('{to}', pendingWidth);
+        confirmText.textContent = msg;
+        okBtn.textContent = I18N.t('confirm');
+        cancelBtn.textContent = I18N.t('cancel');
+        modal.classList.add('active');
+
+        okBtn.onclick = async () => {
+            modal.classList.remove('active');
+            await _commitResize(pendingWidth);
+        };
+        cancelBtn.onclick = () => {
+            modal.classList.remove('active');
+            // 回退预览
+            container.style.maxWidth = _containerMaxWidth + 'px';
+        };
+    }
+
+    function _startDrag(side, e) {
+        if (typeof isRectSelectMode !== 'undefined' && isRectSelectMode) return;
+        dragSide = side;
+        dragStartX = e.clientX;
+        dragStartWidth = _containerMaxWidth;
+        pendingWidth = _containerMaxWidth;
+        if (side === 'left')  handleLeft.classList.add('dragging');
+        if (side === 'right') handleRight.classList.add('dragging');
+        document.addEventListener('pointermove', _onPointerMove);
+        document.addEventListener('pointerup', _onPointerUp);
+    }
+
+    handleLeft.addEventListener('pointerdown',  (e) => { e.preventDefault(); _startDrag('left',  e); });
+    handleRight.addEventListener('pointerdown', (e) => { e.preventDefault(); _startDrag('right', e); });
+}
+
+function _applyContainerWidth(w) {
+    const container = document.querySelector('.container');
+    if (container) container.style.maxWidth = w + 'px';
+}
+
+async function _commitResize(newWidth) {
+    const mixCanvas = document.getElementById('mixCanvas');
+    if (!mixCanvas || !window.painter) {
+        _containerMaxWidth = newWidth;
+        localStorage.setItem(RESIZE_STORAGE_KEY, String(newWidth));
+        _applyContainerWidth(newWidth);
+        return;
+    }
+
+    const oldW = mixCanvas.width;
+    const oldH = mixCanvas.height;
+
+    // 以 RESIZE_MIN 对应 680px 逻辑宽度为基准，按比例推算新分辨率
+    const BASE_CONTAINER = RESIZE_MIN;
+    const BASE_CANVAS_W  = 680;
+    const BASE_CANVAS_H  = 572;
+    const newCanvasW = Math.round(BASE_CANVAS_W * newWidth / BASE_CONTAINER);
+    const newCanvasH = Math.round(BASE_CANVAS_H * newWidth / BASE_CONTAINER);
+
+    // 先更新状态，防止 await 期间 window resize 事件用旧值覆盖 container 宽度
+    _containerMaxWidth = newWidth;
+    localStorage.setItem(RESIZE_STORAGE_KEY, String(newWidth));
+    _applyContainerWidth(newWidth);
+
+    // 1. 读取当前画面和参数
+    const oldMixStrength = painter.getMixStrength();
+    const oldPixels = painter.readPixelRegion(0, 0, oldW, oldH);
+
+    // 2. 将旧像素写入离屏 2D canvas，再用 drawImage 缩放到新尺寸
+    //    缩小：等比例缩放内容居中；扩展：内容居中，四周填白
+    const srcCanvas = document.createElement('canvas');
+    srcCanvas.width = oldW; srcCanvas.height = oldH;
+    srcCanvas.getContext('2d').putImageData(
+        new ImageData(oldPixels, oldW, oldH), 0, 0
+    );
+
+    const dstCanvas = document.createElement('canvas');
+    dstCanvas.width = newCanvasW; dstCanvas.height = newCanvasH;
+    const dstCtx = dstCanvas.getContext('2d');
+    // 白色背景
+    dstCtx.fillStyle = '#ffffff';
+    dstCtx.fillRect(0, 0, newCanvasW, newCanvasH);
+
+    if (newCanvasW < oldW) {
+        // 缩小：等比例缩放，居中放置
+        const scale = Math.min(newCanvasW / oldW, newCanvasH / oldH);
+        const dw = Math.round(oldW * scale);
+        const dh = Math.round(oldH * scale);
+        const dx = Math.round((newCanvasW - dw) / 2);
+        const dy = Math.round((newCanvasH - dh) / 2);
+        dstCtx.drawImage(srcCanvas, dx, dy, dw, dh);
+    } else {
+        // 扩展：原始尺寸居中，四周留白
+        const dx = Math.round((newCanvasW - oldW) / 2);
+        const dy = Math.round((newCanvasH - oldH) / 2);
+        dstCtx.drawImage(srcCanvas, dx, dy);
+    }
+
+    // 3. 读取最终像素
+    const newPixels = dstCtx.getImageData(0, 0, newCanvasW, newCanvasH).data;
+
+    // 4. Resize canvas 并重建 painter
+    mixCanvas.width  = newCanvasW;
+    mixCanvas.height = newCanvasH;
+    painter = createPainter(currentEngine, mixCanvas);
+    await painter.init();
+    painter.setMixStrength(oldMixStrength);
+    painter.writeFromPixels(newPixels, newCanvasW, newCanvasH);
+
+    if (typeof saveState === 'function') saveState();
+    if (typeof saveCanvasToStorage === 'function') saveCanvasToStorage();
+    console.log(`✅ 画布已 resize: ${oldW}x${oldH} → ${newCanvasW}x${newCanvasH}`);
+}
+
 // ============ 缩放控制 ============
+let _currentZoom = 1.0;
+function getCurrentZoom() { return _currentZoom; }
+
 function initZoomControl() {
     const zoomBtn = document.getElementById('zoomBtn');
     const zoomDropdown = document.getElementById('zoomDropdown');
@@ -6,6 +192,7 @@ function initZoomControl() {
 
     // 从 localStorage 读取保存的缩放比例
     let currentZoom = parseFloat(localStorage.getItem('mixbox_zoom') || '1.0');
+    _currentZoom = currentZoom;
 
     // 应用初始缩放
     applyZoom(currentZoom);
@@ -59,22 +246,23 @@ function initZoomControl() {
     });
 
     function applyZoom(zoom) {
+        _currentZoom = zoom;
         container.style.transform = `scale(${zoom})`;
         container.style.transformOrigin = 'top center';
         zoomBtn.textContent = `${Math.round(zoom * 100)}%`;
 
         // 缩放 > 1 时，缩小容器实际宽度，使 scale 后不超出窗口
         if (zoom > 1) {
-            const availableWidth = document.documentElement.clientWidth - 24; // 减去 body padding
+            const availableWidth = document.documentElement.clientWidth - 24;
             const adjustedMax = Math.floor(availableWidth / zoom);
             container.style.maxWidth = `${adjustedMax}px`;
             document.body.style.padding = '0 12px 12px';
-        } else if (zoom < 1) {
-            container.style.maxWidth = '710px';
-            document.body.style.padding = '0 10px 10px';
         } else {
-            container.style.maxWidth = '710px';
-            document.body.style.padding = '0 12px 12px';
+            // 恢复用户设定的宽度
+            container.style.maxWidth = `${_containerMaxWidth}px`;
+            document.body.style.padding = zoom < 1 ? '0 10px 10px' : '0 12px 12px';
         }
     }
+
+    initResizeHandle();
 }

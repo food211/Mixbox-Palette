@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="css/modals.css">
 </head>
 <body oncontextmenu="return false">
+    <div class="resize-handle resize-handle-left" id="resizeHandleLeft"></div>
     <div class="container">
         <div class="focus-indicator" id="focusIndicator"><span data-i18n="focusHint">Hold Space + click PS canvas to return shortcuts</span></div>
         <div class="header-container">
@@ -51,9 +52,8 @@
         
         <!-- 控制按钮 -->
         <div class="controls">
-            <button id="clearBtn" class="clear" data-i18n="clear">Clear</button>
             <div class="brush-size">
-                <label data-i18n="brushSize">Brush Size</label>
+                <label class="label-size" data-i18n="brushSize" data-i18n-title="brushSizeTitle" title="Brush Size">Brush Size</label>
                 <div class="custom-range-wrap">
                     <input type="range" id="brushSize" min="2" max="50" value="15">
                     <div class="custom-range" data-for="brushSize"></div>
@@ -62,7 +62,7 @@
                 <button id="pressureBtn" class="pressure-btn" title="Pressure Sensitivity">✏</button>
             </div>
             <div class="brush-size">
-                <label id="mixLabel" data-i18n="paintConcentration">Concentration</label>
+                <label id="mixLabel" class="label-conc" data-i18n="paintConcentration" data-i18n-title="paintConcentrationTitle" title="Paint Concentration">Concentration</label>
                 <div class="custom-range-wrap">
                     <input type="range" id="brushMix" min="1" max="100" value="77">
                     <div class="custom-range" data-for="brushMix"></div>
@@ -70,14 +70,15 @@
                 <span id="brushMixStrength">77</span><span class="unit">%</span>
             </div>
             <div class="brush-size">
-                <label data-i18n="brushSpacing">Spacing</label>
+                <label class="label-spacing" data-i18n="brushSpacing" data-i18n-title="brushSpacingTitle" title="Spacing">Spacing</label>
                 <div class="custom-range-wrap">
-                    <input type="range" id="brushSpacing" min="1" max="100" value="100">
+                    <input type="range" id="brushSpacing" min="1" max="100" value="5">
                     <div class="custom-range" data-for="brushSpacing"></div>
                 </div>
-                <span id="brushSpacingValue">100</span><span class="unit">%</span>
+                <span id="brushSpacingValue">5</span><span class="unit">%</span>
             </div>
             <div class="controls-break"></div>
+            <button id="clearBtn" class="clear" data-i18n="clear">Clear</button>
             <div class="brush-preview-group">
                 <span class="brush-label" data-i18n="brushLabel">Brush</span>
                 <div class="brush-preview-btn" id="brushPreviewBtn" data-i18n-title="selectBrush" title="Select Brush">
@@ -99,6 +100,19 @@
         <div class="mix-area-container">
             <div class="mix-area-header">
                 <h3 data-i18n="mixArea">Mixing Area</h3>
+                <!-- 明度标尺 -->
+                <div class="value-ruler" id="valueRuler" title="Value Ruler">
+                    <div class="value-ruler-track">
+                        <div class="value-ruler-gradient"></div>
+                        <div class="value-ruler-marker fg" id="fgValueMarker" title="Foreground"></div>
+                        <div class="value-ruler-marker bg" id="bgValueMarker" title="Background"></div>
+                    </div>
+                    <div class="value-ruler-labels">
+                        <div class="value-ruler-tick"><span class="tick-line"></span><span class="tick-num">0</span></div>
+                        <div class="value-ruler-tick"><span class="tick-line"></span><span class="tick-num">50</span></div>
+                        <div class="value-ruler-tick"><span class="tick-line"></span><span class="tick-num">100</span></div>
+                    </div>
+                </div>
                 <div class="color-indicators">
                     <div class="color-indicator">
                         <div class="color-box foreground" id="fgColorBox"></div>
@@ -116,6 +130,17 @@
             </div>
         </div>
         
+        <!-- 画布宽度调整确认弹窗 -->
+        <div class="brush-selector-modal" id="resizeConfirmModal">
+            <div class="brush-selector-content alert-modal-content">
+                <p id="resizeConfirmText"></p>
+                <div style="display:flex;gap:10px;justify-content:center;margin-top:12px;">
+                    <button id="resizeConfirmOkBtn" class="alert-ok-btn">Confirm</button>
+                    <button id="resizeConfirmCancelBtn" class="alert-ok-btn" style="background:#555;">Cancel</button>
+                </div>
+            </div>
+        </div>
+
         <!-- 信息显示 -->
         <div class="info">
             <p><strong data-i18n="instructions">Instructions:</strong></p>
@@ -125,10 +150,12 @@
             <p>• <span data-i18n="inst4"><strong>Alt + Right Click canvas</strong> → Pick as background</span></p>
             <p>• <span data-i18n="inst5">Click ↶ Undo / ↷ Redo</span></p>
             <p>• <span data-i18n="inst6">Click <strong>PS canvas</strong> → Return shortcuts to PS</span></p>
+            <p>• <span data-i18n="inst7"><strong>Drag edge handle</strong> → Resize canvas</span></p>
             <p id="statusText" data-i18n="statusDraw">• Mode: <strong>Draw</strong></p>
             <p class="github-link"><a href="javascript:void(0)" onclick="openExternalURL('https://github.com/food211/mixbox-palette')" title="GitHub"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a> <a href="javascript:void(0)" id="versionLabel" class="version-link"></a></p>
         </div>
     </div>
+    <div class="resize-handle resize-handle-right" id="resizeHandleRight"></div>
 
     <!-- 更新提示弹窗 -->
     <div class="brush-selector-modal" id="updateModal">
