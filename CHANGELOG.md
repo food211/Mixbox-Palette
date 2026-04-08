@@ -8,6 +8,8 @@
 - **Send to PS 遮罩提示** — 进入矩形选取模式时画布立即显示暗色遮罩，状态更清晰
 
 ### 优化
+- **涂抹工具改进** — 调整涂抹的混色方式，颜料之间的混合更符合物理直觉
+- **加载页面本地化** — 加载界面跟随系统语言，中文系统显示中文，其他语言显示英文
 - **界面布局** — 切换中英文时控件位置保持一致，不再因文字长短而移位
 [EN]
 ### New Features
@@ -16,6 +18,8 @@
 - **Rect Select overlay** — Entering rect-select mode immediately shows a dark overlay, making the mode change more obvious
 
 ### Improvement
+- **Smudge tool improvement** — Reworked the color blending behavior for more physically accurate paint mixing
+- **Loading page localization** — The loading screen now follows the system language; Chinese systems show Chinese, all others show English
 - **UI layout** — Controls no longer shift position when switching between languages
 
 == V1.3.1 ==

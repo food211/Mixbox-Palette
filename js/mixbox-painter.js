@@ -37,6 +37,7 @@ class MixboxWebGLPainter extends BaseWebGLPainter {
         uniform float u_isSmudge;
         uniform float u_smudgeSampleRadius;
         uniform float u_smudgeAngle;
+        uniform float u_smudgeMix;
 
         ${mixbox.glsl()}
 
@@ -134,7 +135,14 @@ class MixboxWebGLPainter extends BaseWebGLPainter {
                 vec3 safeCanvasRGB = (canvasColor.a > 0.1) ? canvasColor.rgb : activeColor;
                 vec3 safeSmearRGB  = (smearSample.a > 0.1) ? smearSample.rgb : safeCanvasRGB;
 
-                vec3 smearTarget = mixbox_lerp(safeCanvasRGB, safeSmearRGB, aBrush * 0.6);
+                // 涂抹模式（u_smudgeMix > 0）：把后方颜色与当前颜色做物理混色，
+                // u_smudgeMix 控制后方颜色参与比例，保留当前位置颜色感
+                vec3 smearTarget;
+                if (u_smudgeMix > 0.0) {
+                    smearTarget = mixbox_lerp(safeCanvasRGB, safeSmearRGB, aBrush * u_smudgeMix);
+                } else {
+                    smearTarget = mixbox_lerp(safeCanvasRGB, safeSmearRGB, aBrush * 0.6);
+                }
 
                 if (density > 0.98) {
                     outRGB = mixbox_lerp(canvasColor.rgb, activeColor, aBrush * u_baseMixStrength);

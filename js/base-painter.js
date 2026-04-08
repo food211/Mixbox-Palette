@@ -149,6 +149,7 @@ class BaseWebGLPainter {
             u_smudgeSampleRadius: gl.getUniformLocation(this.program, 'u_smudgeSampleRadius'),
             u_smudgeAngle:        gl.getUniformLocation(this.program, 'u_smudgeAngle'),
             u_smudgeSnapshot:     gl.getUniformLocation(this.program, 'u_smudgeSnapshot'),
+            u_smudgeMix:          gl.getUniformLocation(this.program, 'u_smudgeMix'),
         };
 
         for (const name of this._getExtraUniformNames()) {
@@ -325,7 +326,7 @@ class BaseWebGLPainter {
               useFalloff = true,
               smearDir = { x: 0, y: 0 }, smearLen = 0,
               disableSmear = false, smudgeAlpha = 1.0, u_isSmudge = false, smudgeSampleRadius = 0, smudgeAngle = 0,
-              brushRotation = 0) {
+              brushRotation = 0, smudgeMix = 0) {
         const gl = this.gl;
         const cw = this.canvas.width;
         const ch = this.canvas.height;
@@ -375,6 +376,7 @@ class BaseWebGLPainter {
         gl.uniform1f(this.locations.u_isSmudge, u_isSmudge ? 1.0 : 0.0);
         gl.uniform1f(this.locations.u_smudgeSampleRadius, smudgeSampleRadius);
         gl.uniform1f(this.locations.u_smudgeAngle, u_isSmudge ? smudgeAngle : brushRotation);
+        gl.uniform1f(this.locations.u_smudgeMix, smudgeMix);
 
         // 涂抹快照纹理固定绑定到 TEXTURE3，供 shader 采样冻结的起始画布
         gl.activeTexture(gl.TEXTURE3);
