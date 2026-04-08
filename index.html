@@ -91,12 +91,33 @@
         <div class="progress-container">
             <div class="progress-bar" id="progressBar"></div>
         </div>
-        <div class="status-text" id="statusText">检测最快的服务器...</div>
-        <div class="error-message" id="errorMessage">加载失败，请检查网络连接。</div>
-        <button class="retry-btn" id="retryBtn">重试</button>
+        <div class="status-text" id="statusText"></div>
+        <div class="error-message" id="errorMessage"></div>
+        <button class="retry-btn" id="retryBtn"></button>
     </div>
 
 <script>
+// 简单语言检测（跟随系统，中文系统用中文，其他用英文）
+const _isZh = (navigator.language || '').toLowerCase().startsWith('zh');
+const T = {
+    detecting:     _isZh ? '检测最快的服务器...'         : 'Detecting fastest server...',
+    loadingEngine: _isZh ? '加载引擎文件...'              : 'Loading engine files...',
+    loadingFile:   _isZh ? '加载中: '                     : 'Loading: ',
+    loadDone:      _isZh ? '加载完成，准备启动应用...'    : 'Load complete, starting app...',
+    launching:     _isZh ? '启动应用...'                  : 'Launching app...',
+    selectedServer:_isZh ? '已选择最快的服务器: '         : 'Selected fastest server: ',
+    fallback:      _isZh ? '无法连接到服务器，使用默认源' : 'Cannot reach server, using default source',
+    errorLoad:     _isZh ? '加载失败，请检查网络连接。'   : 'Load failed. Please check your network connection.',
+    errorPartial:  _isZh ? '部分核心文件加载失败，请检查网络连接后重试。' : 'Some core files failed to load. Please check your network and retry.',
+    errorConnect:  _isZh ? '无法连接到服务器，请检查网络连接后重试。'     : 'Cannot connect to server. Please check your network and retry.',
+    retrying:      _isZh ? '重新连接...'                  : 'Reconnecting...',
+    retry:         _isZh ? '重试'                         : 'Retry',
+};
+
+document.getElementById('statusText').textContent  = T.detecting;
+document.getElementById('errorMessage').textContent = T.errorLoad;
+document.getElementById('retryBtn').textContent     = T.retry;
+
 const SOURCES = [
     "https://mixbox-palette.pages.dev/",
     "https://food211.github.io/Mixbox-Palette/"
@@ -140,7 +161,7 @@ async function preloadFiles(baseUrl) {
     // 确定需要加载的引擎文件
     let filesToLoad = [...CORE_FILES];
     
-    updateProgress(10, "加载引擎文件...");
+    updateProgress(10, T.loadingEngine);
     
     const totalFiles = filesToLoad.length;
     let loadedFiles = 0;
@@ -156,7 +177,7 @@ async function preloadFiles(baseUrl) {
             .then(() => {
                 loadedFiles++;
                 const percent = 10 + Math.floor(loadedFiles / totalFiles * 85);
-                updateProgress(percent, `加载中: ${file.split('/').pop()}`);
+                updateProgress(percent, T.loadingFile + file.split('/').pop());
             })
             .catch(err => {
                 console.error(`Failed to preload ${file}:`, err);
@@ -172,11 +193,11 @@ async function preloadFiles(baseUrl) {
     
     try {
         await Promise.all(promises);
-        updateProgress(95, "加载完成，准备启动应用...");
+        updateProgress(95, T.loadDone);
         return true;
     } catch (error) {
         console.error("预加载文件失败:", error);
-        showError("部分核心文件加载失败，请检查网络连接后重试。");
+        showError(T.errorPartial);
         return false;
     }
 }
@@ -187,7 +208,7 @@ async function race() {
     const suffix = params.toString() ? '?' + params.toString() : '';
 
     try {
-        updateProgress(0, "检测最快的服务器...");
+        updateProgress(0, T.detecting);
         
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -204,7 +225,7 @@ async function race() {
 
         clearTimeout(timeout);
         const baseUrl = SOURCES[fastest];
-        updateProgress(5, `已选择最快的服务器: ${baseUrl.replace(/https:\/\/|\/$/g, '')}`);
+        updateProgress(5, T.selectedServer + baseUrl.replace(/https:\/\/|\/$/g, ''));
         
         // 预加载核心文件
         const preloadSuccess = await preloadFiles(baseUrl);
@@ -212,14 +233,14 @@ async function race() {
         if (preloadSuccess) {
             // 给用户一点时间看到100%
             setTimeout(() => {
-                updateProgress(100, "启动应用...");
+                updateProgress(100, T.launching);
                 // 跳转到应用页面
                 window.location.replace(baseUrl + "app.html" + suffix);
             }, 500);
         }
     } catch (e) {
         console.error("服务器检测失败:", e);
-        updateProgress(5, "无法连接到服务器，使用默认源");
+        updateProgress(5, T.fallback);
         
         // 尝试使用第一个源进行预加载
         try {
@@ -230,7 +251,7 @@ async function race() {
                 }, 500);
             }
         } catch (err) {
-            showError("无法连接到服务器，请检查网络连接后重试。");
+            showError(T.errorConnect);
         }
     }
 }
@@ -242,7 +263,7 @@ race();
 document.getElementById('retryBtn').addEventListener('click', () => {
     document.getElementById('errorMessage').classList.remove('show');
     document.getElementById('retryBtn').classList.remove('show');
-    updateProgress(0, "重新连接...");
+    updateProgress(0, T.retrying);
     race();
 });
 </script>
