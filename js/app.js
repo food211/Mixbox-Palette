@@ -884,14 +884,15 @@ function bindEvents() {
     let lastY = 0;
 
     mixCanvas.addEventListener('pointerdown', (e) => {
+        // 阻止默认行为（防止长按时浏览器恢复系统光标）
+        e.preventDefault();
+
         const rect = mixCanvas.getBoundingClientRect();
         const x = (e.clientX - rect.left) * (mixCanvas.width / rect.width);
         const y = (e.clientY - rect.top) * (mixCanvas.height / rect.height);
         const pressure = (pressureEnabled && e.pointerType === 'pen') ? (e.pressure > 0 ? e.pressure : 1.0) : 1.0;
 
         if (isEyedropperMode) {
-            // 吸管模式下阻止默认行为，但不立即取色
-            e.preventDefault();
             return;
         }
 
@@ -956,6 +957,7 @@ function bindEvents() {
     });
 
     mixCanvas.addEventListener('pointermove', (e) => {
+        e.preventDefault();
         if (isDrawing && !isEyedropperMode) {
             const rect = mixCanvas.getBoundingClientRect();
             const x = (e.clientX - rect.left) * (mixCanvas.width / rect.width);
