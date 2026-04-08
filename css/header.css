@@ -54,13 +54,17 @@
     background-color: #2196F3;
     color: white;
     border: none;
-    padding: 3px 6px;
+    padding: 0 6px;
     border-radius: 4px;
     cursor: pointer;
     font-size: 12px;
     display: flex;
     align-items: center;
     gap: 2px;
+    width: 90px;
+    height: 24px;
+    justify-content: center;
+    box-sizing: border-box;
 }
 
 .palette-btn:hover {
@@ -129,6 +133,11 @@
     margin-bottom: 10px;
     font-size: 14px;
     color: #b0b0b0;
+    height: 20px;
+    line-height: 20px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
 /* 语言切换 & 引擎切换按钮 */

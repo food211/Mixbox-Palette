@@ -5,7 +5,6 @@
 
 .mix-area-header {
     display: flex;
-    justify-content: space-between;
     align-items: center;
     margin-bottom: 5px;
 }
@@ -13,6 +12,7 @@
 .mix-area-header h3 {
     font-size: 14px;
     color: #e0e0e0;
+    width: 90px;
 }
 
 .color-indicators {
@@ -26,6 +26,10 @@
     gap: 5px;
     font-size: 12px;
     color: #b0b0b0;
+}
+
+.color-indicator span {
+    width: 24px;
 }
 
 .color-box {
@@ -85,4 +89,81 @@
 
 .info strong {
     color: #e0e0e0;
+}
+
+/* ── Value Ruler ─────────────────────────────────────── */
+.value-ruler {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+}
+
+.value-ruler-track {
+    position: relative;
+    width: 120px;
+    height: 12px;
+    border-radius: 6px;
+    overflow: visible;
+}
+
+.value-ruler-gradient {
+    position: absolute;
+    inset: 0;
+    border-radius: 6px;
+    background: linear-gradient(to right, #000000, #ffffff);
+    border: 1px solid #555;
+}
+
+.value-ruler-marker {
+    position: absolute;
+    top: 50%;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    border: 2px solid transparent;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.6);
+    pointer-events: none;
+    transition: left 0.15s ease;
+}
+
+.value-ruler-marker.fg {
+    border-color: #fff;
+    z-index: 2;
+}
+
+.value-ruler-marker.bg {
+    border-color: rgba(255,255,255,0.5);
+    border-style: dashed;
+    z-index: 1;
+}
+
+.value-ruler-labels {
+    display: flex;
+    justify-content: space-between;
+    width: 120px;
+    font-size: 9px;
+    color: #666;
+    line-height: 1;
+}
+
+.value-ruler-tick {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+}
+
+.tick-line {
+    display: block;
+    width: 1px;
+    height: 3px;
+    background: #555;
+}
+
+.tick-num {
+    font-size: 9px;
+    color: #666;
 }
