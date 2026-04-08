@@ -125,8 +125,10 @@
     transform: translate(-50%, -50%);
     border: 2px solid transparent;
     box-shadow: 0 0 0 1px rgba(0,0,0,0.6);
-    pointer-events: none;
+    pointer-events: auto;
     transition: left 0.15s ease;
+    overflow: visible;
+    cursor: default;
 }
 
 .value-ruler-marker.fg {
@@ -166,4 +168,34 @@
 .tick-num {
     font-size: 9px;
     color: #666;
+}
+
+.vr-tooltip {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(30, 30, 30, 0.9);
+    color: #eee;
+    font-size: 10px;
+    padding: 2px 5px;
+    border-radius: 3px;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.vr-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 4px solid transparent;
+    border-top-color: rgba(30, 30, 30, 0.9);
+}
+
+.value-ruler-marker:hover .vr-tooltip {
+    opacity: 1;
 }

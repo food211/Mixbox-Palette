@@ -1266,11 +1266,15 @@ function updateColorDisplay() {
         const v = colorToValue(foregroundColor);
         fgMarker.style.left = (v * 100) + '%';
         fgMarker.style.backgroundColor = foregroundColor;
+        const fgTip = document.getElementById('fgValueTooltip');
+        if (fgTip) fgTip.textContent = t('foreground') + ' ' + Math.round(v * 100);
     }
     if (bgMarker && backgroundColor && backgroundColor.length === 7) {
         const v = colorToValue(backgroundColor);
         bgMarker.style.left = (v * 100) + '%';
         bgMarker.style.backgroundColor = backgroundColor;
+        const bgTip = document.getElementById('bgValueTooltip');
+        if (bgTip) bgTip.textContent = t('background') + ' ' + Math.round(v * 100);
     }
     document.querySelectorAll('.color-circle').forEach(circle => {
         const color = circle.dataset.color;
@@ -1675,6 +1679,7 @@ function initLangToggle() {
         updatePaletteInfo();
         initBrushSelector();
         updateStatus('draw');
+        updateColorDisplay();
     });
 }
 
