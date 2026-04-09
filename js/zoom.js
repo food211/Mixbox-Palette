@@ -52,7 +52,7 @@ function initResizeHandle() {
         }
         newWidth = Math.round(Math.max(RESIZE_MIN, Math.min(RESIZE_MAX, newWidth)));
         // 实时预览（不提交）
-        container.style.maxWidth = newWidth + 'px';
+        container.style.maxWidth = Math.floor(newWidth / zoom) + 'px';
         pendingWidth = newWidth;
     }
 
@@ -82,7 +82,7 @@ function initResizeHandle() {
         cancelBtn.onclick = () => {
             modal.classList.remove('active');
             // 回退预览
-            container.style.maxWidth = _containerMaxWidth + 'px';
+            _applyContainerWidth(_containerMaxWidth);
         };
     }
 
@@ -104,7 +104,9 @@ function initResizeHandle() {
 
 function _applyContainerWidth(w) {
     const container = document.querySelector('.container');
-    if (container) container.style.maxWidth = w + 'px';
+    if (!container) return;
+    const zoom = typeof getCurrentZoom === 'function' ? getCurrentZoom() : 1;
+    container.style.maxWidth = Math.floor(w / zoom) + 'px';
 }
 
 async function _commitResize(newWidth) {
@@ -241,8 +243,10 @@ function initZoomControl() {
     });
 
     // 窗口大小变化时重新计算容器宽度
+    let _resizeTimer = null;
     window.addEventListener('resize', () => {
-        applyZoom(currentZoom);
+        clearTimeout(_resizeTimer);
+        _resizeTimer = setTimeout(() => applyZoom(currentZoom), 150);
     });
 
     function applyZoom(zoom) {
@@ -251,17 +255,9 @@ function initZoomControl() {
         container.style.transformOrigin = 'top center';
         zoomBtn.textContent = `${Math.round(zoom * 100)}%`;
 
-        // 缩放 > 1 时，缩小容器实际宽度，使 scale 后不超出窗口
-        if (zoom > 1) {
-            const availableWidth = document.documentElement.clientWidth - 24;
-            const adjustedMax = Math.floor(availableWidth / zoom);
-            container.style.maxWidth = `${adjustedMax}px`;
-            document.body.style.padding = '0 12px 12px';
-        } else {
-            // 恢复用户设定的宽度
-            container.style.maxWidth = `${_containerMaxWidth}px`;
-            document.body.style.padding = zoom < 1 ? '0 10px 10px' : '0 12px 12px';
-        }
+        const adjustedMax = Math.floor(_containerMaxWidth / zoom);
+        container.style.maxWidth = `${adjustedMax}px`;
+        document.body.style.padding = zoom < 1 ? '0 10px 10px' : '0 12px 12px';
     }
 
     initResizeHandle();

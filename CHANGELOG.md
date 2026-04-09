@@ -1,5 +1,13 @@
 # 更新日志 / Changelog
 
+== V1.3.3b ==
+[ZH]
+### 修复
+- **缩放显示修复** — 修复页面缩放比例不为 100% 时，拖动窗口导致面板宽度异常变化的问题
+[EN]
+### Fix
+- **Zoom display fix** — Fixed an issue where dragging the window while page zoom is not 100% caused the panel width to change unexpectedly
+
 == V1.3.3 ==
 [ZH]
 ### 优化
