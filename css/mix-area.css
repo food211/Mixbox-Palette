@@ -91,6 +91,37 @@
     color: #e0e0e0;
 }
 
+.info-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+    margin-bottom: 5px;
+}
+
+.info-chevron {
+    color: #b0b0b0;
+    transition: transform 0.2s ease;
+    flex-shrink: 0;
+}
+
+.info-chevron.open {
+    transform: rotate(180deg);
+}
+
+.info-body {
+    overflow: hidden;
+    transition: max-height 0.25s ease, opacity 0.25s ease;
+    max-height: 300px;
+    opacity: 1;
+}
+
+.info-body.collapsed {
+    max-height: 0;
+    opacity: 0;
+}
+
 /* ── Value Ruler ─────────────────────────────────────── */
 .value-ruler {
     flex: 1;
