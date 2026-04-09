@@ -1,5 +1,7 @@
 # 🎨 Mixbox Palette for Adobe Photoshop
 
+[点击查看中文版](#-mixbox-调色板---adobe-photoshop-插件)
+
 A UXP plugin for realistic pigment mixing in Adobe Photoshop, with dual mixing engines.
 
 ![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg)
@@ -139,6 +141,8 @@ See [Changelog](https://food211.github.io/Mixbox-Palette/changelog.html) for ver
 ---
 
 # 🎨 Mixbox 调色板 - Adobe Photoshop 插件
+
+[Click here for English version](#-mixbox-palette-for-adobe-photoshop)
 
 Adobe Photoshop UXP 调色板插件，内置双混色引擎，模拟真实颜料的混合效果。
 
