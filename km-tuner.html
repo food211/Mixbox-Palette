@@ -19,7 +19,7 @@
 
   .grid {
     display: grid;
-    grid-template-columns: 130px 1fr 1fr 1fr 1fr 1fr;
+    grid-template-columns: max-content 1fr 1fr 1fr 1fr 1fr;
     gap: 2px;
   }
   .grid-header {
@@ -55,35 +55,34 @@
 </style>
 </head>
 <body>
-<h1>KM 混色对比工具
+<h1><span data-i18n="title"></span>
   <span class="badge badge-linear">Linear RGB</span>
   <span class="badge badge-direct">KM Direct</span>
-<span class="badge badge-lite">KM Lite ★</span>
+  <span class="badge badge-lite">KM Lite ★</span>
   <span class="badge badge-mixbox">Mixbox ★</span>
   <span class="badge badge-spectral">Spectral</span>
 </h1>
 
 <div class="controls">
-  <label>颜色 A <input type="color" id="colorA" value="#e32636"></label>
-  <label>颜色 B <input type="color" id="colorB" value="#1a3a6a"></label>
-<button id="compareBtn" style="padding: 6px 12px; background: #444; color: #fff; border: none; border-radius: 4px; cursor: pointer;">生成对比分析</button>
-  <label style="margin-left:auto; font-size:12px; color:#666;">
-    渐变宽度每像素对应 t = 0→1，左=纯A，右=纯B
-  </label>
+  <label><span data-i18n="colorA"></span> <input type="color" id="colorA" value="#e32636"></label>
+  <label><span data-i18n="colorB"></span> <input type="color" id="colorB" value="#1a3a6a"></label>
+  <button id="compareBtn" style="display:none"></button>
+  <label style="margin-left:auto; font-size:12px; color:#666;" data-i18n="gradientNote"></label>
+  <button id="langBtn" style="padding: 4px 10px; background: #333; color: #aaa; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 12px;"></button>
 </div>
 
 <div class="grid" id="grid">
   <div class="grid-header">
     <div></div>
-    <div>Linear RGB <span class="badge badge-linear">参考</span></div>
-    <div>KM Direct <span class="badge badge-direct">RGB空间几何平均</span></div>
-    <div>KM Lite <span class="badge badge-lite">38波长KM ★插件在用</span></div>
-    <div>Mixbox <span class="badge badge-mixbox">LUT ★插件在用</span></div>
-    <div>Spectral <span class="badge badge-spectral">KM光谱</span></div>
+    <div>Linear RGB <span class="badge badge-linear" data-i18n="hdr-linear"></span></div>
+    <div>KM Direct <span class="badge badge-direct" data-i18n="hdr-direct"></span></div>
+    <div>KM Lite <span class="badge badge-lite" data-i18n="hdr-lite"></span></div>
+    <div>Mixbox <span class="badge badge-mixbox" data-i18n="hdr-mixbox"></span></div>
+    <div>Spectral <span class="badge badge-spectral" data-i18n="hdr-spectral"></span></div>
   </div>
 
   <!-- 自定义颜色行 -->
-  <div class="row-label" id="customLabel">自定义</div>
+  <div class="row-label" id="customLabel" data-i18n="row-custom"></div>
   <div class="cell"><canvas id="c_custom_linear"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_custom_direct"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_custom_fix"     height="40"></canvas></div>
@@ -93,49 +92,49 @@
   <div class="section-gap"></div>
 
   <!-- 固定测试色对 -->
-  <div class="row-label">镉红 + 钛白<br><small style="color:#555">期望：粉红</small></div>
+  <div class="row-label" data-i18n="row-rw"></div>
   <div class="cell"><canvas id="c_rw_linear"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_rw_direct"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_rw_fix"     height="40"></canvas></div>
   <div class="cell"><canvas id="c_rw_mixbox"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_rw_spectral" height="40"></canvas></div>
 
-  <div class="row-label">群青 + 钛白<br><small style="color:#555">期望：天蓝</small></div>
+  <div class="row-label" data-i18n="row-bw2"></div>
   <div class="cell"><canvas id="c_bw2_linear" height="40"></canvas></div>
   <div class="cell"><canvas id="c_bw2_direct" height="40"></canvas></div>
   <div class="cell"><canvas id="c_bw2_fix"    height="40"></canvas></div>
   <div class="cell"><canvas id="c_bw2_mixbox" height="40"></canvas></div>
   <div class="cell"><canvas id="c_bw2_spectral" height="40"></canvas></div>
 
-  <div class="row-label">镉红 + 群青<br><small style="color:#555">期望：紫</small></div>
+  <div class="row-label" data-i18n="row-rb"></div>
   <div class="cell"><canvas id="c_rb_linear"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_rb_direct"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_rb_fix"     height="40"></canvas></div>
   <div class="cell"><canvas id="c_rb_mixbox"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_rb_spectral" height="40"></canvas></div>
 
-  <div class="row-label">群青 + 镉黄<br><small style="color:#555">期望：绿</small></div>
+  <div class="row-label" data-i18n="row-by"></div>
   <div class="cell"><canvas id="c_by_linear"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_by_direct"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_by_fix"     height="40"></canvas></div>
   <div class="cell"><canvas id="c_by_mixbox"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_by_spectral" height="40"></canvas></div>
 
-  <div class="row-label">镉红 + 镉黄<br><small style="color:#555">期望：橙</small></div>
+  <div class="row-label" data-i18n="row-ry"></div>
   <div class="cell"><canvas id="c_ry_linear"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_ry_direct"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_ry_fix"     height="40"></canvas></div>
   <div class="cell"><canvas id="c_ry_mixbox"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_ry_spectral" height="40"></canvas></div>
 
-  <div class="row-label">象牙黑 + 钛白<br><small style="color:#555">期望：中灰</small></div>
+  <div class="row-label" data-i18n="row-bw"></div>
   <div class="cell"><canvas id="c_bw_linear"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_bw_direct"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_bw_fix"     height="40"></canvas></div>
   <div class="cell"><canvas id="c_bw_mixbox"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_bw_spectral" height="40"></canvas></div>
 
-  <div class="row-label">翡翠绿 + 玫瑰红<br><small style="color:#555">冷暖对比</small></div>
+  <div class="row-label" data-i18n="row-cm"></div>
   <div class="cell"><canvas id="c_cm_linear"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_cm_direct"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_cm_fix"     height="40"></canvas></div>
@@ -144,35 +143,35 @@
 
   <div class="section-gap"></div>
 
-  <div class="row-label">镉红 + 氧化铬绿<br><small style="color:#555">互补：棕</small></div>
+  <div class="row-label" data-i18n="row-rg"></div>
   <div class="cell"><canvas id="c_rg_linear"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_rg_direct"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_rg_fix"     height="40"></canvas></div>
   <div class="cell"><canvas id="c_rg_mixbox"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_rg_spectral" height="40"></canvas></div>
 
-  <div class="row-label">二噁嗪紫 + 镉黄<br><small style="color:#555">互补：灰棕</small></div>
+  <div class="row-label" data-i18n="row-py"></div>
   <div class="cell"><canvas id="c_py_linear"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_py_direct"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_py_fix"     height="40"></canvas></div>
   <div class="cell"><canvas id="c_py_mixbox"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_py_spectral" height="40"></canvas></div>
 
-  <div class="row-label">镉橙 + 群青<br><small style="color:#555">互补：灰褐</small></div>
+  <div class="row-label" data-i18n="row-ob"></div>
   <div class="cell"><canvas id="c_ob_linear"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_ob_direct"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_ob_fix"     height="40"></canvas></div>
   <div class="cell"><canvas id="c_ob_mixbox"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_ob_spectral" height="40"></canvas></div>
 
-  <div class="row-label">翡翠绿 + 镉红<br><small style="color:#555">互补：暗灰</small></div>
+  <div class="row-label" data-i18n="row-cr"></div>
   <div class="cell"><canvas id="c_cr_linear"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_cr_direct"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_cr_fix"     height="40"></canvas></div>
   <div class="cell"><canvas id="c_cr_mixbox"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_cr_spectral" height="40"></canvas></div>
 
-  <div class="row-label">氧化铬绿 + 玫瑰红<br><small style="color:#555">互补：灰</small></div>
+  <div class="row-label" data-i18n="row-gm"></div>
   <div class="cell"><canvas id="c_gm_linear"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_gm_direct"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_gm_fix"     height="40"></canvas></div>
@@ -182,49 +181,49 @@
   <div class="section-gap"></div>
 
   <!-- RGB 纯色组 -->
-  <div class="row-label">纯红 + 纯绿<br><small style="color:#555">RGB：黄</small></div>
+  <div class="row-label" data-i18n="row-prg"></div>
   <div class="cell"><canvas id="c_prg_linear"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_prg_direct"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_prg_fix"     height="40"></canvas></div>
   <div class="cell"><canvas id="c_prg_mixbox"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_prg_spectral" height="40"></canvas></div>
 
-  <div class="row-label">纯红 + 纯蓝<br><small style="color:#555">RGB：品红</small></div>
+  <div class="row-label" data-i18n="row-prb"></div>
   <div class="cell"><canvas id="c_prb_linear"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_prb_direct"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_prb_fix"     height="40"></canvas></div>
   <div class="cell"><canvas id="c_prb_mixbox"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_prb_spectral" height="40"></canvas></div>
 
-  <div class="row-label">纯绿 + 纯蓝<br><small style="color:#555">RGB：青</small></div>
+  <div class="row-label" data-i18n="row-pgb"></div>
   <div class="cell"><canvas id="c_pgb_linear"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_pgb_direct"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_pgb_fix"     height="40"></canvas></div>
   <div class="cell"><canvas id="c_pgb_mixbox"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_pgb_spectral" height="40"></canvas></div>
 
-  <div class="row-label">纯红 + 纯白<br><small style="color:#555">RGB</small></div>
+  <div class="row-label" data-i18n="row-prw"></div>
   <div class="cell"><canvas id="c_prw_linear"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_prw_direct"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_prw_fix"     height="40"></canvas></div>
   <div class="cell"><canvas id="c_prw_mixbox"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_prw_spectral" height="40"></canvas></div>
 
-  <div class="row-label">纯黄 + 纯蓝<br><small style="color:#555">RGB互补</small></div>
+  <div class="row-label" data-i18n="row-pyb"></div>
   <div class="cell"><canvas id="c_pyb_linear"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_pyb_direct"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_pyb_fix"     height="40"></canvas></div>
   <div class="cell"><canvas id="c_pyb_mixbox"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_pyb_spectral" height="40"></canvas></div>
 
-  <div class="row-label">纯青 + 纯红<br><small style="color:#555">RGB互补</small></div>
+  <div class="row-label" data-i18n="row-pcr"></div>
   <div class="cell"><canvas id="c_pcr_linear"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_pcr_direct"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_pcr_fix"     height="40"></canvas></div>
   <div class="cell"><canvas id="c_pcr_mixbox"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_pcr_spectral" height="40"></canvas></div>
 
-  <div class="row-label">纯品红 + 纯绿<br><small style="color:#555">RGB互补</small></div>
+  <div class="row-label" data-i18n="row-pmg"></div>
   <div class="cell"><canvas id="c_pmg_linear"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_pmg_direct"  height="40"></canvas></div>
   <div class="cell"><canvas id="c_pmg_fix"     height="40"></canvas></div>
@@ -232,14 +231,7 @@
   <div class="cell"><canvas id="c_pmg_spectral" height="40"></canvas></div>
 </div>
 
-<p class="note">
-  KM Lite = 38波长光谱域KM混合。RGB→7基色光谱分解→38波长KS混合→RGB，线性浓度混合，物理正确，无需hack。<br>
-  Spectral = 基于 spectral.js (MIT) 的光谱域 KM 混色。RGB→7基色光谱分解→38波长KM混合→RGB，luminance加权浓度，无需hack即可实现蓝+黄=绿。<br><br>
-  <strong style="color:#c8b060;">★ 为插件实际使用的算法。</strong><br>
-  KM Lite 与插件的 KM 模式在算法逻辑上一致（38波长光谱KM，线性浓度混合），但实现方式不同：插件使用预计算的 32³ LUT 查表 + WebGL 渲染；此处为实时计算，结果应接近但因浮点精度和插值方式不同可能有细微差异。<br>
-  Mixbox 使用完全相同的 JS 库（mixbox.js），结果与插件一致。<br>
-  Linear RGB 和 KM Direct 为参考对比，不在插件中使用。Spectral 为第三方实现参考（spectral.js，MIT），与 KM Lite 算法相同但浓度加权方式不同。
-</p>
+<p class="note" data-i18n="note"></p>
 
 <script src="js/mixbox.js"></script>
 <script>
@@ -656,9 +648,99 @@ function generateComparisonReport() {
 
 document.getElementById('colorA').addEventListener('input', renderAll);
 document.getElementById('colorB').addEventListener('input', renderAll);
-document.getElementById('compareBtn').addEventListener('click', generateComparisonReport);
+document.addEventListener('keydown', e => { if (e.shiftKey && e.key === 'R') generateComparisonReport(); });
 
 requestAnimationFrame(() => requestAnimationFrame(renderAll));
+
+// ============ i18n ============
+
+const STRINGS = {
+  zh: {
+    'title':        'KM 混色对比工具',
+    'colorA':       '颜色 A',
+    'colorB':       '颜色 B',
+    'compareBtn':   '生成对比分析',
+    'gradientNote': '渐变宽度每像素对应 t = 0→1，左=纯A，右=纯B',
+    'hdr-linear':   '参考',
+    'hdr-direct':   'RGB空间几何平均',
+    'hdr-lite':     '38波长KM ★插件在用',
+    'hdr-mixbox':   'LUT ★插件在用',
+    'hdr-spectral': 'KM光谱',
+    'row-custom':   '自定义',
+    'row-rw':       '镉红 + 钛白<br><small style="color:#555">期望：粉红</small>',
+    'row-bw2':      '群青 + 钛白<br><small style="color:#555">期望：天蓝</small>',
+    'row-rb':       '镉红 + 群青<br><small style="color:#555">期望：紫</small>',
+    'row-by':       '群青 + 镉黄<br><small style="color:#555">期望：绿</small>',
+    'row-ry':       '镉红 + 镉黄<br><small style="color:#555">期望：橙</small>',
+    'row-bw':       '象牙黑 + 钛白<br><small style="color:#555">期望：中灰</small>',
+    'row-cm':       '翡翠绿 + 玫瑰红<br><small style="color:#555">冷暖对比</small>',
+    'row-rg':       '镉红 + 氧化铬绿<br><small style="color:#555">互补：棕</small>',
+    'row-py':       '二噁嗪紫 + 镉黄<br><small style="color:#555">互补：灰棕</small>',
+    'row-ob':       '镉橙 + 群青<br><small style="color:#555">互补：灰褐</small>',
+    'row-cr':       '翡翠绿 + 镉红<br><small style="color:#555">互补：暗灰</small>',
+    'row-gm':       '氧化铬绿 + 玫瑰红<br><small style="color:#555">互补：灰</small>',
+    'row-prg':      '纯红 + 纯绿<br><small style="color:#555">RGB：黄</small>',
+    'row-prb':      '纯红 + 纯蓝<br><small style="color:#555">RGB：品红</small>',
+    'row-pgb':      '纯绿 + 纯蓝<br><small style="color:#555">RGB：青</small>',
+    'row-prw':      '纯红 + 纯白<br><small style="color:#555">RGB</small>',
+    'row-pyb':      '纯黄 + 纯蓝<br><small style="color:#555">RGB互补</small>',
+    'row-pcr':      '纯青 + 纯红<br><small style="color:#555">RGB互补</small>',
+    'row-pmg':      '纯品红 + 纯绿<br><small style="color:#555">RGB互补</small>',
+    'note':         'KM Lite = 38波长光谱域KM混合。RGB→7基色光谱分解→38波长KS混合→RGB，线性浓度混合，物理正确，无需hack。<br>Spectral = 基于 spectral.js (MIT) 的光谱域 KM 混色。RGB→7基色光谱分解→38波长KM混合→RGB，luminance加权浓度，无需hack即可实现蓝+黄=绿。<br><br><strong style="color:#c8b060;">★ 为插件实际使用的算法。</strong><br>KM Lite 与插件的 KM 模式在算法逻辑上一致（38波长光谱KM，线性浓度混合），但实现方式不同：插件使用预计算的 32³ LUT 查表 + WebGL 渲染；此处为实时计算，结果应接近但因浮点精度和插值方式不同可能有细微差异。<br>Mixbox 使用完全相同的 JS 库（mixbox.js），结果与插件一致。<br>Linear RGB 和 KM Direct 为参考对比，不在插件中使用。Spectral 为第三方实现参考（spectral.js，MIT），与 KM Lite 算法相同但浓度加权方式不同。',
+  },
+  en: {
+    'title':        'KM Color Mixing Comparator',
+    'colorA':       'Color A',
+    'colorB':       'Color B',
+    'compareBtn':   'Generate Report',
+    'gradientNote': 'Each pixel maps t = 0→1, left = pure A, right = pure B',
+    'hdr-linear':   'Reference',
+    'hdr-direct':   'Geometric mean in RGB',
+    'hdr-lite':     '38-wavelength KM ★ in plugin',
+    'hdr-mixbox':   'LUT ★ in plugin',
+    'hdr-spectral': 'KM spectral',
+    'row-custom':   'Custom',
+    'row-rw':       'Cadmium Red + Titanium White<br><small style="color:#555">Expected: pink</small>',
+    'row-bw2':      'Ultramarine + Titanium White<br><small style="color:#555">Expected: sky blue</small>',
+    'row-rb':       'Cadmium Red + Ultramarine<br><small style="color:#555">Expected: purple</small>',
+    'row-by':       'Ultramarine + Cadmium Yellow<br><small style="color:#555">Expected: green</small>',
+    'row-ry':       'Cadmium Red + Cadmium Yellow<br><small style="color:#555">Expected: orange</small>',
+    'row-bw':       'Ivory Black + Titanium White<br><small style="color:#555">Expected: mid gray</small>',
+    'row-cm':       'Viridian + Rose Madder<br><small style="color:#555">Warm/cool contrast</small>',
+    'row-rg':       'Cadmium Red + Chromium Oxide Green<br><small style="color:#555">Complementary: brown</small>',
+    'row-py':       'Dioxazine Violet + Cadmium Yellow<br><small style="color:#555">Complementary: gray-brown</small>',
+    'row-ob':       'Cadmium Orange + Ultramarine<br><small style="color:#555">Complementary: gray-brown</small>',
+    'row-cr':       'Viridian + Cadmium Red<br><small style="color:#555">Complementary: dark gray</small>',
+    'row-gm':       'Chromium Oxide Green + Rose Madder<br><small style="color:#555">Complementary: gray</small>',
+    'row-prg':      'Pure Red + Pure Green<br><small style="color:#555">RGB: yellow</small>',
+    'row-prb':      'Pure Red + Pure Blue<br><small style="color:#555">RGB: magenta</small>',
+    'row-pgb':      'Pure Green + Pure Blue<br><small style="color:#555">RGB: cyan</small>',
+    'row-prw':      'Pure Red + Pure White<br><small style="color:#555">RGB</small>',
+    'row-pyb':      'Pure Yellow + Pure Blue<br><small style="color:#555">RGB complementary</small>',
+    'row-pcr':      'Pure Cyan + Pure Red<br><small style="color:#555">RGB complementary</small>',
+    'row-pmg':      'Pure Magenta + Pure Green<br><small style="color:#555">RGB complementary</small>',
+    'note':         'KM Lite = 38-wavelength spectral KM mixing. RGB → 7-primary spectral decomposition → 38-wavelength KS mixing → RGB, linear concentration, physically correct, no hacks.<br>Spectral = spectral KM mixing based on spectral.js (MIT). Same decomposition, luminance-weighted concentration — blue + yellow = green without hacks.<br><br><strong style="color:#c8b060;">★ = algorithm used in the plugin.</strong><br>KM Lite is algorithmically equivalent to the plugin\'s KM mode (38-wavelength spectral KM, linear concentration), but implemented differently: the plugin uses a precomputed 32³ LUT + WebGL; here it runs in real time — results should be close but may differ slightly due to floating-point precision and interpolation.<br>Mixbox uses the identical JS library (mixbox.js) — results match the plugin exactly.<br>Linear RGB and KM Direct are reference baselines not used in the plugin. Spectral is a third-party reference (spectral.js, MIT) using the same algorithm as KM Lite but with luminance-weighted concentration.',
+  }
+};
+
+function applyLang(lang) {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    const val = STRINGS[lang][key];
+    if (val !== undefined) el.innerHTML = val;
+  });
+  document.getElementById('langBtn').textContent = lang === 'zh' ? 'EN' : '中文';
+  document.documentElement.lang = lang;
+  localStorage.setItem('km-tuner-lang', lang);
+}
+
+const savedLang = localStorage.getItem('km-tuner-lang');
+const defaultLang = savedLang || (navigator.language.startsWith('zh') ? 'zh' : 'en');
+applyLang(defaultLang);
+
+document.getElementById('langBtn').addEventListener('click', () => {
+  applyLang(document.documentElement.lang === 'zh' ? 'en' : 'zh');
+});
 </script>
 </body>
 </html>
