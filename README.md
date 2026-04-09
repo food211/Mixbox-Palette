@@ -131,6 +131,7 @@ See [Changelog](https://food211.github.io/Mixbox-Palette/changelog.html) for ver
 ## Support
 
 - ⭐ Star this project
+- 💬 [Join our Discord](https://discord.gg/d3ubWGpe) — bug reports, feedback, and discussion
 - 🐛 [Report bugs](https://github.com/food211/Mixbox-Palette/issues)
 - 💡 Suggest features
 - ☕ Support my open-source work: Alipay food211@qq.com / WeChat 172660507
@@ -233,6 +234,7 @@ Adobe 和 Photoshop 是 Adobe 在美国和/或其他国家/地区的注册商标
 ## 赞助
 
 - ⭐ Star 本项目
+- 💬 [加入 Discord 社区](https://discord.gg/d3ubWGpe) — 反馈问题、提出建议、日常交流
 - 🐛 [提交 Bug](https://github.com/food211/Mixbox-Palette/issues)
 - 💡 提出功能建议
 - ☕ 支持开源：支付宝 food211@qq.com / 微信 172660507

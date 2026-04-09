@@ -189,6 +189,7 @@ async function initApp() {
     // 7. 绑定事件
     bindEvents();
     initCustomRanges();
+    initInstructionsToggle();
     
     // 8. 初始化调色板下拉菜单
     initPaletteDropdown();
@@ -1030,7 +1031,8 @@ function bindEvents() {
         // 笔刷光标跟随（无论是否在绘制）
         {
             const rect = mixCanvas.getBoundingClientRect();
-            updateBrushCursor(e.clientX - rect.left, e.clientY - rect.top);
+            const zoom = typeof getCurrentZoom === 'function' ? getCurrentZoom() : 1;
+            updateBrushCursor((e.clientX - rect.left) / zoom, (e.clientY - rect.top) / zoom);
         }
     });
 
@@ -1135,7 +1137,8 @@ function bindEvents() {
         }
 
         const rect = mixCanvas.getBoundingClientRect();
-        const scaleX = rect.width / mixCanvas.width;
+        const zoom = typeof getCurrentZoom === 'function' ? getCurrentZoom() : 1;
+        const scaleX = rect.width / mixCanvas.width / zoom;
         const activeSize = currentTool === 'smudge' ? smudgeBrushSize : brushSize;
         const cssDiameter = activeSize * scaleX;
         const canvasSize = Math.ceil(cssDiameter);
@@ -1660,6 +1663,27 @@ function smudgeAtPoint(x, y, dx, dy) {
     return result;
 }
 
+// ============ Instructions 折叠 ============
+function initInstructionsToggle() {
+    const toggle = document.getElementById('instructionsToggle');
+    const body = document.getElementById('instructionsBody');
+    const chevron = document.getElementById('instructionsChevron');
+    if (!toggle || !body || !chevron) return;
+
+    const isOpen = localStorage.getItem('mixbox_instructions_open') !== 'false';
+    if (!isOpen) {
+        body.classList.add('collapsed');
+    } else {
+        chevron.classList.add('open');
+    }
+
+    toggle.addEventListener('click', () => {
+        const collapsed = body.classList.toggle('collapsed');
+        chevron.classList.toggle('open', !collapsed);
+        localStorage.setItem('mixbox_instructions_open', String(!collapsed));
+    });
+}
+
 // ============ 语言切换 ============
 function initLangToggle() {
     const langBtn = document.getElementById('langBtn');
@@ -1735,4 +1759,35 @@ window.addEventListener("message", (e) => {
     window.addEventListener('blur', () => indicator.classList.remove('active'));
     // 页面加载时如果已有焦点则立即显示
     if (document.hasFocus()) indicator.classList.add('active');
+
+    // 无效重复按键检测：同一个键1秒内按3次以上 → 闪烁提示
+    const VALID_KEYS = new Set(['b', 's', 'i', 'm', 'x', ' ', 'z', 'escape', 'alt', 'shift', 'control', 'meta']);
+    let _lastInvalidKey = null;
+    let _invalidKeyTimes = [];
+    let _flashTimer = null;
+
+    document.addEventListener('keydown', (e) => {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        const key = e.key.toLowerCase();
+        if (VALID_KEYS.has(key) || e.ctrlKey || e.metaKey) return;
+
+        const now = Date.now();
+        if (key !== _lastInvalidKey) {
+            _lastInvalidKey = key;
+            _invalidKeyTimes = [];
+        }
+        _invalidKeyTimes.push(now);
+        _invalidKeyTimes = _invalidKeyTimes.filter(t => now - t < 1000);
+
+        if (_invalidKeyTimes.length >= 3) {
+            _invalidKeyTimes = [];
+            // 闪烁：短暂加深再恢复
+            clearTimeout(_flashTimer);
+            indicator.style.backgroundColor = '#e53935';
+            indicator.classList.add('active');
+            _flashTimer = setTimeout(() => {
+                indicator.style.backgroundColor = '';
+            }, 600);
+        }
+    });
 })();

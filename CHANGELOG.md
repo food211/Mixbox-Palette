@@ -1,5 +1,17 @@
 # 更新日志 / Changelog
 
+== V1.3.3 ==
+[ZH]
+### 优化
+- **使用说明折叠** — 操作说明区域可点击展开/收起，状态自动保存
+- **放大模式准心修复** — 启用页面缩放后，笔刷准心与实际绘制位置保持一致
+- **焦点卡住提示** — 键盘焦点卡在插件内时，短时间内重复按下无效按键会触发顶部提示条闪烁红色，提示按住 Space 并点击 PS 画布归还焦点
+[EN]
+### Improvement
+- **Collapsible instructions** — The instructions panel can be expanded or collapsed with a click; state is saved automatically
+- **Zoom cursor fix** — Brush cursor now aligns correctly with actual paint position when page zoom is active
+- **Stuck focus warning** — If keyboard focus gets trapped in the plugin, repeatedly pressing an unrecognized key triggers a red flash on the top bar, reminding you to hold Space and click the PS canvas to return focus
+
 == V1.3.2 ==
 [ZH]
 ### 新功能
