@@ -266,6 +266,35 @@ function initZoomControl() {
         const adjustedMax = Math.floor(_containerMaxWidth / zoom);
         container.style.maxWidth = `${adjustedMax}px`;
         document.body.style.padding = zoom < 1 ? '0 10px 10px' : '0 12px 12px';
+
+        // 检测 controls 第一行是否折行，若折行则扩大 maxWidth 到刚好容纳
+        requestAnimationFrame(() => {
+            const controls = document.querySelector('.controls');
+            if (!controls) return;
+            const breakEl = controls.querySelector('.controls-break');
+            if (!breakEl) return;
+            const children = [...controls.children];
+            const breakIdx = children.indexOf(breakEl);
+            const rowItems = children.slice(0, breakIdx);
+            if (rowItems.length < 2) return;
+
+            const firstTop = rowItems[0].offsetTop;
+            const allInLine = rowItems.every(el => el.offsetTop === firstTop);
+            if (!allInLine) {
+                // 折行：把所有第一行元素宽度加起来，加上 gap 和 container 内边距
+                const totalW = rowItems.reduce((sum, el) => sum + el.offsetWidth, 0)
+                             + (rowItems.length - 1) * 2   // gap: 2px
+                             + 30;                          // container padding: 15px * 2
+                const needed = Math.ceil(totalW);
+                // 只有需要的宽度比当前 maxWidth 更大时才覆盖
+                const current = parseInt(container.style.maxWidth) || 0;
+                if (needed > current) {
+                    // 反算逻辑宽度并同步画布分辨率
+                    const neededLogical = Math.ceil(needed * zoom);
+                    _commitResize(neededLogical);
+                }
+            }
+        });
     }
 
     initResizeHandle();

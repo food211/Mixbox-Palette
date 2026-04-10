@@ -4,7 +4,7 @@
     align-items: center;
     margin-bottom: 10px;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 2px;
 }
 
 .controls-break {
@@ -34,7 +34,8 @@
 #brushSizeValue, #brushMixStrength, #brushSpacingValue {
     font-size: 12px;
     color: #a0a0a0;
-    min-width: 16px;
+    width: 20px;
+    flex-shrink: 0;
     display: inline-block;
     text-align: right;
 }
@@ -43,6 +44,12 @@
     display: flex;
     align-items: center;
     gap: 5px;
+    flex-shrink: 0;
+    width: 120px;
+}
+
+.brush-size:first-child {
+    width: 145px;
 }
 
 .brush-size label {
@@ -50,16 +57,17 @@
     color: #ffffff;
 }
 
-.label-size    { width: 26px; }
-.label-conc    { width: 28px; }
-.label-spacing { width: 28px; }
+.label-size    { width: 26px; flex-shrink: 0; }
+.label-conc    { width: 30px; flex-shrink: 0; }
+.label-spacing { width: 28px; flex-shrink: 0; }
 
 .custom-range-wrap {
     position: relative;
-    width: 50px;
+    width: 40px;
     height: 18px;
     display: flex;
     align-items: center;
+    flex-shrink: 0;
 }
 
 .brush-size input[type="range"] {
@@ -98,8 +106,8 @@
 .custom-range::after {
     content: '';
     position: absolute;
-    width: 11px;
-    height: 11px;
+    width: 9px;
+    height: 9px;
     background: #ccc;
     border-radius: 50%;
     top: 50%;
