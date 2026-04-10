@@ -60,6 +60,7 @@ function initResizeHandle() {
         if (!dragSide) return;
         handleLeft.classList.remove('dragging');
         handleRight.classList.remove('dragging');
+        container.classList.remove('glow-dragging');
         dragSide = null;
         document.removeEventListener('pointermove', _onPointerMove);
         document.removeEventListener('pointerup', _onPointerUp);
@@ -94,12 +95,19 @@ function initResizeHandle() {
         pendingWidth = _containerMaxWidth;
         if (side === 'left')  handleLeft.classList.add('dragging');
         if (side === 'right') handleRight.classList.add('dragging');
+        container.classList.remove('glow-left', 'glow-right');
+        container.classList.add('glow-dragging');
         document.addEventListener('pointermove', _onPointerMove);
         document.addEventListener('pointerup', _onPointerUp);
     }
 
     handleLeft.addEventListener('pointerdown',  (e) => { e.preventDefault(); _startDrag('left',  e); });
     handleRight.addEventListener('pointerdown', (e) => { e.preventDefault(); _startDrag('right', e); });
+
+    handleLeft.addEventListener('mouseenter',  () => container.classList.add('glow-left'));
+    handleLeft.addEventListener('mouseleave',  () => container.classList.remove('glow-left'));
+    handleRight.addEventListener('mouseenter', () => container.classList.add('glow-right'));
+    handleRight.addEventListener('mouseleave', () => container.classList.remove('glow-right'));
 }
 
 function _applyContainerWidth(w) {
