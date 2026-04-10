@@ -226,3 +226,51 @@
 .alert-ok-btn:hover {
     background-color: #1976D2;
 }
+
+/* ============ 公告弹窗 ============ */
+.announcement-modal-content {
+    max-width: 380px;
+}
+
+.announcement-modal-body {
+    font-size: 13px;
+    line-height: 1.7;
+    color: #c8c8c8;
+    margin-bottom: 16px;
+}
+
+.announcement-modal-body p {
+    margin: 4px 0;
+}
+
+.announcement-modal-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+
+.announcement-link {
+    font-size: 13px;
+    color: #5865F2;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.announcement-link:hover {
+    text-decoration: underline;
+}
+
+.announcement-btn-ok {
+    background: none;
+    border: 1px solid #555;
+    color: #b0b0b0;
+    padding: 6px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.announcement-btn-ok:hover {
+    background-color: #3c3c3c;
+}

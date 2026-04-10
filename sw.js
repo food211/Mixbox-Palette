@@ -22,6 +22,7 @@ const CACHE_URLS = [
   './js/brush-manager.js',
   './js/palette-storage.js',
   './js/updater.js',
+  './js/announcer.js',
   './icons/smudge.svg',
   './icons/eyedropper.svg',
   './icons/rect-select.svg'
