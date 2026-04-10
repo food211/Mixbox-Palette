@@ -51,22 +51,25 @@ const Updater = {
             .join('');
     },
 
+    /** 自动检查更新，返回 true 表示弹出了更新弹窗 */
     async check() {
         try {
             const res = await fetch(this.CHANGELOG_URL, { cache: 'no-store' });
-            if (!res.ok) return;
+            if (!res.ok) return false;
             const text = await res.text();
             const parsed = this._parseChangelog(text);
-            if (!parsed) return;
+            if (!parsed) return false;
 
-            if (parsed.version === this.CURRENT_VERSION) return;
+            if (parsed.version === this.CURRENT_VERSION) return false;
 
             const dismissed = localStorage.getItem(this.STORAGE_KEY);
-            if (dismissed === parsed.version) return;
+            if (dismissed === parsed.version) return false;
 
             this._showModal(parsed);
+            return true;
         } catch (e) {
             // 网络失败静默处理
+            return false;
         }
     },
 

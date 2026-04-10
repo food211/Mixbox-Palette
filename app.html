@@ -192,6 +192,21 @@
         </div>
     </div>
 
+    <!-- 公告弹窗 -->
+    <div class="brush-selector-modal" id="announcementModal">
+        <div class="brush-selector-content announcement-modal-content">
+            <div class="brush-selector-header">
+                <h3 id="announcementTitle"></h3>
+                <button class="close-btn" id="announcementCloseBtn">×</button>
+            </div>
+            <div id="announcementContent" class="announcement-modal-body"></div>
+            <div class="announcement-modal-actions">
+                <a href="javascript:void(0)" id="announcementLink" class="announcement-link"></a>
+                <button id="announcementOkBtn" class="announcement-btn-ok"></button>
+            </div>
+        </div>
+    </div>
+
     <!-- 通用提示弹窗 -->
     <div class="brush-selector-modal" id="alertModal">
         <div class="brush-selector-content alert-modal-content">
@@ -268,23 +283,24 @@
             await loadScript('js/app.js');
             console.log('✅ app.js 已加载');
 
-            // 加载更新检测模块
+            // 加载更新检测模块和公告组件
             await loadScript('js/updater.js');
+            await loadScript('js/announcer.js');
 
             // 显示版本号
             const versionLabel = document.getElementById('versionLabel');
             if (versionLabel && typeof Updater !== 'undefined') {
                 versionLabel.textContent = Updater.CURRENT_VERSION;
                 versionLabel.title = I18N.getLang() === 'zh' ? '点击检查更新' : 'Click to check for updates';
-                versionLabel.addEventListener('click', () => Updater.checkAndShow());
+                versionLabel.addEventListener('click', () => Announcer.checkUpdate());
             }
 
             // 重要：手动调用 app.js 中的 initApp 函数
             console.log('🚀 正在初始化应用...');
             window.initApp();
 
-            // 延迟检测更新（避免阻塞启动）
-            setTimeout(() => Updater.check(), 3000);
+            // 延迟启动公告组件（包揽更新检测 + 公告推送）
+            setTimeout(() => Announcer.init(), 3000);
             
         } catch (error) {
             console.error('初始化失败:', error);
