@@ -49,6 +49,8 @@ const I18N = {
             paletteName_schminckeHoradam: 'Schmincke Horadam 16',
             paletteName_kuretakeGansai: 'Kuretake Gansai 16',
 
+            switchLanguage: 'Switch Language (EN / ZH)',
+            zoomTitle: 'Zoom — Zoom in expands canvas size, zoom out does not',
             switchEngine: 'Switch Mixing Engine (Mixbox / KM)',
             focusHint: 'Hold Space + click PS canvas to return shortcuts',
             inst6: 'Hold <strong>Space</strong> + click <strong>PS canvas</strong> → Return shortcuts to PS',
@@ -119,6 +121,8 @@ const I18N = {
             paletteName_schminckeHoradam: '施美尔 Horadam 16色',
             paletteName_kuretakeGansai: '吴竹 Gansai 16色',
 
+            switchLanguage: '切换语言 (EN / ZH)',
+            zoomTitle: '缩放 — 放大会同步扩展画布尺寸，缩小不会',
             switchEngine: '切换混色引擎 (Mixbox / KM)',
             focusHint: '按住空格 + 点击 PS 画布以切回快捷键',
             inst6: '按住 <strong>空格</strong> + 点击 <strong>PS 画布</strong> → 将快捷键切回 PS',

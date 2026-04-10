@@ -111,7 +111,7 @@
     background-color: #2c2c2c;
     border-radius: 4px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    min-width: 160px;
+    width: max-content;
     z-index: 100;
     display: none;
     margin-top: 3px;

@@ -193,6 +193,7 @@ async function _commitResize(newWidth) {
 
 // ============ 缩放控制 ============
 let _currentZoom = 1.0;
+let _zoomLayoutReady = false;  // 页面样式稳定后才允许折行检测
 function getCurrentZoom() { return _currentZoom; }
 
 function initZoomControl() {
@@ -268,6 +269,8 @@ function initZoomControl() {
         document.body.style.padding = zoom < 1 ? '0 10px 10px' : '0 12px 12px';
 
         // 检测 controls 第一行是否折行，若折行则扩大 maxWidth 到刚好容纳
+        // 页面样式未稳定时跳过，防止初始化阶段写入错误值
+        if (!_zoomLayoutReady) return;
         requestAnimationFrame(() => {
             const controls = document.querySelector('.controls');
             if (!controls) return;
@@ -289,8 +292,8 @@ function initZoomControl() {
                 // 只有需要的宽度比当前 maxWidth 更大时才覆盖
                 const current = parseInt(container.style.maxWidth) || 0;
                 if (needed > current) {
-                    // 反算逻辑宽度并同步画布分辨率
                     const neededLogical = Math.ceil(needed * zoom);
+                    if (neededLogical <= _containerMaxWidth) return;
                     _commitResize(neededLogical);
                 }
             }
@@ -298,4 +301,7 @@ function initZoomControl() {
     }
 
     initResizeHandle();
+
+    // 页面完全加载后才允许折行检测，避免样式未稳定时写入错误值
+    window.addEventListener('load', () => { _zoomLayoutReady = true; });
 }
