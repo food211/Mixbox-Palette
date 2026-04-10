@@ -1,5 +1,18 @@
 # 更新日志 / Changelog
 
+== V1.3.4 ==
+[ZH]
+### 新增
+- **吸管光标** — 使用吸管工具时显示专属光标图标
+### 优化
+- **缩放自适应** — 切换缩放比例后，若控件栏折行则自动扩展面板宽度并同步画布尺寸
+
+[EN]
+### New
+- **Eyedropper cursor** — A dedicated cursor icon is shown when using the eyedropper tool
+### Improvement
+- **Zoom adaptive width** — Switching zoom levels now automatically expands the panel width and canvas size if the control bar would wrap
+
 == V1.3.3c ==
 [ZH]
 ### 新增
