@@ -1,5 +1,13 @@
 # 更新日志 / Changelog
 
+== V1.3.3c ==
+[ZH]
+### 新增
+- **Discord 按钮** — 面板右下角新增 Discord 社区跳转按钮
+[EN]
+### New
+- **Discord button** — Added a Discord community link button in the bottom-right corner of the panel
+
 == V1.3.3b ==
 [ZH]
 ### 修复
