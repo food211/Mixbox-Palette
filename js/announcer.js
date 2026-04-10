@@ -1,18 +1,25 @@
 /**
  * Announcer — 统一管理更新弹窗与公告弹窗
  *
- * 流程：
- *   init() 被调用
- *     → 检查更新（Updater.check()）
- *         有新版本 → 弹更新弹窗，关闭后检查公告
- *         无新版本 → 直接检查公告
+ * 流程（自动，页面加载后触发）：
+ *   init()
+ *     → Updater.check() 获取更新数据
+ *         有更新 → 弹更新弹窗
+ *                    用户点"稍后/不再提示/关闭" → 检查公告
+ *                    用户点"立即更新"           → 刷新页面，结束
+ *         无更新 → 直接检查公告
  *
- * 公告哈希：按当前语言取 title + content 生成，存储 key 带语言前缀
- *   mixbox_seen_announcement_zh_<hash>
- *   mixbox_seen_announcement_en_<hash>
+ * 流程（手动，版本号点击触发）：
+ *   checkUpdate()
+ *     → Updater.checkAndFetch()
+ *         有更新 → 弹更新弹窗（关闭后不触发公告）
+ *         无更新 → 打开 changelog 页面
+ *
+ * 公告哈希：按当前语言取 title + content 生成
+ *   存储 key：mixbox_seen_announcement_zh_<hash> / _en_<hash>
  */
 
-// ─── 当前公告内容（无公告时设为 null）───────────────────────────────────────
+// ─── 当前公告（无公告时设为 null）──────────────────────────────────────────
 const CURRENT_ANNOUNCEMENT = {
     titleZH: '加入我们的 Discord 社区 🎨',
     titleEN: 'Join our Discord Community 🎨',
@@ -27,99 +34,151 @@ const CURRENT_ANNOUNCEMENT = {
 const Announcer = {
     STORAGE_PREFIX: 'mixbox_seen_announcement_',
 
+    // ── 公告哈希工具 ──────────────────────────────────────────────────────
+
     /** djb2 哈希，返回 8 位十六进制字符串 */
     _hash(str) {
         let h = 5381;
         for (let i = 0; i < str.length; i++) {
             h = ((h << 5) + h) ^ str.charCodeAt(i);
-            h = h >>> 0; // 转为无符号 32 位
+            h = h >>> 0;
         }
         return h.toString(16).padStart(8, '0');
     },
 
-    /** 根据当前语言计算公告哈希及存储 key */
     _getAnnouncementKey(lang, ann) {
-        const title = lang === 'zh' ? ann.titleZH : ann.titleEN;
+        const title   = lang === 'zh' ? ann.titleZH   : ann.titleEN;
         const content = lang === 'zh' ? ann.contentZH : ann.contentEN;
-        const hash = this._hash(title + content);
-        return `${this.STORAGE_PREFIX}${lang}_${hash}`;
+        return `${this.STORAGE_PREFIX}${lang}_${this._hash(title + content)}`;
     },
 
-    /** 检查当前语言下公告是否已读 */
     _isSeen(lang, ann) {
         return !!localStorage.getItem(this._getAnnouncementKey(lang, ann));
     },
 
-    /** 标记当前语言下公告为已读 */
     _markSeen(lang, ann) {
         localStorage.setItem(this._getAnnouncementKey(lang, ann), '1');
     },
 
-    /**
-     * 入口：检查更新，完成后检查公告
-     * 替代原来 app.html 里的 setTimeout(() => Updater.check(), 3000)
-     */
+    _getLang() {
+        return (typeof I18N !== 'undefined') ? I18N.getLang() : 'en';
+    },
+
+    // ── 公开入口 ──────────────────────────────────────────────────────────
+
+    /** 页面启动时调用：自动检查更新，完成后检查公告 */
     async init() {
-        const hasUpdate = await this._checkUpdate();
-        if (hasUpdate) {
-            // 更新弹窗关闭后再检查公告
-            this._waitForModalClose('updateModal', () => this._checkAnnouncement());
+        const updateData = await Updater.check();
+        if (updateData) {
+            this._showUpdateModal(updateData, { onDone: () => this._checkAnnouncement() });
         } else {
             this._checkAnnouncement();
         }
     },
 
-    /**
-     * 手动触发更新检查（版本号点击）
-     * 不触发公告，直接走原 checkAndShow 逻辑
-     */
-    checkUpdate() {
-        Updater.checkAndShow();
+    /** 版本号点击时调用：手动检查更新，无更新则打开 changelog，不触发公告 */
+    async checkUpdate() {
+        const result = await Updater.checkAndFetch();
+        if (result === 'open-changelog') {
+            openExternalURL(Updater.CHANGELOG_PAGE);
+        } else {
+            this._showUpdateModal(result, { onDone: null });
+        }
     },
 
-    /**
-     * 调用 Updater.check()，若有更新则弹窗并返回 true
-     * 无更新返回 false
-     */
-    async _checkUpdate() {
-        return new Promise(resolve => {
-            Updater.check().then(hadUpdate => resolve(!!hadUpdate));
-        });
+    // ── 更新弹窗 ──────────────────────────────────────────────────────────
+
+    _showUpdateModal({ version, contentZH, contentEN }, { onDone }) {
+        const lang  = this._getLang();
+        const isZH  = lang === 'zh';
+        const content     = isZH ? contentZH || contentEN : contentEN || contentZH;
+        const contentHtml = Updater._mdToHtml(content);
+
+        const modal      = document.getElementById('updateModal');
+        const titleEl    = document.getElementById('updateModalTitle');
+        const bodyEl     = document.getElementById('updateModalBody');
+        const changelogLink = document.getElementById('updateChangelogLink');
+        const closeBtn   = document.getElementById('updateCloseBtn');
+        const laterBtn   = document.getElementById('updateLaterBtn');
+        const dismissBtn = document.getElementById('updateDismissBtn');
+        const refreshBtn = document.getElementById('updateRefreshBtn');
+
+        titleEl.textContent = isZH
+            ? `🆕 发现新版本 ${version}`
+            : `🆕 New Version Available: ${version}`;
+        bodyEl.innerHTML = contentHtml;
+        changelogLink.textContent = isZH ? '查看完整更新日志 →' : 'View Full Changelog →';
+        changelogLink.href = Updater.CHANGELOG_PAGE;
+        laterBtn.textContent  = isZH ? '稍后' : 'Later';
+        dismissBtn.textContent = isZH ? '不再提示此版本' : "Don't remind me";
+        refreshBtn.textContent = isZH ? '立即更新' : 'Update Now';
+
+        const close = (dismissed) => {
+            if (dismissed) localStorage.setItem(Updater.STORAGE_KEY, version);
+            modal.classList.remove('active');
+            if (onDone) onDone();
+        };
+
+        closeBtn.onclick  = () => close(false);
+        laterBtn.onclick  = () => close(false);
+        dismissBtn.onclick = () => close(true);
+        refreshBtn.onclick = () => {
+            localStorage.setItem(Updater.STORAGE_KEY, version);
+            this._showReloadOverlay();
+        };
+
+        modal.classList.add('active');
     },
 
-    /** 监听弹窗从 active 变为非 active，触发 callback */
-    _waitForModalClose(modalId, callback) {
-        const modal = document.getElementById(modalId);
-        if (!modal) { callback(); return; }
+    _showReloadOverlay() {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#2b2b2b;display:flex;flex-direction:column;justify-content:center;align-items:center;z-index:10000;';
+        const icon = document.createElement('div');
+        icon.style.cssText = 'font-size:48px;margin-bottom:20px;';
+        icon.textContent = '🎨';
+        const isZH = this._getLang() === 'zh';
+        const text = document.createElement('div');
+        text.style.cssText = 'color:#e0e0e0;font-size:14px;';
+        text.textContent = isZH ? '正在更新，请稍候' : 'Updating, please wait';
+        const dots = document.createElement('span');
+        dots.textContent = '';
+        text.appendChild(dots);
+        let dotCount = 0;
+        setInterval(() => { dotCount = (dotCount + 1) % 4; dots.textContent = '.'.repeat(dotCount); }, 400);
+        overlay.appendChild(icon);
+        overlay.appendChild(text);
+        document.body.appendChild(overlay);
 
-        const observer = new MutationObserver(() => {
-            if (!modal.classList.contains('active')) {
-                observer.disconnect();
-                callback();
-            }
-        });
-        observer.observe(modal, { attributes: true, attributeFilter: ['class'] });
+        if (navigator.serviceWorker) {
+            navigator.serviceWorker.getRegistrations().then(regs =>
+                Promise.all(regs.map(r => r.unregister())).then(() =>
+                    caches.keys().then(keys =>
+                        Promise.all(keys.map(k => caches.delete(k))).finally(() => location.reload(true))
+                    )
+                )
+            );
+        } else {
+            location.reload(true);
+        }
     },
 
-    /** 检查并弹出公告弹窗 */
+    // ── 公告弹窗 ──────────────────────────────────────────────────────────
+
     _checkAnnouncement() {
         if (!CURRENT_ANNOUNCEMENT) return;
-
-        const lang = (typeof I18N !== 'undefined') ? I18N.getLang() : 'en';
+        const lang = this._getLang();
         if (this._isSeen(lang, CURRENT_ANNOUNCEMENT)) return;
-
         this._showAnnouncement(lang, CURRENT_ANNOUNCEMENT);
     },
 
     _showAnnouncement(lang, ann) {
-        const isZH = lang === 'zh';
+        const isZH  = lang === 'zh';
         const modal = document.getElementById('announcementModal');
         if (!modal) return;
 
         document.getElementById('announcementTitle').textContent =
             isZH ? ann.titleZH : ann.titleEN;
 
-        // 正文：换行转 <br>
         const contentEl = document.getElementById('announcementContent');
         const raw = isZH ? ann.contentZH : ann.contentEN;
         contentEl.innerHTML = raw
@@ -136,16 +195,15 @@ const Announcer = {
         };
 
         const closeBtn = document.getElementById('announcementCloseBtn');
-        const okBtn = document.getElementById('announcementOkBtn');
+        const okBtn    = document.getElementById('announcementOkBtn');
         okBtn.textContent = isZH ? '知道了' : 'Got it';
 
         const dismiss = () => {
             this._markSeen(lang, ann);
             modal.classList.remove('active');
         };
-
         closeBtn.onclick = dismiss;
-        okBtn.onclick = dismiss;
+        okBtn.onclick    = dismiss;
 
         modal.classList.add('active');
     },
