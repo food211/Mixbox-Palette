@@ -76,33 +76,26 @@ const Announcer = {
         }
     },
 
-    /** 版本号点击时调用：显示版本信息弹窗，包含最新 changelog，有更新则启用更新按钮 */
+    /** 版本号点击时调用：立即显示弹窗，在窗口内异步加载检查结果 */
     async checkUpdate() {
-        const result = await Updater.checkAndFetch();
-        const hasUpdate = result !== 'open-changelog' && result !== null;
-        this._showVersionModal(hasUpdate ? result : null);
-    },
-
-    /** 版本信息弹窗：始终显示版本号区域和最新 changelog，按需启用更新按钮 */
-    async _showVersionModal(updateData) {
         const isZH = this._getLang() === 'zh';
         const t = (k) => (typeof I18N !== 'undefined') ? I18N.t(k) : k;
 
-        const modal      = document.getElementById('updateModal');
-        const titleEl    = document.getElementById('updateModalTitle');
-        const versionInfo = document.getElementById('updateVersionInfo');
-        const copyBtn    = document.getElementById('updateCopyBtn');
-        const bodyEl     = document.getElementById('updateModalBody');
+        const modal         = document.getElementById('updateModal');
+        const titleEl       = document.getElementById('updateModalTitle');
+        const versionInfo   = document.getElementById('updateVersionInfo');
+        const copyBtn       = document.getElementById('updateCopyBtn');
+        const bodyEl        = document.getElementById('updateModalBody');
         const changelogLink = document.getElementById('updateChangelogLink');
-        const closeBtn   = document.getElementById('updateCloseBtn');
-        const laterBtn   = document.getElementById('updateLaterBtn');
-        const dismissBtn = document.getElementById('updateDismissBtn');
-        const refreshBtn = document.getElementById('updateRefreshBtn');
+        const closeBtn      = document.getElementById('updateCloseBtn');
+        const laterBtn      = document.getElementById('updateLaterBtn');
+        const dismissBtn    = document.getElementById('updateDismissBtn');
+        const refreshBtn    = document.getElementById('updateRefreshBtn');
 
         // 标题
         titleEl.textContent = t('versionModalTitle');
 
-        // 版本信息标签
+        // 版本信息标签（本地数据，立即可用）
         const appVer  = Updater.CURRENT_VERSION;
         const hostVer = (typeof getHostVersion === 'function') ? getHostVersion() : null;
         const swVer   = await caches.keys().then(keys => {
@@ -112,32 +105,63 @@ const Announcer = {
             return m ? m[1] : name;
         }).catch(() => '—');
 
-        const appVerStr = updateData
-            ? `${appVer} → ${updateData.version}`
-            : appVer;
-        const tags = [
+        const buildTags = (appVerStr) => [
             `${t('versionTagApp')}: ${appVerStr}`,
             ...(hostVer ? [`${t('versionTagHost')}: ${hostVer}`] : []),
             `${t('versionTagCache')}: ${swVer}`,
         ];
-        versionInfo.innerHTML = tags.map(tag =>
+
+        let currentTags = buildTags(appVer);
+        versionInfo.innerHTML = currentTags.map(tag =>
             `<span class="update-version-tag">${tag}</span>`
         ).join('');
 
         copyBtn.textContent = t('versionCopyBtn');
         copyBtn.onclick = () => {
-            navigator.clipboard.writeText(tags.join(' | ')).then(() => {
+            navigator.clipboard.writeText(currentTags.join(' | ')).then(() => {
                 copyBtn.textContent = t('versionCopied');
                 setTimeout(() => { copyBtn.textContent = t('versionCopyBtn'); }, 2000);
             });
         };
 
-        // Changelog 内容（最新版本）
+        // 初始状态：正在获取
+        bodyEl.innerHTML     = `<p style="color:#888;">${isZH ? '正在获取版本信息…' : 'Fetching version info…'}</p>`;
+        changelogLink.textContent = '';
+        changelogLink.href   = '#';
+        laterBtn.style.display   = 'none';
+        dismissBtn.style.display = 'none';
+        closeBtn.style.display   = '';
+        refreshBtn.textContent   = isZH ? '检查中…' : 'Checking…';
+        refreshBtn.disabled      = true;
+
+        const close = (dismissed, updateData) => {
+            if (dismissed && updateData) localStorage.setItem(Updater.STORAGE_KEY, updateData.version);
+            modal.classList.remove('active');
+        };
+        closeBtn.onclick   = () => close(false, null);
+        laterBtn.onclick   = () => close(false, null);
+        dismissBtn.onclick = () => close(true, null);
+
+        // 立即显示弹窗
+        modal.classList.add('active');
+
+        // 异步发起网络检查
+        const result = await Updater.checkAndFetch();
+        const updateData = (result !== 'open-changelog' && result !== null) ? result : null;
+
+        // 有更新时更新版本标签
+        if (updateData) {
+            currentTags = buildTags(`${appVer} → ${updateData.version}`);
+            versionInfo.innerHTML = currentTags.map(tag =>
+                `<span class="update-version-tag">${tag}</span>`
+            ).join('');
+        }
+
+        // 填充 changelog
         if (updateData) {
             const content = isZH ? updateData.contentZH || updateData.contentEN : updateData.contentEN || updateData.contentZH;
             bodyEl.innerHTML = Updater._mdToHtml(content);
         } else {
-            // 无更新：拉取本地当前版本的 changelog 展示
             bodyEl.innerHTML = `<p style="color:#6abf6a;">${t('versionUpToDate')}</p>`;
             try {
                 const text = await fetch(Updater.CHANGELOG_URL, { cache: 'no-store' }).then(r => r.text());
@@ -152,35 +176,23 @@ const Announcer = {
         changelogLink.textContent = isZH ? '查看完整更新日志 →' : 'View Full Changelog →';
         changelogLink.href = Updater.CHANGELOG_PAGE;
 
-        // 按钮
+        // 更新按钮状态
         laterBtn.style.display   = updateData ? '' : 'none';
         dismissBtn.style.display = updateData ? '' : 'none';
-        closeBtn.style.display   = updateData ? '' : '';
-
         if (updateData) {
             laterBtn.textContent   = isZH ? '稍后' : 'Later';
             dismissBtn.textContent = isZH ? '不再提示此版本' : "Don't remind me";
             refreshBtn.textContent = isZH ? '立即更新' : 'Update Now';
             refreshBtn.disabled    = false;
+            dismissBtn.onclick     = () => close(true, updateData);
+            refreshBtn.onclick     = () => {
+                localStorage.setItem(Updater.STORAGE_KEY, updateData.version);
+                this._showReloadOverlay();
+            };
         } else {
             refreshBtn.textContent = isZH ? '已是最新版本' : 'Up to Date';
             refreshBtn.disabled    = true;
         }
-
-        const close = (dismissed) => {
-            if (dismissed && updateData) localStorage.setItem(Updater.STORAGE_KEY, updateData.version);
-            modal.classList.remove('active');
-        };
-
-        closeBtn.onclick   = () => close(false);
-        laterBtn.onclick   = () => close(false);
-        dismissBtn.onclick = () => close(true);
-        refreshBtn.onclick = updateData ? () => {
-            localStorage.setItem(Updater.STORAGE_KEY, updateData.version);
-            this._showReloadOverlay();
-        } : null;
-
-        modal.classList.add('active');
     },
 
     // ── 更新弹窗 ──────────────────────────────────────────────────────────
