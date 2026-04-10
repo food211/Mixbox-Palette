@@ -44,6 +44,10 @@
     opacity: 1;
 }
 
+.discord-link:hover {
+    color: #5865F2 !important;
+}
+
 .palette-selector {
     position: relative;
     display: inline-block;
