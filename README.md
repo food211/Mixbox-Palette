@@ -7,6 +7,12 @@ A UXP plugin for realistic pigment mixing in Adobe Photoshop, with dual mixing e
 ![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg)
 ![Mixbox License](https://img.shields.io/badge/Mixbox-CC%20BY--NC%204.0-lightgrey.svg)
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="icons/Designed_for_Adobe_Photoshop_badge_dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="icons/Designed_for_Adobe_Photoshop_badge_light.svg">
+  <img src="icons/Designed_for_Adobe_Photoshop_badge_dark.svg" height="40">
+</picture>
+
 ## Features
 
 ### Professional Palettes
@@ -35,9 +41,10 @@ To compare both engines side by side, try the [KM Tuner](https://food211.github.
 ### Tools & Shortcuts
 - **Eyedropper** - `Alt + Left Click` for foreground, `Alt + Right Click` for background
 - **Transfer to Photoshop** - Export a region of the mixing canvas directly to your active Photoshop layer
+- **Resizable canvas** - Drag the handles on either side of the black panel to resize the mixing canvas (480px–2000px)
 - **Zoom control** - 60%–150% zoom via the top-right dropdown
 - **Focus indicator** - Blue bar at top when plugin captures keyboard focus
-- **Undo/Redo** - Up to 50 steps of history
+- **Undo/Redo** - Up to 50 steps; history is stored directly as canvas snapshots using GPU memory for incremental recording
 - **Auto-save** - Canvas, settings, and history automatically preserved
 - **Bidirectional color sync** - Colors sync both ways: plugin selections update Photoshop, and Photoshop color changes (color picker, swatches, X to swap, D to reset) update the plugin
 
@@ -47,15 +54,7 @@ To compare both engines side by side, try the [KM Tuner](https://food211.github.
 
 ## Architecture
 
-This plugin uses a **WebView hybrid architecture**:
-
-- **Remote UI** (GitHub Pages / Cloudflare Pages) - Full plugin UI, mixing engine, and brush system
-- **UXP Host** (local `uxp-host/` directory) - Minimal bridge that loads the WebView and syncs colors to Photoshop via `executeAsModal` + `batchPlay`
-
-Benefits: Users get updates automatically without reinstalling. Offline use is supported via Service Worker caching after first load.
-
-### Dual-Source Failover
-The plugin loads from Cloudflare Pages (`mixbox-palette.pages.dev`) by default, with automatic fallback to GitHub Pages if the primary source fails. This ensures accessibility for users in regions where GitHub may be restricted.
+The plugin UI and mixing engine are hosted remotely (Cloudflare Pages, with GitHub Pages as fallback). The local UXP host is a minimal bridge that loads the remote UI and syncs colors to Photoshop. Updates are delivered automatically without reinstalling. After the first load, a Service Worker caches all content for offline use.
 
 ## Installation
 
@@ -107,7 +106,7 @@ The plugin loads from Cloudflare Pages (`mixbox-palette.pages.dev`) by default, 
 ## Tech Stack
 
 - **Mixing Engines**: Mixbox (LUT-based, CC BY-NC 4.0) + KM (38-wavelength Kubelka-Munk, spectral data from spectral.js MIT, GPL v3)
-- **Rendering**: WebGL + Canvas 2D dual-buffer
+- **Rendering**: WebGL (mixing engine) + Canvas 2D (brush cursor, overlays)
 - **Platform**: Adobe UXP + WebView
 - **Hosting**: Cloudflare Pages (primary) / GitHub Pages (fallback)
 - **Offline**: Service Worker with Cache-First strategy for reliable offline use
@@ -159,9 +158,10 @@ Adobe Photoshop UXP 调色板插件，内置双混色引擎，模拟真实颜料
 - **右键绘制** - 右键拖拽使用背景色绘制
 - **吸管工具** - Alt + 左键/右键取色
 - **传输至 PS** - 将混色画布的内容传输到 Photoshop 活动图层
+- **可调节画布大小** - 拖拽黑色面板两侧的 handle 调整混色画布宽度（480px–2000px）
 - **缩放控制** - 右上角下拉菜单，60%–150%
 - **焦点指示条** - 插件捕获键盘焦点时顶部亮起蓝色指示条
-- **50 步撤销/重做**
+- **50 步撤销/重做** - 历史记录直接保存画布快照，使用 GPU 显存记录增量修改
 - **自动保存** - 画布、历史记录和设置自动保存
 - **双向颜色同步** - 插件选色自动同步到 Photoshop；反之，在 PS 中更改颜色（拾色器、色板、X 键交换、D 键复位）也会同步更新插件
 - **中英文双语** - 自动跟随系统语言，支持手动切换
