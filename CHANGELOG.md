@@ -4,9 +4,13 @@
 [ZH]
 ### 新增
 - **Discord 按钮** — 面板右下角新增 Discord 社区跳转按钮
+### 优化
+- **拖拽边缘提示** — 鼠标悬停在面板边缘时蓝色发光，拖动时变为黄色，拖拽状态更直观
 [EN]
 ### New
 - **Discord button** — Added a Discord community link button in the bottom-right corner of the panel
+### Improvement
+- **Resize handle glow** — Panel edges glow blue on hover and yellow while dragging for clearer visual feedback
 
 == V1.3.3b ==
 [ZH]
