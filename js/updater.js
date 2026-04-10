@@ -1,6 +1,7 @@
 /**
- * 更新检测模块
- * 从远端 CHANGELOG.md 获取最新版本信息，若有新版本则显示更新提示弹窗
+ * 更新检测模块（数据层）
+ * 只负责 fetch CHANGELOG、解析版本数据，不操作 DOM，不管理弹窗。
+ * 弹窗逻辑全部由 Announcer 负责。
  */
 const Updater = {
     CHANGELOG_URL: 'https://raw.githubusercontent.com/food211/Mixbox-Palette/main/CHANGELOG.md',
@@ -35,7 +36,7 @@ const Updater = {
                     .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" target="_blank">$1</a>');
                 if (/^###\s+/.test(line)) {
                     const title = line.replace(/^###\s+/, '');
-                    const isImprovement = /improv|改进/i.test(title);
+                    const isImprovement = /improv|优化|改进/i.test(title);
                     const color = isImprovement ? '#7a9ab5' : '#7a9e8a';
                     return '<p class="update-section-title" style="color:' + color + '">' + title + '</p>';
                 }
@@ -51,115 +52,42 @@ const Updater = {
             .join('');
     },
 
-    /** 自动检查更新，返回 true 表示弹出了更新弹窗 */
+    /**
+     * 自动检查更新。
+     * 返回需要展示的更新数据 { version, contentZH, contentEN }，
+     * 或 null（无更新 / 已忽略 / 网络失败）。
+     */
     async check() {
         try {
             const res = await fetch(this.CHANGELOG_URL, { cache: 'no-store' });
-            if (!res.ok) return false;
+            if (!res.ok) return null;
             const text = await res.text();
             const parsed = this._parseChangelog(text);
-            if (!parsed) return false;
-
-            if (parsed.version === this.CURRENT_VERSION) return false;
-
+            if (!parsed) return null;
+            if (parsed.version === this.CURRENT_VERSION) return null;
             const dismissed = localStorage.getItem(this.STORAGE_KEY);
-            if (dismissed === parsed.version) return false;
-
-            this._showModal(parsed);
-            return true;
+            if (dismissed === parsed.version) return null;
+            return parsed;
         } catch (e) {
-            // 网络失败静默处理
-            return false;
+            return null;
         }
     },
 
-    /** 用户点击版本号时调用：有更新则弹更新提示，否则打开 changelog */
-    async checkAndShow() {
+    /**
+     * 手动触发检查（版本号点击）。
+     * 返回更新数据，或 null（已是最新 / 网络失败）。
+     * 网络失败时返回特殊标记 'open-changelog'，由 Announcer 决定打开页面。
+     */
+    async checkAndFetch() {
         try {
             const res = await fetch(this.CHANGELOG_URL, { cache: 'no-store' });
-            if (!res.ok) {
-                openExternalURL(this.CHANGELOG_PAGE);
-                return;
-            }
+            if (!res.ok) return 'open-changelog';
             const text = await res.text();
             const parsed = this._parseChangelog(text);
-            if (!parsed || parsed.version === this.CURRENT_VERSION) {
-                openExternalURL(this.CHANGELOG_PAGE);
-                return;
-            }
-            this._showModal(parsed);
+            if (!parsed || parsed.version === this.CURRENT_VERSION) return 'open-changelog';
+            return parsed;
         } catch (e) {
-            openExternalURL(this.CHANGELOG_PAGE);
+            return 'open-changelog';
         }
-    },
-
-    _showModal({ version, contentZH, contentEN }) {
-        const lang = (typeof I18N !== 'undefined') ? I18N.getLang() : 'en';
-        const isZH = lang === 'zh';
-
-        const content = isZH ? contentZH || contentEN : contentEN || contentZH;
-        const contentHtml = this._mdToHtml(content);
-
-        const modal = document.getElementById('updateModal');
-        const titleEl = document.getElementById('updateModalTitle');
-        const bodyEl = document.getElementById('updateModalBody');
-        const changelogLink = document.getElementById('updateChangelogLink');
-        const closeBtn = document.getElementById('updateCloseBtn');
-        const laterBtn = document.getElementById('updateLaterBtn');
-        const dismissBtn = document.getElementById('updateDismissBtn');
-        const refreshBtn = document.getElementById('updateRefreshBtn');
-
-        titleEl.textContent = isZH
-            ? `🆕 发现新版本 ${version}`
-            : `🆕 New Version Available: ${version}`;
-        bodyEl.innerHTML = contentHtml;
-        changelogLink.textContent = isZH ? '查看完整更新日志 →' : 'View Full Changelog →';
-        changelogLink.href = this.CHANGELOG_PAGE;
-        laterBtn.textContent = isZH ? '稍后' : 'Later';
-        dismissBtn.textContent = isZH ? '不再提示此版本' : "Don't remind me";
-        refreshBtn.textContent = isZH ? '立即更新' : 'Update Now';
-
-        closeBtn.onclick = () => modal.classList.remove('active');
-        laterBtn.onclick = () => modal.classList.remove('active');
-        dismissBtn.onclick = () => {
-            localStorage.setItem(this.STORAGE_KEY, version);
-            modal.classList.remove('active');
-        };
-        refreshBtn.onclick = () => {
-            localStorage.setItem(this.STORAGE_KEY, version);
-            // 显示 loading 遮罩
-            const overlay = document.createElement('div');
-            overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#2b2b2b;display:flex;flex-direction:column;justify-content:center;align-items:center;z-index:10000;';
-            const icon = document.createElement('div');
-            icon.style.cssText = 'font-size:48px;margin-bottom:20px;';
-            icon.textContent = '🎨';
-            const isZH_ = (typeof I18N !== 'undefined') && I18N.getLang() === 'zh';
-            const baseText = isZH_ ? '正在更新，请稍候' : 'Updating, please wait';
-            const text = document.createElement('div');
-            text.style.cssText = 'color:#e0e0e0;font-size:14px;';
-            text.textContent = baseText;
-            const dots = document.createElement('span');
-            dots.textContent = '';
-            text.appendChild(dots);
-            let dotCount = 0;
-            setInterval(() => { dotCount = (dotCount + 1) % 4; dots.textContent = '.'.repeat(dotCount); }, 400);
-            overlay.appendChild(icon);
-            overlay.appendChild(text);
-            document.body.appendChild(overlay);
-            // 先注销 SW 再刷新，确保加载最新资源
-            if (navigator.serviceWorker) {
-                navigator.serviceWorker.getRegistrations().then(regs => {
-                    Promise.all(regs.map(r => r.unregister())).then(() => {
-                        caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).finally(() => {
-                            location.reload(true);
-                        });
-                    });
-                });
-            } else {
-                location.reload(true);
-            }
-        };
-
-        modal.classList.add('active');
     },
 };
