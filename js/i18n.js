@@ -50,6 +50,11 @@ const I18N = {
             paletteName_kuretakeGansai: 'Kuretake Gansai 16',
 
             switchLanguage: 'Switch Language (EN / ZH)',
+            versionModalTitle: 'Version Info',
+            versionUpToDate: '✓ Up to date',
+            versionTagApp: 'App',
+            versionTagHost: 'Host',
+            versionTagCache: 'Cache',
             zoomTitle: 'Zoom — Zoom in expands canvas size, zoom out does not',
             switchEngine: 'Switch Mixing Engine (Mixbox / KM)',
             focusHint: 'Hold Space + click PS canvas to return shortcuts',
@@ -122,6 +127,11 @@ const I18N = {
             paletteName_kuretakeGansai: '吴竹 Gansai 16色',
 
             switchLanguage: '切换语言 (EN / ZH)',
+            versionModalTitle: '版本信息',
+            versionUpToDate: '✓ 已是最新版本',
+            versionTagApp: 'App',
+            versionTagHost: '宿主',
+            versionTagCache: '缓存',
             zoomTitle: '缩放 — 放大会同步扩展画布尺寸，缩小不会',
             switchEngine: '切换混色引擎 (Mixbox / KM)',
             focusHint: '按住空格 + 点击 PS 画布以切回快捷键',
