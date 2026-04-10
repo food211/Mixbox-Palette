@@ -126,11 +126,36 @@
     max-height: 70vh;
 }
 
+.update-version-info-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+
 .update-version-info {
     display: flex;
     gap: 6px;
     flex-wrap: wrap;
-    margin-bottom: 12px;
+    flex: 1;
+}
+
+.update-copy-btn {
+    flex-shrink: 0;
+    background: none;
+    border: 1px solid #555;
+    border-radius: 4px;
+    color: #aaa;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 2px 7px;
+    line-height: 1.4;
+    white-space: nowrap;
+    transition: border-color 0.15s, color 0.15s;
+}
+.update-copy-btn:hover {
+    border-color: #aaa;
+    color: #fff;
 }
 
 .update-version-tag {

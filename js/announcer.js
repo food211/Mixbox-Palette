@@ -91,6 +91,7 @@ const Announcer = {
         const modal      = document.getElementById('updateModal');
         const titleEl    = document.getElementById('updateModalTitle');
         const versionInfo = document.getElementById('updateVersionInfo');
+        const copyBtn    = document.getElementById('updateCopyBtn');
         const bodyEl     = document.getElementById('updateModalBody');
         const changelogLink = document.getElementById('updateChangelogLink');
         const closeBtn   = document.getElementById('updateCloseBtn');
@@ -122,6 +123,14 @@ const Announcer = {
         versionInfo.innerHTML = tags.map(tag =>
             `<span class="update-version-tag">${tag}</span>`
         ).join('');
+
+        copyBtn.textContent = t('versionCopyBtn');
+        copyBtn.onclick = () => {
+            navigator.clipboard.writeText(tags.join(' | ')).then(() => {
+                copyBtn.textContent = t('versionCopied');
+                setTimeout(() => { copyBtn.textContent = t('versionCopyBtn'); }, 2000);
+            });
+        };
 
         // Changelog 内容（最新版本）
         if (updateData) {
