@@ -17,12 +17,12 @@
         <div class="header-container">
             <!-- 语言切换 - 左上角 -->
             <div class="lang-selector">
-                <button id="langBtn" class="lang-btn">EN</button>
+                <button id="langBtn" class="lang-btn" data-i18n-title="switchLanguage" title="Switch Language (EN / ZH)">EN</button>
                 <button id="engineBtn" class="engine-btn" data-i18n-title="switchEngine" title="Switch Mixing Engine">MB</button>
             </div>
             <!-- 缩放控制 - 右上角 -->
             <div class="zoom-selector">
-                <button id="zoomBtn" class="zoom-btn">100%</button>
+                <button id="zoomBtn" class="zoom-btn" data-i18n-title="zoomTitle" title="Zoom — Zoom in expands canvas size, zoom out does not">100%</button>
                 <div id="zoomDropdown" class="zoom-dropdown">
                     <div class="zoom-option" data-zoom="0.6">60%</div>
                     <div class="zoom-option" data-zoom="0.7">70%</div>
@@ -130,17 +130,6 @@
             </div>
         </div>
         
-        <!-- 画布宽度调整确认弹窗 -->
-        <div class="brush-selector-modal" id="resizeConfirmModal">
-            <div class="brush-selector-content alert-modal-content">
-                <p id="resizeConfirmText"></p>
-                <div style="display:flex;gap:10px;justify-content:center;margin-top:12px;">
-                    <button id="resizeConfirmOkBtn" class="alert-ok-btn">Confirm</button>
-                    <button id="resizeConfirmCancelBtn" class="alert-ok-btn" style="background:#555;">Cancel</button>
-                </div>
-            </div>
-        </div>
-
         <!-- 信息显示 -->
         <div class="info">
             <p class="info-header" id="instructionsToggle">
@@ -167,6 +156,17 @@
         </div>
     </div>
     <div class="resize-handle resize-handle-right" id="resizeHandleRight"></div>
+
+    <!-- 画布宽度调整确认弹窗 -->
+    <div class="brush-selector-modal" id="resizeConfirmModal">
+        <div class="brush-selector-content alert-modal-content">
+            <p id="resizeConfirmText"></p>
+            <div style="display:flex;gap:10px;justify-content:center;margin-top:12px;">
+                <button id="resizeConfirmOkBtn" class="alert-ok-btn">Confirm</button>
+                <button id="resizeConfirmCancelBtn" class="alert-ok-btn" style="background:#555;">Cancel</button>
+            </div>
+        </div>
+    </div>
 
     <!-- 更新提示弹窗 -->
     <div class="brush-selector-modal" id="updateModal">

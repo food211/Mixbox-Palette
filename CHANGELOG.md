@@ -1,5 +1,14 @@
 # 更新日志 / Changelog
 
+== V1.3.4a ==
+[ZH]
+### 修复
+- **紧急修复** — 修复缩放功能在特定刷新时机下将画布宽度错误扩大的问题
+
+[EN]
+### Fix
+- **Hotfix** — Fixed an issue where switching zoom could incorrectly expand canvas width under certain refresh conditions
+
 == V1.3.4 ==
 [ZH]
 ### 新增
