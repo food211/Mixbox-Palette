@@ -126,6 +126,23 @@
     max-height: 70vh;
 }
 
+.update-version-info {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+
+.update-version-tag {
+    font-size: 11px;
+    color: #a0a0a0;
+    background: #333;
+    border: 1px solid #444;
+    border-radius: 4px;
+    padding: 2px 8px;
+    white-space: nowrap;
+}
+
 .update-modal-body {
     font-size: 13px;
     line-height: 1.6;
@@ -196,8 +213,14 @@
     font-size: 13px;
 }
 
-.update-btn-refresh:hover {
+.update-btn-refresh:hover:not(:disabled) {
     background-color: #1976D2;
+}
+
+.update-btn-refresh:disabled {
+    background-color: #3c3c3c;
+    color: #666;
+    cursor: default;
 }
 
 .alert-modal-content {

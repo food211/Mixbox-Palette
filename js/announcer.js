@@ -76,14 +76,102 @@ const Announcer = {
         }
     },
 
-    /** 版本号点击时调用：手动检查更新，无更新则打开 changelog，不触发公告 */
+    /** 版本号点击时调用：显示版本信息弹窗，包含最新 changelog，有更新则启用更新按钮 */
     async checkUpdate() {
         const result = await Updater.checkAndFetch();
-        if (result === 'open-changelog') {
-            openExternalURL(Updater.CHANGELOG_PAGE);
+        const hasUpdate = result !== 'open-changelog' && result !== null;
+        this._showVersionModal(hasUpdate ? result : null);
+    },
+
+    /** 版本信息弹窗：始终显示版本号区域和最新 changelog，按需启用更新按钮 */
+    async _showVersionModal(updateData) {
+        const isZH = this._getLang() === 'zh';
+        const t = (k) => (typeof I18N !== 'undefined') ? I18N.t(k) : k;
+
+        const modal      = document.getElementById('updateModal');
+        const titleEl    = document.getElementById('updateModalTitle');
+        const versionInfo = document.getElementById('updateVersionInfo');
+        const bodyEl     = document.getElementById('updateModalBody');
+        const changelogLink = document.getElementById('updateChangelogLink');
+        const closeBtn   = document.getElementById('updateCloseBtn');
+        const laterBtn   = document.getElementById('updateLaterBtn');
+        const dismissBtn = document.getElementById('updateDismissBtn');
+        const refreshBtn = document.getElementById('updateRefreshBtn');
+
+        // 标题
+        titleEl.textContent = t('versionModalTitle');
+
+        // 版本信息标签
+        const appVer  = Updater.CURRENT_VERSION;
+        const hostVer = (typeof getHostVersion === 'function') ? getHostVersion() : null;
+        const swVer   = await caches.keys().then(keys => {
+            const name = keys.find(k => k.startsWith('km-palette'));
+            if (!name) return '—';
+            const m = name.match(/-(v\d+)$/);
+            return m ? m[1] : name;
+        }).catch(() => '—');
+
+        const appVerStr = updateData
+            ? `${appVer} → ${updateData.version}`
+            : appVer;
+        const tags = [
+            `${t('versionTagApp')}: ${appVerStr}`,
+            ...(hostVer ? [`${t('versionTagHost')}: ${hostVer}`] : []),
+            `${t('versionTagCache')}: ${swVer}`,
+        ];
+        versionInfo.innerHTML = tags.map(tag =>
+            `<span class="update-version-tag">${tag}</span>`
+        ).join('');
+
+        // Changelog 内容（最新版本）
+        if (updateData) {
+            const content = isZH ? updateData.contentZH || updateData.contentEN : updateData.contentEN || updateData.contentZH;
+            bodyEl.innerHTML = Updater._mdToHtml(content);
         } else {
-            this._showUpdateModal(result, { onDone: null });
+            // 无更新：拉取本地当前版本的 changelog 展示
+            bodyEl.innerHTML = `<p style="color:#6abf6a;">${t('versionUpToDate')}</p>`;
+            try {
+                const text = await fetch(Updater.CHANGELOG_URL, { cache: 'no-store' }).then(r => r.text());
+                const parsed = Updater._parseChangelog(text);
+                if (parsed) {
+                    const content = isZH ? parsed.contentZH || parsed.contentEN : parsed.contentEN || parsed.contentZH;
+                    bodyEl.innerHTML += Updater._mdToHtml(content);
+                }
+            } catch (e) { /* 离线时静默失败 */ }
         }
+
+        changelogLink.textContent = isZH ? '查看完整更新日志 →' : 'View Full Changelog →';
+        changelogLink.href = Updater.CHANGELOG_PAGE;
+
+        // 按钮
+        laterBtn.style.display   = updateData ? '' : 'none';
+        dismissBtn.style.display = updateData ? '' : 'none';
+        closeBtn.style.display   = updateData ? '' : '';
+
+        if (updateData) {
+            laterBtn.textContent   = isZH ? '稍后' : 'Later';
+            dismissBtn.textContent = isZH ? '不再提示此版本' : "Don't remind me";
+            refreshBtn.textContent = isZH ? '立即更新' : 'Update Now';
+            refreshBtn.disabled    = false;
+        } else {
+            refreshBtn.textContent = isZH ? '已是最新版本' : 'Up to Date';
+            refreshBtn.disabled    = true;
+        }
+
+        const close = (dismissed) => {
+            if (dismissed && updateData) localStorage.setItem(Updater.STORAGE_KEY, updateData.version);
+            modal.classList.remove('active');
+        };
+
+        closeBtn.onclick   = () => close(false);
+        laterBtn.onclick   = () => close(false);
+        dismissBtn.onclick = () => close(true);
+        refreshBtn.onclick = updateData ? () => {
+            localStorage.setItem(Updater.STORAGE_KEY, updateData.version);
+            this._showReloadOverlay();
+        } : null;
+
+        modal.classList.add('active');
     },
 
     // ── 更新弹窗 ──────────────────────────────────────────────────────────
