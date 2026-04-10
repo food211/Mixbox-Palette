@@ -25,7 +25,10 @@ const CACHE_URLS = [
   './js/announcer.js',
   './icons/smudge.svg',
   './icons/eyedropper.svg',
-  './icons/rect-select.svg'
+  './icons/rect-select.svg',
+  './icons/github.svg',
+  './icons/discord.svg',
+  './icons/eyedropper-cursor.svg'
 ];
 
 // 安装 - 预缓存资源

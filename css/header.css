@@ -48,6 +48,30 @@
     color: #5865F2 !important;
 }
 
+.icon-github,
+.icon-discord {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    background-color: currentColor;
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-position: center;
+}
+
+.icon-github {
+    -webkit-mask-image: url('../icons/github.svg');
+    mask-image: url('../icons/github.svg');
+}
+
+.icon-discord {
+    -webkit-mask-image: url('../icons/discord.svg');
+    mask-image: url('../icons/discord.svg');
+}
+
 .palette-selector {
     position: relative;
     display: inline-block;

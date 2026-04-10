@@ -1131,8 +1131,13 @@ function bindEvents() {
     }
 
     function updateBrushCursor(cssX, cssY) {
-        if (!brushManager || isEyedropperMode || isRectSelectMode) {
+        if (!brushManager || isRectSelectMode) {
             hideBrushCursor();
+            return;
+        }
+        if (isEyedropperMode) {
+            brushCursorCanvas.style.display = 'none';
+            mixCanvas.style.cursor = 'url("icons/eyedropper-cursor.svg") 2 14, crosshair';
             return;
         }
 
