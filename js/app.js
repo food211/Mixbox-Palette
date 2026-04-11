@@ -71,6 +71,8 @@ async function switchEngine(engine) {
     await painter.init();
     window._painter = painter;
     painter.setMixStrength(oldMixStrength);
+    painter.setHeatmapDecayActive(currentTool === 'smudge');
+    painter.startHeatmapFadeOut();
     currentEngine = engine;
     localStorage.setItem('mixbox_engine', engine);
 
@@ -565,6 +567,7 @@ function bindEvents() {
             brushSpacingSlider.value = Math.round(smudgeSpacingRatio * 100);
             brushSpacingValue.textContent = Math.round(smudgeSpacingRatio * 100);
             syncAllRangeThumbs();
+            if (painter) painter.setHeatmapDecayActive(true);
             console.log('✅ 切换到涂抹工具');
         } else {
             // 切换回笔刷工具：保存涂抹工具设置
@@ -574,6 +577,7 @@ function bindEvents() {
             smudgeSpacingRatio = parseInt(brushSpacingSlider.value) / 100;
             paletteStorage.saveAppSettings({ smudgeBrushSize, smudgeStrength, smudgeBrushType, smudgeSpacing: Math.round(smudgeSpacingRatio * 100) });
 
+            if (painter) painter.setHeatmapDecayActive(false);
             currentTool = 'brush';
             smudgeBtn.classList.remove('active');
             updateStatus('draw');
@@ -620,8 +624,21 @@ function bindEvents() {
         }
     });
     
-    // 矩形选取按钮
+    // 矩形选取按钮（非UXP环境下替换为保存PNG按钮）
     const rectSelectBtn = document.getElementById('rectSelectBtn');
+    if (typeof window.uxpHost === 'undefined' && rectSelectBtn) {
+        rectSelectBtn.innerHTML = '<img src="icons/save.svg" width="14" height="14" alt="Save">';
+        rectSelectBtn.title = t('saveCanvasTitle');
+        rectSelectBtn.removeAttribute('data-i18n');
+        rectSelectBtn.removeAttribute('data-i18n-title');
+        rectSelectBtn.addEventListener('click', () => {
+            const dataURL = painter.toDataURL('image/png');
+            const a = document.createElement('a');
+            a.href = dataURL;
+            a.download = 'mixbox-palette.png';
+            a.click();
+        });
+    } else {
     // 动态创建 overlay canvas，尺寸完全复制 mixCanvas
     const selectOverlay = document.createElement('canvas');
     selectOverlay.id = 'selectOverlay';
@@ -708,6 +725,7 @@ function bindEvents() {
             }, 500);
         });
     }
+    } // end else (UXP env)
 
     // 引擎切换按钮
     const engineBtn = document.getElementById('engineBtn');

@@ -277,52 +277,130 @@ function _flushDebugHeatmap(opacity = 1.0) {
     gl.disable(gl.BLEND);
 }
 
+// ─── 热度衰减 program ─────────────────────────────────────────────────────────
+
 /**
- * 笔触结束时调用：2秒内将热度图 overlay 线性淡出到不可见。
- * 如果期间开始了新笔触，captureSmudgeSnapshot 会调用 _resetHeatmapFade 打断淡出。
+ * 初始化热度衰减 shader：每帧把热度图乘以衰减系数写回
  */
-function startHeatmapFadeOut() {
-    if (!this._debugHeatmapEnabled) return;
+function _initHeatDecayProgram() {
+    const gl = this.gl;
 
-    // 打断上一次未完成的淡出
-    if (this._fadeRafId) {
-        cancelAnimationFrame(this._fadeRafId);
-        this._fadeRafId = null;
-    }
-
-    const FADE_MS = 2000;
-    const startTime = performance.now();
-    const painter = this;
-
-    function tick(now) {
-        const elapsed = now - startTime;
-        const t = Math.min(elapsed / FADE_MS, 1.0);
-        painter._debugHeatOpacity = 1.0 - t;
-
-        // 重新 flush 一帧（blit canvas + overlay）
-        painter.flush();
-
-        if (t < 1.0) {
-            painter._fadeRafId = requestAnimationFrame(tick);
-        } else {
-            painter._fadeRafId = null;
-            painter._debugHeatOpacity = 1.0; // 下次笔触恢复满透明度
+    const vs = this.createShader(gl.VERTEX_SHADER, `
+        attribute vec2 a_pos;
+        varying vec2 v_uv;
+        void main() {
+            v_uv = vec2(a_pos.x * 0.5 + 0.5, a_pos.y * 0.5 + 0.5);
+            gl_Position = vec4(a_pos, 0.0, 1.0);
         }
+    `);
+    const fs = this.createShader(gl.FRAGMENT_SHADER, `
+        precision mediump float;
+        uniform sampler2D u_heatmap;
+        uniform float u_step;
+        varying vec2 v_uv;
+        void main() {
+            float heat = texture2D(u_heatmap, v_uv).r;
+            gl_FragColor = vec4(max(heat - u_step, 0.0), 0.0, 0.0, 1.0);
+        }
+    `);
+
+    const prog = this.createProgram(vs, fs);
+    this._heatDecayProgram   = prog;
+    this._heatDecayAPos      = gl.getAttribLocation(prog, 'a_pos');
+    this._heatDecayUTex      = gl.getUniformLocation(prog, 'u_heatmap');
+    this._heatDecayUStep     = gl.getUniformLocation(prog, 'u_step');
+
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+        -1,-1,  1,-1,  -1,1,  1,1
+    ]), gl.STATIC_DRAW);
+    this._heatDecayBuf = buf;
+}
+
+/**
+ * 对热度图执行一次衰减 pass（写回 smudgeHeatmap）
+ */
+function _decayHeatmap(decay = 0.02) {
+    const gl = this.gl;
+    const cw = this.canvas.width;
+    const ch = this.canvas.height;
+
+    // 先拷贝当前热度图到 temp
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.smudgeHeatmap);
+    gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeHeatTemp);
+    gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, cw, ch, 0);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+    // 用 decay shader 写回 smudgeHeatmap
+    gl.useProgram(this._heatDecayProgram);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.smudgeHeatmap);
+    gl.viewport(0, 0, cw, ch);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeHeatTemp);
+    gl.uniform1i(this._heatDecayUTex, 0);
+    gl.uniform1f(this._heatDecayUStep, decay);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, this._heatDecayBuf);
+    gl.enableVertexAttribArray(this._heatDecayAPos);
+    gl.vertexAttribPointer(this._heatDecayAPos, 2, gl.FLOAT, false, 0, 0);
+
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+}
+
+// ─── 常驻 RAF：热度衰减 + debug overlay ──────────────────────────────────────
+
+/**
+ * 启动常驻 RAF，每帧衰减热度图并刷新 overlay。
+ * 落笔时调用（_resetHeatmapFade 打断后重新启动）。
+ * 热度全部衰减到阈值以下时自动停止。
+ */
+/**
+ * 控制热度衰减 RAF 是否实际执行 decay。
+ * RAF 本身常驻运行，此开关决定每帧是否处理。
+ * 目前仅涂抹工具激活时为 true，未来可按需扩展到其他工具。
+ */
+function setHeatmapDecayActive(active) {
+    this._heatmapDecayActive = !!active;
+    if (!active) {
+        // 关闭时清零热度图，避免残留影响后续
+        const gl = this.gl;
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.smudgeHeatmap);
+        gl.clearColor(0, 0, 0, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    }
+}
+
+function startHeatmapFadeOut() {
+    // RAF 已在运行则不重复启动
+    if (this._fadeRafId) return;
+
+    const painter = this;
+    const STEP = 0.02;
+
+    function tick() {
+        if (painter._heatmapDecayActive) {
+            painter._decayHeatmap(STEP);
+            if (painter._debugHeatmapEnabled) painter.flush();
+        }
+        painter._fadeRafId = requestAnimationFrame(tick);
     }
 
     this._fadeRafId = requestAnimationFrame(tick);
 }
 
 /**
- * 新笔触开始时调用，打断正在进行的淡出动画并恢复满透明度。
+ * 新笔触开始时调用，打断衰减 RAF（涂抹期间不衰减，由 updateSmudgeHeatmap 叠加）。
+ * 笔触结束后 endStroke 再调用 startHeatmapFadeOut 重启衰减。
  */
 function _resetHeatmapFade() {
-    if (this._fadeRafId) {
-        cancelAnimationFrame(this._fadeRafId);
-        this._fadeRafId = null;
-    }
-    this._debugHeatOpacity = 1.0;
+    // RAF 常驻运行，无需任何操作
 }
+
 
 // ─── 挂载到 BaseWebGLPainter.prototype ───────────────────────────────────────
 
@@ -331,9 +409,12 @@ Object.assign(BaseWebGLPainter.prototype, {
     setupHeatmapTextures,
     setupHeatmapFramebuffers,
     _initHeatmapProgram,
+    _initHeatDecayProgram,
     updateSmudgeHeatmap,
+    _decayHeatmap,
     debugHeatmap,
     _flushDebugHeatmap,
+    setHeatmapDecayActive,
     startHeatmapFadeOut,
     _resetHeatmapFade,
 });
