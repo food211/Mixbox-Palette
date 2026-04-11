@@ -1,5 +1,14 @@
 # 更新日志 / Changelog
 
+== V1.3.4b ==
+[ZH]
+### 优化
+- **调色盘颜色校准** — 调整白色颜料的色值，使其更贴近真实颜料的观感，在白色画布上也能看出笔迹
+
+[EN]
+### Improvement
+- **Palette color calibration** — Adjusted white paint colors to better match real-world pigment appearance, making strokes visible on white canvas
+
 == V1.3.4a ==
 [ZH]
 ### 修复

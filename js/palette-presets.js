@@ -19,7 +19,7 @@ const palettePresets = {
             { hex: '#7A3F13', name: 'Burnt Sienna', nameCN: '熟赭' },
             { hex: '#362320', name: 'Burnt Umber', nameCN: '熟褐' },
             { hex: '#424B5A', name: 'Payne\'s Gray', nameCN: '佩恩灰' },
-            { hex: '#F5F5F0', name: 'Chinese White', nameCN: '中国白' }
+            { hex: '#F2EEE3', name: 'Chinese White', nameCN: '中国白' }
         ]
     },
     // 数字艺术家调色板
@@ -38,7 +38,7 @@ const palettePresets = {
             { hex: '#8B4513', name: 'Brown', nameCN: '棕色' },
             { hex: '#D2B48C', name: 'Tan', nameCN: '棕褐' },
             { hex: '#FFD700', name: 'Gold', nameCN: '金色' },
-            { hex: '#ffffff', name: 'White', nameCN: '纯白' },
+            { hex: '#F7F6ED', name: 'White', nameCN: '纯白' },
             { hex: '#808080', name: 'Gray', nameCN: '灰色' },
             { hex: '#2F4F4F', name: 'Dark Slate Gray', nameCN: '深灰' },
             { hex: '#000000', name: 'Black', nameCN: '黑色' }
