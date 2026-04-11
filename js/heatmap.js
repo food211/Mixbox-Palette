@@ -359,20 +359,12 @@ function _decayHeatmap(decay = 0.02) {
  * 热度全部衰减到阈值以下时自动停止。
  */
 /**
- * 控制热度衰减 RAF 是否实际执行 decay。
- * RAF 本身常驻运行，此开关决定每帧是否处理。
+ * 控制是否允许向热度图写入新热度（updateSmudgeHeatmap）。
+ * 衰减 RAF 始终运行，切换工具不会打断已有热度的自然消退。
  * 目前仅涂抹工具激活时为 true，未来可按需扩展到其他工具。
  */
 function setHeatmapDecayActive(active) {
     this._heatmapDecayActive = !!active;
-    if (!active) {
-        // 关闭时清零热度图，避免残留影响后续
-        const gl = this.gl;
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.smudgeHeatmap);
-        gl.clearColor(0, 0, 0, 1);
-        gl.clear(gl.COLOR_BUFFER_BIT);
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    }
 }
 
 function startHeatmapFadeOut() {
@@ -383,10 +375,8 @@ function startHeatmapFadeOut() {
     const STEP = 0.02;
 
     function tick() {
-        if (painter._heatmapDecayActive) {
-            painter._decayHeatmap(STEP);
-            if (painter._debugHeatmapEnabled) painter.flush();
-        }
+        painter._decayHeatmap(STEP);
+        if (painter._debugHeatmapEnabled) painter.flush();
         painter._fadeRafId = requestAnimationFrame(tick);
     }
 
