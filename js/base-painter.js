@@ -73,6 +73,7 @@ class BaseWebGLPainter {
         this.setupGeometry();
         this._initBlitProgram();
         this._initHeatmapProgram();
+        this._initHeatDecayProgram();
     }
 
     initWebGL() {
@@ -314,8 +315,9 @@ class BaseWebGLPainter {
      * 同时清零热度图，让新笔从热度 0 开始累积。
      */
     captureSmudgeSnapshot() {
-        // 新笔触开始，打断正在进行的淡出动画
+        // 新笔触开始，取消定时清零，确保衰减 RAF 在运行
         this._resetHeatmapFade();
+        this.startHeatmapFadeOut();
 
         const gl = this.gl;
         const cw = this.canvas.width;
