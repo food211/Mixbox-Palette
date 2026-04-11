@@ -1403,7 +1403,6 @@ function beginStroke(type, color = null, startX = 0, startY = 0, pressure = 1.0)
     currentStrokeBrushCanvas = brushManager.createBrushTexture(effectiveSize, currentBrush);
 
     if (type === 'smudge') {
-        // 角度归零：每笔重新开始旋转，避免每笔开头方向相同
         _smudgeAngle = 0;
         // 只记录起始坐标，用于距离衰减计算
         smudgeSnapshotCache = { startX, startY };
@@ -1442,14 +1441,13 @@ function addStrokePoint(x, y, extra = {}) {
  */
 function endStroke() {
     if (currentStroke && currentStroke.points.length > 0) {
+        if (currentStroke.type === 'smudge' && painter) painter.startHeatmapFadeOut();
         pushSnapshot();
         smudgeSnapshotCache = null;
         currentStroke = null;
         updateHistoryButtons();
         saveCanvasToStorage();
     }
-    // 涂抹热度图调试：笔触结束后淡出 overlay
-    if (painter) painter.startHeatmapFadeOut();
 }
 
 /**
@@ -1666,8 +1664,7 @@ function smudgeAtPoint(x, y, dx, dy) {
         true,
         { x: dirX, y: dirY }, smearLen,
         false,  // disableSmear=false，走 smear 路径
-        1.0, true, 0, 0, 0, smudgeMix
-        //   ↑ u_isSmudge=true：触发热度图更新 + shader 读取热度
+        1.0, true, brushSize, 0, 0, smudgeMix
     );
     painter.setMixStrength(prevStrength);
     return result;

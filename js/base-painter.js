@@ -73,7 +73,6 @@ class BaseWebGLPainter {
         this.setupGeometry();
         this._initBlitProgram();
         this._initHeatmapProgram();
-        this._initAccumProgram();
     }
 
     initWebGL() {
@@ -153,7 +152,6 @@ class BaseWebGLPainter {
             u_smudgeSnapshot:     gl.getUniformLocation(this.program, 'u_smudgeSnapshot'),
             u_smudgeMix:          gl.getUniformLocation(this.program, 'u_smudgeMix'),
             u_smudgeHeatmap:      gl.getUniformLocation(this.program, 'u_smudgeHeatmap'),
-            u_smudgeAccum:        gl.getUniformLocation(this.program, 'u_smudgeAccum'),
         };
 
         for (const name of this._getExtraUniformNames()) {
@@ -336,13 +334,6 @@ class BaseWebGLPainter {
         gl.clearColor(0, 0, 0, 1);
         gl.clear(gl.COLOR_BUFFER_BIT);
 
-        // 用当前画布初始化累积混色缓存（第一个颜色槽 = 笔画起始颜色）
-        // 从 canvas framebuffer 读，写入 smudgeAccum 纹理
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
-        gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeAccum);
-        gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, cw, ch, 0);
-        gl.bindTexture(gl.TEXTURE_2D, null);
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     }
 
     /**
@@ -415,11 +406,6 @@ class BaseWebGLPainter {
         gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeHeatmap);
         gl.uniform1i(this.locations.u_smudgeHeatmap, 4);
 
-        // 累积混色缓存绑定到 TEXTURE5，供 shader 读取当前混合色
-        gl.activeTexture(gl.TEXTURE5);
-        gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeAccum);
-        gl.uniform1i(this.locations.u_smudgeAccum, 5);
-
         const positions = new Float32Array([
             x - halfSize, y - halfSize,
             x + halfSize, y - halfSize,
@@ -442,7 +428,6 @@ class BaseWebGLPainter {
         // 涂抹模式：每次 drawcall 后先更新热度图，再更新累积混色缓存
         if (u_isSmudge) {
             this.updateSmudgeHeatmap(x, y, size, brushCanvas, useFalloff);
-            this.updateSmudgeAccum(x, y, size, brushCanvas, useFalloff);
         }
 
 
