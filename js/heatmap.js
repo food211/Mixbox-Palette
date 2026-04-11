@@ -223,7 +223,7 @@ function _initAccumProgram() {
         varying vec2 v_canvasCoord;
         uniform sampler2D u_brushTexture;
         uniform sampler2D u_accumTexture;
-        uniform sampler2D u_snapshotTexture;
+        uniform sampler2D u_canvasTexture;
         uniform sampler2D u_heatmapTexture;
         uniform vec2 u_resolution;
         uniform vec2 u_currentPosition;
@@ -240,7 +240,7 @@ function _initAccumProgram() {
 
             vec2 uv0 = center / u_resolution;
             uv0.y = 1.0 - uv0.y;
-            vec3 s0 = texture2D(u_snapshotTexture, uv0).rgb;
+            vec3 s0 = texture2D(u_canvasTexture, uv0).rgb;
             float w0 = 0.4 * colorness(s0);
             col += s0 * w0; totalW += w0;
 
@@ -251,7 +251,7 @@ function _initAccumProgram() {
                 vec2 uv = (center + offset) / u_resolution;
                 uv.y = 1.0 - uv.y;
                 uv = clamp(uv, 0.0, 1.0);
-                vec3 s = texture2D(u_snapshotTexture, uv).rgb;
+                vec3 s = texture2D(u_canvasTexture, uv).rgb;
                 float w = 0.1 * colorness(s);
                 col += s * w; totalW += w;
             }
@@ -262,7 +262,7 @@ function _initAccumProgram() {
                 vec2 uv = (center + offset) / u_resolution;
                 uv.y = 1.0 - uv.y;
                 uv = clamp(uv, 0.0, 1.0);
-                vec3 s = texture2D(u_snapshotTexture, uv).rgb;
+                vec3 s = texture2D(u_canvasTexture, uv).rgb;
                 float w = 0.025 * colorness(s);
                 col += s * w; totalW += w;
             }
@@ -309,7 +309,7 @@ function _initAccumProgram() {
         u_useFalloff:      gl.getUniformLocation(this._accumProgram, 'u_useFalloff'),
         u_brushTexture:    gl.getUniformLocation(this._accumProgram, 'u_brushTexture'),
         u_accumTexture:    gl.getUniformLocation(this._accumProgram, 'u_accumTexture'),
-        u_snapshotTexture: gl.getUniformLocation(this._accumProgram, 'u_snapshotTexture'),
+        u_canvasTexture:   gl.getUniformLocation(this._accumProgram, 'u_canvasTexture'),
         u_heatmapTexture:  gl.getUniformLocation(this._accumProgram, 'u_heatmapTexture'),
     };
 }
@@ -343,8 +343,8 @@ function updateSmudgeAccum(x, y, size, brushCanvas, useFalloff) {
     gl.uniform1i(this._accumLocations.u_accumTexture, 1);
 
     gl.activeTexture(gl.TEXTURE2);
-    gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeSnapshot);
-    gl.uniform1i(this._accumLocations.u_snapshotTexture, 2);
+    gl.bindTexture(gl.TEXTURE_2D, this.textures.canvas);
+    gl.uniform1i(this._accumLocations.u_canvasTexture, 2);
 
     gl.activeTexture(gl.TEXTURE3);
     gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeHeatmap);
