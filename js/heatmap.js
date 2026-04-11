@@ -389,7 +389,7 @@ function startHeatmapFadeOut() {
     if (this._fadeRafId) return;
 
     const painter = this;
-    const STEP = 0.02;
+    const STEP = 0.01;
 
     function tick() {
         painter._decayHeatmap(STEP);

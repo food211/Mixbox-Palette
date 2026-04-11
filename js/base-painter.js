@@ -429,7 +429,7 @@ class BaseWebGLPainter {
 
         // 涂抹模式：每次 drawcall 后先更新热度图，再更新累积混色缓存
         if (u_isSmudge) {
-            this.updateSmudgeHeatmap(x, y, size, brushCanvas, useFalloff);
+            this.updateSmudgeHeatmap(x, y, size, brushCanvas, useFalloff, 0.1);
         }
 
 

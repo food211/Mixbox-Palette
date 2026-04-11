@@ -48,6 +48,7 @@ class KMWebGLPainter extends BaseWebGLPainter {
         uniform float u_smudgeSampleRadius;
         uniform float u_smudgeAngle;
         uniform float u_smudgeMix;
+        uniform sampler2D u_smudgeHeatmap;
 
         // 13点环形采样，返回加权平均色（纯 GPU，零 readPixels）
         vec3 sampleSmudgeColor(vec2 center, float radius, float angle) {
@@ -238,13 +239,22 @@ class KMWebGLPainter extends BaseWebGLPainter {
                 ? sampleSmudgeColor(v_canvasCoord, u_smudgeSampleRadius, u_smudgeAngle)
                 : u_brushColor.rgb;
 
+            // 涂抹模式下：热度图重映射混合强度，冷区=1%，热区=用户设定值
+            float effectiveMixStrength = u_baseMixStrength;
+            if (u_isSmudge > 0.5) {
+                vec2 heatUV = v_canvasCoord / u_resolution;
+                heatUV.y = 1.0 - heatUV.y;
+                float heat = texture2D(u_smudgeHeatmap, heatUV).r;
+                effectiveMixStrength = mix(0.01, u_baseMixStrength, heat);
+            }
+
             vec3 finalColor;
             if (u_disableSmear > 0.5) {
                 float edgeWeight = clamp(aBrush * u_smudgeAlpha, 0.0, 1.0);
                 vec3 mixedColor = km_mix(canvasColor.rgb, activeColor, u_smudgeAlpha * 0.5);
                 finalColor = mix(canvasColor.rgb, mixedColor, edgeWeight);
             } else {
-                float density = u_baseMixStrength * u_baseMixStrength;
+                float density = effectiveMixStrength * effectiveMixStrength;
 
                 float smearReach = clamp(u_smearLen, 1.0, u_brushRadius) * 0.8;
                 vec2 smearUV = (v_canvasCoord - u_smearDir * smearReach) / u_resolution;
@@ -263,15 +273,15 @@ class KMWebGLPainter extends BaseWebGLPainter {
                 }
 
                 if (density > 0.98) {
-                    float edgeWeight = clamp(aBrush * u_baseMixStrength, 0.0, 1.0);
-                    vec3 mixedColor = km_mix(canvasColor.rgb, activeColor, clamp(u_baseMixStrength, 0.0, 1.0));
-                    finalColor = mix(canvasColor.rgb, mixedColor, edgeWeight / max(u_baseMixStrength, 0.001));
+                    float edgeWeight = clamp(aBrush * effectiveMixStrength, 0.0, 1.0);
+                    vec3 mixedColor = km_mix(canvasColor.rgb, activeColor, clamp(effectiveMixStrength, 0.0, 1.0));
+                    finalColor = mix(canvasColor.rgb, mixedColor, edgeWeight / max(effectiveMixStrength, 0.001));
                 } else if (density < 0.01) {
                     finalColor = smearTarget;
                 } else {
-                    float edgeWeight = clamp(aBrush * u_baseMixStrength, 0.0, 1.0);
-                    vec3 mixedColor = km_mix(canvasColor.rgb, activeColor, clamp(u_baseMixStrength, 0.0, 1.0));
-                    vec3 paintResult = mix(canvasColor.rgb, mixedColor, edgeWeight / max(u_baseMixStrength, 0.001));
+                    float edgeWeight = clamp(aBrush * effectiveMixStrength, 0.0, 1.0);
+                    vec3 mixedColor = km_mix(canvasColor.rgb, activeColor, clamp(effectiveMixStrength, 0.0, 1.0));
+                    vec3 paintResult = mix(canvasColor.rgb, mixedColor, edgeWeight / max(effectiveMixStrength, 0.001));
                     finalColor = mix(smearTarget, paintResult, density);
                 }
             }

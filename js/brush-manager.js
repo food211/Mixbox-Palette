@@ -91,8 +91,9 @@ class BrushManager {
                 ctx.globalAlpha = 0.8;
                 for (let i = 0; i < 20; i++) {
                     const angle = Math.random() * Math.PI * 2;
-                    const dist = Math.random() * size;
                     const dotSize = size * (0.1 + Math.random() * 0.2);
+                    const maxDist = size * 0.9 - dotSize; // 确保点不超出画布边缘
+                    const dist = Math.random() * maxDist;
                     ctx.beginPath();
                     ctx.arc(x + Math.cos(angle) * dist, y + Math.sin(angle) * dist, dotSize, 0, Math.PI * 2);
                     ctx.fill();
