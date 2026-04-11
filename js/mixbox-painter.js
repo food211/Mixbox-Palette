@@ -38,6 +38,7 @@ class MixboxWebGLPainter extends BaseWebGLPainter {
         uniform float u_smudgeSampleRadius;
         uniform float u_smudgeAngle;
         uniform float u_smudgeMix;
+        uniform sampler2D u_smudgeHeatmap;
 
         ${mixbox.glsl()}
 
@@ -120,11 +121,20 @@ class MixboxWebGLPainter extends BaseWebGLPainter {
                 ? sampleSmudgeColor(v_canvasCoord, u_smudgeSampleRadius, u_smudgeAngle)
                 : u_brushColor.rgb;
 
+            // 涂抹模式下：热度图重映射混合强度，冷区=1%，热区=用户设定值
+            float effectiveMixStrength = u_baseMixStrength;
+            if (u_isSmudge > 0.5) {
+                vec2 heatUV = v_canvasCoord / u_resolution;
+                heatUV.y = 1.0 - heatUV.y;
+                float heat = texture2D(u_smudgeHeatmap, heatUV).r;
+                effectiveMixStrength = mix(0.01, u_baseMixStrength, heat);
+            }
+
             vec3 outRGB;
             if (u_disableSmear > 0.5) {
-                outRGB = mixbox_lerp(canvasColor.rgb, activeColor, aBrush * u_baseMixStrength);
+                outRGB = mixbox_lerp(canvasColor.rgb, activeColor, aBrush * effectiveMixStrength);
             } else {
-                float density = u_baseMixStrength * u_baseMixStrength;
+                float density = effectiveMixStrength * effectiveMixStrength;
 
                 float smearReach = clamp(u_smearLen, 1.0, u_brushRadius) * 0.8;
                 vec2 smearUV = (v_canvasCoord - u_smearDir * smearReach) / u_resolution;
@@ -145,11 +155,11 @@ class MixboxWebGLPainter extends BaseWebGLPainter {
                 }
 
                 if (density > 0.98) {
-                    outRGB = mixbox_lerp(canvasColor.rgb, activeColor, aBrush * u_baseMixStrength);
+                    outRGB = mixbox_lerp(canvasColor.rgb, activeColor, aBrush * effectiveMixStrength);
                 } else if (density < 0.01) {
                     outRGB = smearTarget;
                 } else {
-                    vec3 paintResult = mixbox_lerp(canvasColor.rgb, activeColor, aBrush * u_baseMixStrength);
+                    vec3 paintResult = mixbox_lerp(canvasColor.rgb, activeColor, aBrush * effectiveMixStrength);
                     outRGB = mixbox_lerp(smearTarget, paintResult, density);
                 }
             }
