@@ -47,6 +47,8 @@ class KMWebGLPainter extends BaseWebGLPainter {
         uniform float u_isSmudge;
         uniform float u_smudgeSampleRadius;
         uniform float u_smudgeAngle;
+        uniform sampler2D u_smudgeHeatmap;
+        uniform sampler2D u_smudgeAccum;
 
         // 13点环形采样，返回加权平均色（纯 GPU，零 readPixels）
         vec3 sampleSmudgeColor(vec2 center, float radius, float angle) {
@@ -232,9 +234,9 @@ class KMWebGLPainter extends BaseWebGLPainter {
 
             float aBrush = radialFalloff * brushAlpha;
 
-            // 涂抹模式：从画布采样混色，替代 JS 传入的固定颜色
+            // 涂抹模式：从累积混色缓存读取，包含本笔迄今为止混合过的所有颜色
             vec3 activeColor = (u_isSmudge > 0.5)
-                ? sampleSmudgeColor(v_canvasCoord, u_smudgeSampleRadius, u_smudgeAngle)
+                ? texture2D(u_smudgeAccum, canvasUV).rgb
                 : u_brushColor.rgb;
 
             vec3 finalColor;
@@ -256,16 +258,21 @@ class KMWebGLPainter extends BaseWebGLPainter {
 
                 vec3 smearTarget = km_mix(safeCanvasRGB, safeSmearRGB, aBrush * 0.6);
 
-                if (density > 0.98) {
-                    float edgeWeight = clamp(aBrush * u_baseMixStrength, 0.0, 1.0);
-                    vec3 mixedColor = km_mix(canvasColor.rgb, activeColor, clamp(u_baseMixStrength, 0.0, 1.0));
-                    finalColor = mix(canvasColor.rgb, mixedColor, edgeWeight / max(u_baseMixStrength, 0.001));
-                } else if (density < 0.01) {
-                    finalColor = smearTarget;
+                float edgeWeight = clamp(aBrush * u_baseMixStrength, 0.0, 1.0);
+                vec3 mixedColor = km_mix(canvasColor.rgb, activeColor, clamp(u_baseMixStrength, 0.0, 1.0));
+                vec3 paintResult = mix(canvasColor.rgb, mixedColor, edgeWeight / max(u_baseMixStrength, 0.001));
+
+                if (u_isSmudge > 0.5) {
+                    // 热度图驱动：随着反复涂抹，颜料混合效果逐渐退出，变成纯 smear
+                    float heat = texture2D(u_smudgeHeatmap, canvasUV).r;
+                    float effectiveDensity = density * (1.0 - heat);
+                    finalColor = mix(smearTarget, paintResult, effectiveDensity);
+
+                    // 高热度收敛：把 accum 混合结果少量混入，使反复涂抹的区域向均匀色收敛
+                    vec3 accumColor = texture2D(u_smudgeAccum, canvasUV).rgb;
+                    float convergence = heat * heat * 0.15 * aBrush;
+                    finalColor = mix(finalColor, accumColor, convergence);
                 } else {
-                    float edgeWeight = clamp(aBrush * u_baseMixStrength, 0.0, 1.0);
-                    vec3 mixedColor = km_mix(canvasColor.rgb, activeColor, clamp(u_baseMixStrength, 0.0, 1.0));
-                    vec3 paintResult = mix(canvasColor.rgb, mixedColor, edgeWeight / max(u_baseMixStrength, 0.001));
                     finalColor = mix(smearTarget, paintResult, density);
                 }
             }
