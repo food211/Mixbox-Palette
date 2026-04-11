@@ -218,11 +218,28 @@ function debugHeatmap(enable = true) {
             uniform sampler2D u_heatmap;
             uniform float u_opacity;
             varying vec2 v_uv;
+
+            // 热成像色阶：蓝→青→绿→黄→红→白
+            vec3 heatColor(float t) {
+                vec3 c0 = vec3(0.0, 0.0, 1.0); // 蓝
+                vec3 c1 = vec3(0.0, 1.0, 1.0); // 青
+                vec3 c2 = vec3(0.0, 1.0, 0.0); // 绿
+                vec3 c3 = vec3(1.0, 1.0, 0.0); // 黄
+                vec3 c4 = vec3(1.0, 0.0, 0.0); // 红
+                vec3 c5 = vec3(1.0, 1.0, 1.0); // 白
+
+                if (t < 0.2) return mix(c0, c1, t / 0.2);
+                if (t < 0.4) return mix(c1, c2, (t - 0.2) / 0.2);
+                if (t < 0.6) return mix(c2, c3, (t - 0.4) / 0.2);
+                if (t < 0.8) return mix(c3, c4, (t - 0.6) / 0.2);
+                return mix(c4, c5, (t - 0.8) / 0.2);
+            }
+
             void main() {
                 float heat = texture2D(u_heatmap, v_uv).r;
                 if (heat < 0.01) discard;
                 float alpha = pow(heat, 0.5) * 0.75 * u_opacity;
-                gl_FragColor = vec4(1.0, 0.15, 0.0, alpha);
+                gl_FragColor = vec4(heatColor(heat), alpha);
             }
         `);
         gl.compileShader(fs);
