@@ -2,9 +2,8 @@
  * heatmap.js — 涂抹热度图系统
  *
  * 以 mixin 形式扩展 BaseWebGLPainter，包含：
- *  - 热度图 / 累积混色缓存的纹理与 FB 创建
+ *  - 热度图纹理与 FB 创建
  *  - 热度图更新 program（_initHeatmapProgram / updateSmudgeHeatmap）
- *  - 累积混色缓存 program（_initAccumProgram / updateSmudgeAccum）
  *  - 调试可视化（debugHeatmap / _flushDebugHeatmap）
  *
  * 依赖 BaseWebGLPainter 上已存在的：
@@ -35,10 +34,8 @@ function _createR8Texture(width, height) {
  * 由 BaseWebGLPainter.setupTextures() 调用
  */
 function setupHeatmapTextures(w, h) {
-    this.textures.smudgeHeatmap   = this._createR8Texture(w, h);
-    this.textures.smudgeHeatTemp  = this._createR8Texture(w, h);
-    this.textures.smudgeAccum     = this.createEmptyTexture(w, h);
-    this.textures.smudgeAccumTemp = this.createEmptyTexture(w, h);
+    this.textures.smudgeHeatmap  = this._createR8Texture(w, h);
+    this.textures.smudgeHeatTemp = this._createR8Texture(w, h);
 }
 
 /**
@@ -55,14 +52,6 @@ function setupHeatmapFramebuffers() {
     this.framebuffers.smudgeHeatTemp = gl.createFramebuffer();
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.smudgeHeatTemp);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.textures.smudgeHeatTemp, 0);
-
-    this.framebuffers.smudgeAccum = gl.createFramebuffer();
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.smudgeAccum);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.textures.smudgeAccum, 0);
-
-    this.framebuffers.smudgeAccumTemp = gl.createFramebuffer();
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.smudgeAccumTemp);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.textures.smudgeAccumTemp, 0);
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 }
@@ -193,186 +182,6 @@ function updateSmudgeHeatmap(x, y, size, brushCanvas, useFalloff, heatStep = 0.0
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 }
 
-// ─── 累积混色缓存 program ─────────────────────────────────────────────────────
-
-/**
- * 累积混色缓存 program：
- * 每次涂抹后，在笔刷覆盖区域把当前画布采样色按 1/(slotCount+1) 混入 accum。
- * slotCount 由热度图 heat * 4 近似（0~4档）。
- */
-function _initAccumProgram() {
-    const gl = this.gl;
-
-    const vs = this.createShader(gl.VERTEX_SHADER, `
-        attribute vec2 a_position;
-        attribute vec2 a_texCoord;
-        uniform vec2 u_resolution;
-        varying vec2 v_texCoord;
-        varying vec2 v_canvasCoord;
-        void main() {
-            vec2 clipSpace = (a_position / u_resolution) * 2.0 - 1.0;
-            gl_Position = vec4(clipSpace * vec2(1, -1), 0, 1);
-            v_texCoord = a_texCoord;
-            v_canvasCoord = a_position;
-        }
-    `);
-
-    const fs = this.createShader(gl.FRAGMENT_SHADER, `
-        precision highp float;
-        varying vec2 v_texCoord;
-        varying vec2 v_canvasCoord;
-        uniform sampler2D u_brushTexture;
-        uniform sampler2D u_accumTexture;
-        uniform sampler2D u_canvasTexture;
-        uniform sampler2D u_heatmapTexture;
-        uniform vec2 u_resolution;
-        uniform vec2 u_currentPosition;
-        uniform float u_brushRadius;
-        uniform float u_useFalloff;
-
-        float colorness(vec3 rgb) {
-            return length(vec3(1.0) - rgb);
-        }
-
-        vec3 sampleCanvas(vec2 center, float radius) {
-            vec3 col = vec3(0.0);
-            float totalW = 0.0;
-
-            vec2 uv0 = center / u_resolution;
-            uv0.y = 1.0 - uv0.y;
-            vec3 s0 = texture2D(u_canvasTexture, uv0).rgb;
-            float w0 = 0.4 * colorness(s0);
-            col += s0 * w0; totalW += w0;
-
-            float r1 = radius * 0.4;
-            for (int i = 0; i < 4; i++) {
-                float a = float(i) * 1.5707963;
-                vec2 offset = vec2(cos(a), -sin(a)) * r1;
-                vec2 uv = (center + offset) / u_resolution;
-                uv.y = 1.0 - uv.y;
-                uv = clamp(uv, 0.0, 1.0);
-                vec3 s = texture2D(u_canvasTexture, uv).rgb;
-                float w = 0.1 * colorness(s);
-                col += s * w; totalW += w;
-            }
-
-            for (int i = 0; i < 8; i++) {
-                float a = float(i) * 0.7853982;
-                vec2 offset = vec2(cos(a), -sin(a)) * radius;
-                vec2 uv = (center + offset) / u_resolution;
-                uv.y = 1.0 - uv.y;
-                uv = clamp(uv, 0.0, 1.0);
-                vec3 s = texture2D(u_canvasTexture, uv).rgb;
-                float w = 0.025 * colorness(s);
-                col += s * w; totalW += w;
-            }
-
-            if (totalW < 0.001) return vec3(1.0);
-            return col / totalW;
-        }
-
-        void main() {
-            vec4 brushSample = texture2D(u_brushTexture, v_texCoord);
-            float brushAlpha = u_useFalloff < 0.5
-                ? step(0.5, brushSample.a)
-                : brushSample.a;
-            if (brushAlpha < 0.01) discard;
-
-            float distToCenter = length(v_canvasCoord - u_currentPosition);
-            float radialFalloff = (u_useFalloff > 0.5 && u_useFalloff < 1.5)
-                ? 1.0 - smoothstep(0.0, u_brushRadius, distToCenter)
-                : 1.0;
-            float aBrush = radialFalloff * brushAlpha;
-
-            vec2 uv = v_canvasCoord / u_resolution;
-            uv.y = 1.0 - uv.y;
-
-            vec3 prevAccum = texture2D(u_accumTexture, uv).rgb;
-            float heat = texture2D(u_heatmapTexture, uv).r;
-
-            // slotCount=0 时新色占50%，随热度升高新色比例递减
-            float newColorWeight = 1.0 / (heat * 4.0 + 1.0);
-            vec3 newColor = sampleCanvas(v_canvasCoord, u_brushRadius);
-            vec3 newAccum = mix(prevAccum, newColor, newColorWeight * aBrush);
-
-            gl_FragColor = vec4(newAccum, 1.0);
-        }
-    `);
-
-    this._accumProgram = this.createProgram(vs, fs);
-    this._accumLocations = {
-        a_position:        gl.getAttribLocation(this._accumProgram, 'a_position'),
-        a_texCoord:        gl.getAttribLocation(this._accumProgram, 'a_texCoord'),
-        u_resolution:      gl.getUniformLocation(this._accumProgram, 'u_resolution'),
-        u_currentPosition: gl.getUniformLocation(this._accumProgram, 'u_currentPosition'),
-        u_brushRadius:     gl.getUniformLocation(this._accumProgram, 'u_brushRadius'),
-        u_useFalloff:      gl.getUniformLocation(this._accumProgram, 'u_useFalloff'),
-        u_brushTexture:    gl.getUniformLocation(this._accumProgram, 'u_brushTexture'),
-        u_accumTexture:    gl.getUniformLocation(this._accumProgram, 'u_accumTexture'),
-        u_canvasTexture:   gl.getUniformLocation(this._accumProgram, 'u_canvasTexture'),
-        u_heatmapTexture:  gl.getUniformLocation(this._accumProgram, 'u_heatmapTexture'),
-    };
-}
-
-/**
- * 在笔刷覆盖区域更新累积混色缓存（每次涂抹 drawcall 后调用，在 updateSmudgeHeatmap 之后）
- */
-function updateSmudgeAccum(x, y, size, brushCanvas, useFalloff) {
-    const gl = this.gl;
-    const cw = this.canvas.width;
-    const ch = this.canvas.height;
-    const halfSize = size / 2;
-
-    // 把当前 accum 拷贝到 temp 纹理，作为 shader 的上一帧输入
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.smudgeAccum);
-    gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeAccumTemp);
-    gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, cw, ch, 0);
-    gl.bindTexture(gl.TEXTURE_2D, null);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-    gl.useProgram(this._accumProgram);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.smudgeAccum);
-    gl.viewport(0, 0, cw, ch);
-
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, this.currentBrushTexture);
-    gl.uniform1i(this._accumLocations.u_brushTexture, 0);
-
-    gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeAccumTemp);
-    gl.uniform1i(this._accumLocations.u_accumTexture, 1);
-
-    gl.activeTexture(gl.TEXTURE2);
-    gl.bindTexture(gl.TEXTURE_2D, this.textures.canvas);
-    gl.uniform1i(this._accumLocations.u_canvasTexture, 2);
-
-    gl.activeTexture(gl.TEXTURE3);
-    gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeHeatmap);
-    gl.uniform1i(this._accumLocations.u_heatmapTexture, 3);
-
-    gl.uniform2f(this._accumLocations.u_resolution, cw, ch);
-    gl.uniform2f(this._accumLocations.u_currentPosition, x, y);
-    gl.uniform1f(this._accumLocations.u_brushRadius, size / 2);
-    gl.uniform1f(this._accumLocations.u_useFalloff, +useFalloff);
-
-    const positions = new Float32Array([
-        x - halfSize, y - halfSize,
-        x + halfSize, y - halfSize,
-        x - halfSize, y + halfSize,
-        x + halfSize, y + halfSize,
-    ]);
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.position);
-    gl.bufferData(gl.ARRAY_BUFFER, positions, gl.DYNAMIC_DRAW);
-    gl.enableVertexAttribArray(this._accumLocations.a_position);
-    gl.vertexAttribPointer(this._accumLocations.a_position, 2, gl.FLOAT, false, 0, 0);
-
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.texCoord);
-    gl.enableVertexAttribArray(this._accumLocations.a_texCoord);
-    gl.vertexAttribPointer(this._accumLocations.a_texCoord, 2, gl.FLOAT, false, 0, 0);
-
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-}
 
 // ─── 调试可视化 ───────────────────────────────────────────────────────────────
 
@@ -523,8 +332,6 @@ Object.assign(BaseWebGLPainter.prototype, {
     setupHeatmapFramebuffers,
     _initHeatmapProgram,
     updateSmudgeHeatmap,
-    _initAccumProgram,
-    updateSmudgeAccum,
     debugHeatmap,
     _flushDebugHeatmap,
     startHeatmapFadeOut,
