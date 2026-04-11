@@ -72,6 +72,8 @@ class BaseWebGLPainter {
         this.setupFramebuffers();
         this.setupGeometry();
         this._initBlitProgram();
+        this._initHeatmapProgram();
+        this._initAccumProgram();
     }
 
     initWebGL() {
@@ -150,6 +152,8 @@ class BaseWebGLPainter {
             u_smudgeAngle:        gl.getUniformLocation(this.program, 'u_smudgeAngle'),
             u_smudgeSnapshot:     gl.getUniformLocation(this.program, 'u_smudgeSnapshot'),
             u_smudgeMix:          gl.getUniformLocation(this.program, 'u_smudgeMix'),
+            u_smudgeHeatmap:      gl.getUniformLocation(this.program, 'u_smudgeHeatmap'),
+            u_smudgeAccum:        gl.getUniformLocation(this.program, 'u_smudgeAccum'),
         };
 
         for (const name of this._getExtraUniformNames()) {
@@ -192,7 +196,8 @@ class BaseWebGLPainter {
         const h = this.canvas.height;
         this.textures.canvas         = this.createEmptyTexture(w, h);
         this.textures.temp           = this.createEmptyTexture(w, h);
-        this.textures.smudgeSnapshot = this.createEmptyTexture(w, h);
+        this.textures.smudgeSnapshot  = this.createEmptyTexture(w, h);
+        this.setupHeatmapTextures(w, h);
     }
 
     setupFramebuffers() {
@@ -212,6 +217,8 @@ class BaseWebGLPainter {
 
         // 辅助 read FB：仅用于 drawBrush 中 copyTexImage2D，不参与 swapTextures
         this._copyReadFB = gl.createFramebuffer();
+
+        this.setupHeatmapFramebuffers();
 
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     }
@@ -306,13 +313,33 @@ class BaseWebGLPainter {
     /**
      * 落笔时调用：把当前 canvas 纹理复制到 smudgeSnapshot，
      * 涂抹期间 shader 从此快照采样，避免颜色被反复稀释变灰。
+     * 同时清零热度图，让新笔从热度 0 开始累积。
      */
     captureSmudgeSnapshot() {
+        // 新笔触开始，打断正在进行的淡出动画
+        this._resetHeatmapFade();
+
         const gl = this.gl;
         const cw = this.canvas.width;
         const ch = this.canvas.height;
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
         gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeSnapshot);
+        gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, cw, ch, 0);
+        gl.bindTexture(gl.TEXTURE_2D, null);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+        // 清零热度图（每笔重新累积）
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.smudgeHeatmap);
+        gl.clearColor(0, 0, 0, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.smudgeHeatTemp);
+        gl.clearColor(0, 0, 0, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+
+        // 用当前画布初始化累积混色缓存（第一个颜色槽 = 笔画起始颜色）
+        // 从 canvas framebuffer 读，写入 smudgeAccum 纹理
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
+        gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeAccum);
         gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, cw, ch, 0);
         gl.bindTexture(gl.TEXTURE_2D, null);
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -383,6 +410,16 @@ class BaseWebGLPainter {
         gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeSnapshot);
         gl.uniform1i(this.locations.u_smudgeSnapshot, 3);
 
+        // 热度图绑定到 TEXTURE4，供 shader 读取当前累积热度
+        gl.activeTexture(gl.TEXTURE4);
+        gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeHeatmap);
+        gl.uniform1i(this.locations.u_smudgeHeatmap, 4);
+
+        // 累积混色缓存绑定到 TEXTURE5，供 shader 读取当前混合色
+        gl.activeTexture(gl.TEXTURE5);
+        gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeAccum);
+        gl.uniform1i(this.locations.u_smudgeAccum, 5);
+
         const positions = new Float32Array([
             x - halfSize, y - halfSize,
             x + halfSize, y - halfSize,
@@ -401,6 +438,13 @@ class BaseWebGLPainter {
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
         this.swapTextures();
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+        // 涂抹模式：每次 drawcall 后先更新热度图，再更新累积混色缓存
+        if (u_isSmudge) {
+            this.updateSmudgeHeatmap(x, y, size, brushCanvas, useFalloff);
+            this.updateSmudgeAccum(x, y, size, brushCanvas, useFalloff);
+        }
+
 
         return { x: rx0, y: ry0, w: rw, h: rh };
     }
@@ -432,6 +476,9 @@ class BaseWebGLPainter {
 
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
         gl.bindTexture(gl.TEXTURE_2D, null);
+
+        // 调试：热度图 overlay 叠加在 canvas 之上
+        if (this._debugHeatmapEnabled) this._flushDebugHeatmap(this._debugHeatOpacity ?? 1.0);
     }
 
     swapTextures() {
@@ -836,6 +883,7 @@ class BaseWebGLPainter {
         offscreen.getContext('2d').putImageData(new ImageData(flipped, cw, ch), 0, 0);
         return offscreen.toDataURL(type);
     }
+
 }
 
 window.BaseWebGLPainter = BaseWebGLPainter;

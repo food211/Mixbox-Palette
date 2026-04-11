@@ -17,6 +17,7 @@ const CACHE_URLS = [
   './js/app.js',
   './js/mixbox.js',
   './js/base-painter.js',
+  './js/heatmap.js',
   './js/mixbox-painter.js',
   './js/km-painter.js',
   './js/brush-manager.js',

@@ -69,6 +69,7 @@ async function switchEngine(engine) {
     // 旧 painter 的历史池随实例一起废弃
     painter = createPainter(engine, mixCanvas);
     await painter.init();
+    window._painter = painter;
     painter.setMixStrength(oldMixStrength);
     currentEngine = engine;
     localStorage.setItem('mixbox_engine', engine);
@@ -246,6 +247,7 @@ async function initCanvas() {
     try {
         painter = createPainter(savedEngine, mixCanvas);
         await painter.init();
+        window._painter = painter;
         currentEngine = savedEngine;
 
         const savedDataURL = paletteStorage.load();
@@ -1446,6 +1448,8 @@ function endStroke() {
         updateHistoryButtons();
         saveCanvasToStorage();
     }
+    // 涂抹热度图调试：笔触结束后淡出 overlay
+    if (painter) painter.startHeatmapFadeOut();
 }
 
 /**
@@ -1662,7 +1666,8 @@ function smudgeAtPoint(x, y, dx, dy) {
         true,
         { x: dirX, y: dirY }, smearLen,
         false,  // disableSmear=false，走 smear 路径
-        1.0, false, 0, 0, 0, smudgeMix
+        1.0, true, 0, 0, 0, smudgeMix
+        //   ↑ u_isSmudge=true：触发热度图更新 + shader 读取热度
     );
     painter.setMixStrength(prevStrength);
     return result;
