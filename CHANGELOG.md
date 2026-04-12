@@ -1,5 +1,14 @@
 # 更新日志 / Changelog
 
+== V1.3.5 ==
+[ZH]
+### 优化
+- **水彩笔重做** — 重新设计水彩笔的渲染效果，更加具有真实感。新增湿度（Wet）参数，湿度低时颜料浓重、沉积感强，湿度高时晕染扩散、颜色更轻盈
+
+[EN]
+### Improvement
+- **Watercolor brush rework** — Redesigned the watercolor brush rendering for a more realistic feel. Added a Wetness (Wet) parameter: low wetness produces dense, heavy paint with strong deposits; high wetness creates soft diffusion and lighter color spread
+
 == V1.3.4b ==
 [ZH]
 ### 优化
