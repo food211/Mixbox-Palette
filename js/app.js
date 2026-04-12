@@ -1039,7 +1039,8 @@ function bindEvents() {
                     : brushType === 'splatter'
                     ? brushSize * 0.3
                     : brushSize * 0.25;
-                const effectiveMinDist = Math.max(1, baseSpacing * brushSpacingRatio);
+                const spacingRatio = brushType === 'watercolor' ? 0.01 : brushSpacingRatio;
+                const effectiveMinDist = Math.max(1, baseSpacing * spacingRatio);
 
                 if (distance >= effectiveMinDist) {
                     const steps = Math.floor(distance / effectiveMinDist);
