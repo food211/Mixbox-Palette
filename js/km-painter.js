@@ -287,8 +287,7 @@ class KMWebGLPainter extends BaseWebGLPainter {
             // 三个蒙版：冷区 / 交界沉积 / 热区
             float maskCold    = 1.0 - smoothstep(0.0, 0.4, wetness);
 
-            // 浓度微弱影响宽度：浓度低时阈值高（边缘更窄），浓度高时更宽
-            float depositThresh = mix(0.55, 0.45, u_baseMixStrength);
+            float depositThresh = 0.5;
             float depositRaw = (u_isWatercolor > 0.5) ? texture2D(u_depositHeatmap, wetUV).r : 0.0;
             float maskDeposit = smoothstep(depositThresh, depositThresh + depositWidth, depositRaw);
 

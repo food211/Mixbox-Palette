@@ -1485,6 +1485,8 @@ function beginStroke(type, color = null, startX = 0, startY = 0, pressure = 1.0)
             painter._wetIsDrawing = true;
             painter._wetColor = color ? hexToRgb(color) : { r: 0, g: 0, b: 0 };
             painter._wetMixStrength = painter.baseMixStrength;
+            // RAF 未运行时（如第一笔）立即启动，确保第一笔就有湿纸效果
+            if (!painter._fadeRafId) painter.startHeatmapFadeOut();
         }
     }
 }

@@ -460,13 +460,14 @@ class BaseWebGLPainter {
         gl.activeTexture(gl.TEXTURE6);
         gl.bindTexture(gl.TEXTURE_2D, this.textures.depositHeatmap);
         gl.uniform1i(this.locations.u_depositHeatmap, 6);
-        // wet低→颜料浓（coldMix高）；wet高→晕染强（bleedMix/bleedRadius高）
+        // wet低→颜料浓（coldMix高）；wet高→晕染强、smudge强（bleedMix/bleedRadius/smudgeMix高）
         const w = this._wetness ?? 0.5;
-        const wetBleedMix    = WET_BLEED_MIX    * (WET_BLEED_SCALE_MIN + (WET_BLEED_SCALE_MAX - WET_BLEED_SCALE_MIN) * w);
-        const wetBleedRadius = WET_BLEED_RADIUS * (WET_BLEED_SCALE_MIN + (WET_BLEED_SCALE_MAX - WET_BLEED_SCALE_MIN) * w);
-        const wetColdMix     = WET_COLD_MIX     * (WET_COLD_SCALE_MAX  + (WET_COLD_SCALE_MIN  - WET_COLD_SCALE_MAX)  * w);
+        const wetBleedMix    = WET_BLEED_MIX    * (WET_BLEED_SCALE_MIN  + (WET_BLEED_SCALE_MAX  - WET_BLEED_SCALE_MIN)  * w);
+        const wetBleedRadius = WET_BLEED_RADIUS * (WET_BLEED_SCALE_MIN  + (WET_BLEED_SCALE_MAX  - WET_BLEED_SCALE_MIN)  * w);
+        const wetColdMix     = WET_COLD_MIX     * (WET_COLD_SCALE_MAX   + (WET_COLD_SCALE_MIN   - WET_COLD_SCALE_MAX)   * w);
+        const wetSmudgeMix   = WET_SMUDGE_MIX   * (WET_SMUDGE_SCALE_MIN + (WET_SMUDGE_SCALE_MAX - WET_SMUDGE_SCALE_MIN) * w);
         gl.uniform1f(this.locations.u_isWatercolor,   isWatercolor ? 1.0 : 0.0);
-        gl.uniform1f(this.locations.u_wetSmudgeMix,   isWatercolor ? WET_SMUDGE_MIX   : 0.0);
+        gl.uniform1f(this.locations.u_wetSmudgeMix,   isWatercolor ? wetSmudgeMix     : 0.0);
         gl.uniform1f(this.locations.u_wetDepositPeak, isWatercolor ? WET_DEPOSIT_PEAK  : 0.0);
         gl.uniform1f(this.locations.u_wetBleedRadius, isWatercolor ? wetBleedRadius    : 0.0);
         gl.uniform1f(this.locations.u_wetBleedMix,    isWatercolor ? wetBleedMix       : 0.0);

@@ -231,10 +231,9 @@ function _initWetColorProgram() {
         uniform sampler2D u_wetHeatmap;   // 湿度图
         uniform vec2 u_resolution;
         uniform vec3 u_color;             // 笔刷颜色
-        uniform float u_mixStrength;      // 用户混色强度（0~1）
         uniform float u_gradRadius;       // 梯度采样半径（像素）
-        uniform float u_depositStr;       // 沉积强度
-        uniform float u_diluteStr;        // 稀释强度
+        uniform float u_depositStr;       // 沉积强度（全权由 wet 控制）
+        uniform float u_diluteStr;        // 稀释强度（全权由 wet 控制）
         uniform float u_depositGradMin;   // 沉积 smoothstep 下限
         uniform float u_depositGradMax;   // 沉积 smoothstep 上限
         uniform float u_diluteGradSuppress; // 稀释梯度抑制上限
@@ -254,14 +253,14 @@ function _initWetColorProgram() {
 
             vec4 canvas = texture2D(u_canvas, v_uv);
 
-            // ── 效果1：梯度区颜料沉积（浓度越高越弱，但保留最低1%）──
+            // ── 效果1：梯度区颜料沉积（强度全权由 u_depositStr 控制）──
             float depositMask = smoothstep(u_depositGradMin, u_depositGradMax, grad);
-            float depositAmt  = depositMask * u_depositStr * mix(0.01, 1.0, 1.0 - u_mixStrength);
+            float depositAmt  = depositMask * u_depositStr;
             vec3 deposited = mix(canvas.rgb, u_color, depositAmt);
 
-            // ── 效果2：高热区稀释（往画布色与笔刷色的中间色偏移）──
+            // ── 效果2：高热区稀释（强度全权由 u_diluteStr 控制）──
             float diluteMask = heat * (1.0 - smoothstep(0.1, u_diluteGradSuppress, grad));
-            float diluteAmt  = diluteMask * u_diluteStr * u_mixStrength;
+            float diluteAmt  = diluteMask * u_diluteStr;
             vec3 diluteTarget = mix(canvas.rgb, u_color, 0.5);
             vec3 outRGB = mix(deposited, diluteTarget, diluteAmt);
 
@@ -289,7 +288,6 @@ function _initWetColorProgram() {
         u_wetHeatmap: gl.getUniformLocation(prog, 'u_wetHeatmap'),
         u_resolution: gl.getUniformLocation(prog, 'u_resolution'),
         u_color:      gl.getUniformLocation(prog, 'u_color'),
-        u_mixStrength:gl.getUniformLocation(prog, 'u_mixStrength'),
         u_gradRadius: gl.getUniformLocation(prog, 'u_gradRadius'),
         u_depositStr: gl.getUniformLocation(prog, 'u_depositStr'),
         u_diluteStr:  gl.getUniformLocation(prog, 'u_diluteStr'),
@@ -302,10 +300,9 @@ function _initWetColorProgram() {
 /**
  * 根据当前 wetHeatmap 将水彩效果写入 canvas 纹理。
  * 每帧由 heatmap RAF tick 调用（仅 _wetPaperActive 时）。
- * @param {{r,g,b}} color      当前笔刷颜色（0~1）
- * @param {number}  mixStrength 用户混色强度（0~1）
+ * @param {{r,g,b}} color 当前笔刷颜色（0~1）
  */
-function _applyWetColor(color, mixStrength) {
+function _applyWetColor(color) {
     if (!this._wetColorProgram) return;
 
     const gl = this.gl;
@@ -341,7 +338,6 @@ function _applyWetColor(color, mixStrength) {
 
     gl.uniform2f(this._wetColorLoc.u_resolution, cw, ch);
     gl.uniform3f(this._wetColorLoc.u_color, color.r, color.g, color.b);
-    gl.uniform1f(this._wetColorLoc.u_mixStrength, mixStrength);
     gl.uniform1f(this._wetColorLoc.u_gradRadius,         WET_GRADIENT_RADIUS);
     gl.uniform1f(this._wetColorLoc.u_depositStr,         depositStr);
     gl.uniform1f(this._wetColorLoc.u_diluteStr,          diluteStr);
@@ -421,7 +417,6 @@ function _applyDepositColorPass(color, depositStr) {
 
     gl.uniform2f(this._wetColorLoc.u_resolution, cw, ch);
     gl.uniform3f(this._wetColorLoc.u_color, color.r, color.g, color.b);
-    gl.uniform1f(this._wetColorLoc.u_mixStrength,        0.0); // 提笔沉积不受用户浓度影响
     gl.uniform1f(this._wetColorLoc.u_gradRadius,         WET_GRADIENT_RADIUS);
     gl.uniform1f(this._wetColorLoc.u_depositStr,         depositStr);
     gl.uniform1f(this._wetColorLoc.u_diluteStr,          0.0);
