@@ -575,13 +575,27 @@ function bindEvents() {
         if (currentTool === 'brush') {
             // 切换到涂抹工具：保存当前笔刷工具设置
             saveBrushSettings();
-            brushSpacingRatio = parseInt(brushSpacingSlider.value) / 100;
-            savedBrushSettings = {
-                size: brushSize,
-                mixStrength: parseInt(brushMixValue.textContent),
-                brushType: currentBrush.type,
-                brushSpacing: Math.round(brushSpacingRatio * 100),
-            };
+            
+            // 保存当前笔刷设置，但要区分水彩模式和普通模式
+            if (currentBrush.type === 'watercolor') {
+                // 水彩模式下，滑块值是湿度而非间距，需要使用正确的间距值
+                savedBrushSettings = {
+                    size: brushSize,
+                    mixStrength: parseInt(brushMixValue.textContent),
+                    brushType: currentBrush.type,
+                    brushSpacing: Math.round(brushSpacingRatio * 100), // 使用真实的间距值
+                    watercolorWetness: watercolorWetness // 保存湿度值
+                };
+            } else {
+                // 非水彩模式，滑块值就是间距
+                brushSpacingRatio = parseInt(brushSpacingSlider.value) / 100;
+                savedBrushSettings = {
+                    size: brushSize,
+                    mixStrength: parseInt(brushMixValue.textContent),
+                    brushType: currentBrush.type,
+                    brushSpacing: Math.round(brushSpacingRatio * 100),
+                };
+            }
 
             currentTool = 'smudge';
             smudgeBtn.classList.add('active');
@@ -638,8 +652,20 @@ function bindEvents() {
                 brushMixSlider.value = savedBrushSettings.mixStrength;
                 brushMixValue.textContent = savedBrushSettings.mixStrength;
                 painter.setMixStrength(mixSliderToStrength(savedBrushSettings.mixStrength));
-                if (savedBrushSettings.brushSpacing != null) {
-                    brushSpacingRatio = savedBrushSettings.brushSpacing / 100;
+                
+                // 根据笔刷类型设置正确的滑块值
+                if (savedBrushSettings.brushType === 'watercolor') {
+                    // 水彩模式下，恢复湿度值到滑块
+                    watercolorWetness = savedBrushSettings.watercolorWetness || watercolorWetness;
+                    brushSpacingSlider.value = watercolorWetness;
+                    brushSpacingValue.textContent = watercolorWetness;
+                } else {
+                    // 非水彩模式，恢复间距值到滑块
+                    if (savedBrushSettings.brushSpacing != null) {
+                        brushSpacingRatio = savedBrushSettings.brushSpacing / 100;
+                    }
+                    brushSpacingSlider.value = Math.round(brushSpacingRatio * 100);
+                    brushSpacingValue.textContent = Math.round(brushSpacingRatio * 100);
                 }
             }
             updateSpacingSliderMode();
