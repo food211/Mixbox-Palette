@@ -69,7 +69,15 @@ const Announcer = {
     /** 页面启动时调用：自动检查更新，完成后检查公告 */
     async init() {
         const updateData = await Updater.check();
-        if (updateData) {
+        if (updateData && updateData.error) {
+            // 处理错误情况，但仍然继续检查公告
+            if (updateData.timeout) {
+                console.warn('更新检查超时');
+            } else {
+                console.warn('更新检查失败');
+            }
+            this._checkAnnouncement();
+        } else if (updateData) {
             this._showUpdateModal(updateData, { onDone: () => this._checkAnnouncement() });
         } else {
             this._checkAnnouncement();
@@ -160,7 +168,25 @@ const Announcer = {
 
         // 异步发起网络检查
         const result = await Updater.checkAndFetch();
-        const updateData = (result !== 'open-changelog' && result !== null) ? result : null;
+
+        // 处理错误情况
+        if (result && result.error) {
+            if (result.timeout) {
+                bodyEl.innerHTML = `<p style="color:#e67e22;">${isZH ? '请求超时，请检查网络连接' : 'Request timed out. Please check your network connection.'}</p>`;
+            } else {
+                bodyEl.innerHTML = `<p style="color:#e74c3c;">${isZH ? '检查更新失败，请稍后再试' : 'Failed to check for updates. Please try again later.'}</p>`;
+            }
+            changelogLink.textContent = isZH ? '查看完整更新日志 →' : 'View Full Changelog →';
+            changelogLink.href = Updater.CHANGELOG_PAGE;
+            refreshBtn.textContent = isZH ? '重试' : 'Retry';
+            refreshBtn.disabled = false;
+            refreshBtn.onclick = () => {
+                this.checkUpdate();
+            };
+            return;
+        }
+
+        const updateData = (result !== null) ? result : null;
 
         // 有更新时更新版本标签
         if (updateData) {
