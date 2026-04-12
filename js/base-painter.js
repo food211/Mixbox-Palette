@@ -120,6 +120,7 @@ class BaseWebGLPainter {
         this._initBlitProgram();
         this._initHeatmapProgram();
         this._initHeatDecayProgram();
+        this._initWetPaperProgram();
     }
 
     initWebGL() {
@@ -242,6 +243,7 @@ class BaseWebGLPainter {
         this.textures.temp           = this.createEmptyTexture(w, h);
         this.textures.smudgeSnapshot  = this.createEmptyTexture(w, h);
         this.setupHeatmapTextures(w, h);
+        this.setupWetPaperTextures(w, h);
     }
 
     setupFramebuffers() {
@@ -263,6 +265,7 @@ class BaseWebGLPainter {
         this._copyReadFB = gl.createFramebuffer();
 
         this.setupHeatmapFramebuffers();
+        this.setupWetPaperFramebuffers();
 
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     }
@@ -509,8 +512,9 @@ class BaseWebGLPainter {
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
         gl.bindTexture(gl.TEXTURE_2D, null);
 
-        // 调试：热度图 overlay 叠加在 canvas 之上
-        if (this._debugHeatmapEnabled) this._flushDebugHeatmap(this._debugHeatOpacity ?? 1.0);
+        // 调试：热度图 / 湿纸 overlay（互斥，各自检查自己的 flag）
+        if (this._debugHeatmapEnabled)  this._flushDebugHeatmap(this._debugHeatOpacity ?? 1.0);
+        if (this._debugWetPaperEnabled) this._flushDebugWetPaper(this._debugHeatOpacity ?? 1.0);
     }
 
     swapTextures() {

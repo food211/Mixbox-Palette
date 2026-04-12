@@ -261,13 +261,20 @@ function debugHeatmap(enable = true) {
         this._debugHeatBuf = buf;
     }
 
+    // 互斥：关闭湿纸 debug
+    this._debugWetPaperEnabled = false;
+
     this._debugHeatmapEnabled = true;
     this._flushDebugHeatmap();
     console.log('[debugHeatmap] 开启 — 调用 window._painter.debugHeatmap(false) 关闭');
 }
 
-function _flushDebugHeatmap(opacity = 1.0) {
-    if (!this._debugHeatmapEnabled || !this._debugHeatProgram) return;
+/**
+ * 通用热成像 overlay 渲染，可传入任意热度图纹理。
+ * 供 debugHeatmap 和 debugWetPaper 共用。
+ */
+function _flushHeatOverlay(texture, opacity = 1.0) {
+    if (!this._debugHeatProgram) return;
 
     const gl = this.gl;
     const cw = this.canvas.width;
@@ -282,7 +289,7 @@ function _flushDebugHeatmap(opacity = 1.0) {
     gl.useProgram(this._debugHeatProgram);
 
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeHeatmap);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.uniform1i(this._debugHeatUTex, 0);
     gl.uniform1f(this._debugHeatUOpacity, opacity);
 
@@ -292,6 +299,11 @@ function _flushDebugHeatmap(opacity = 1.0) {
 
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     gl.disable(gl.BLEND);
+}
+
+function _flushDebugHeatmap(opacity = 1.0) {
+    if (!this._debugHeatmapEnabled) return;
+    this._flushHeatOverlay(this.textures.smudgeHeatmap, opacity);
 }
 
 // ─── 热度衰减 program ─────────────────────────────────────────────────────────
@@ -389,11 +401,17 @@ function startHeatmapFadeOut() {
     if (this._fadeRafId) return;
 
     const painter = this;
-    const STEP = HEAT_DECAY_STEP; // 见 base-painter.js 顶部常量
 
     function tick() {
-        painter._decayHeatmap(STEP);
-        if (painter._debugHeatmapEnabled) painter.flush();
+        // 热度衰减（始终运行，让已有热度自然消退）
+        painter._decayHeatmap(HEAT_DECAY_STEP);
+
+        // 湿纸物理步进（仅激活时运行）
+        if (painter._wetPaperActive) painter._stepWetPaper();
+
+        // 任一 debug overlay 开启时刷新一次屏幕
+        if (painter._debugHeatmapEnabled || painter._debugWetPaperEnabled) painter.flush();
+
         painter._fadeRafId = requestAnimationFrame(tick);
     }
 
@@ -420,6 +438,7 @@ Object.assign(BaseWebGLPainter.prototype, {
     updateSmudgeHeatmap,
     _decayHeatmap,
     debugHeatmap,
+    _flushHeatOverlay,
     _flushDebugHeatmap,
     setHeatmapDecayActive,
     startHeatmapFadeOut,
