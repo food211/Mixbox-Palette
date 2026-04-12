@@ -594,7 +594,7 @@ function startHeatmapFadeOut() {
 
             // 仅绘制期间把湿度图渲染为颜色写入 canvas
             if (painter._wetIsDrawing && painter._wetColor) {
-                painter._applyWetColor(painter._wetColor, painter._wetMixStrength ?? painter.baseMixStrength);
+                painter._applyWetColor(painter._wetColor);
                 painter.flush();
             }
         }

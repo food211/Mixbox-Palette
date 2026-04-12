@@ -101,12 +101,16 @@ const WET_SMEAR_REACH   = 0.8;
 /** 水彩 smudge 推色强度 */
 const WET_SMUDGE_MIX    = 0.38;
 
+/** smudgeMix 随湿度的调制范围：wet=0 时为 MIN 倍，wet=1 时为 MAX 倍 */
+const WET_SMUDGE_SCALE_MIN = 0.3;
+const WET_SMUDGE_SCALE_MAX = 2.0;
+
 /** bleedMix/bleedRadius 随湿度的调制范围：wet=0 时为 MIN 倍，wet=1 时为 MAX 倍 */
 const WET_BLEED_SCALE_MIN = 0.3;
-const WET_BLEED_SCALE_MAX = 1.3;
+const WET_BLEED_SCALE_MAX = 1.7;
 
 /** coldMix 随湿度的调制范围：wet=0 时为 MAX 倍，wet=1 时为 MIN 倍 */
-const WET_COLD_SCALE_MAX = 1.3;
+const WET_COLD_SCALE_MAX = 1.8;
 const WET_COLD_SCALE_MIN = 0.2;
 
 // ─── 水彩 RAF 效果参数（wetpaper.js / _applyWetColor）────────────────────────
@@ -136,7 +140,7 @@ const WET_DEPOSIT_GRAD_MAX = 0.4;
 const WET_DILUTE_GRAD_SUPPRESS = 0.5;
 
 /** depositStr 随湿度的调制范围：wet=0 时为 MAX 倍，wet=1 时为 MIN 倍 */
-const WET_DEPOSIT_SCALE_MAX = 1.8;
+const WET_DEPOSIT_SCALE_MAX = 0.8;
 const WET_DEPOSIT_SCALE_MIN = 0.2;
 
 /** diluteStr 随湿度的调制范围：wet=0 时为 MIN 倍，wet=1 时为 MAX 倍 */
