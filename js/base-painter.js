@@ -199,6 +199,8 @@ class BaseWebGLPainter {
             u_smudgeSnapshot:     gl.getUniformLocation(this.program, 'u_smudgeSnapshot'),
             u_smudgeMix:          gl.getUniformLocation(this.program, 'u_smudgeMix'),
             u_smudgeHeatmap:      gl.getUniformLocation(this.program, 'u_smudgeHeatmap'),
+            u_wetHeatmap:         gl.getUniformLocation(this.program, 'u_wetHeatmap'),
+            u_isWatercolor:       gl.getUniformLocation(this.program, 'u_isWatercolor'),
         };
 
         for (const name of this._getExtraUniformNames()) {
@@ -394,7 +396,7 @@ class BaseWebGLPainter {
               useFalloff = true,
               smearDir = { x: 0, y: 0 }, smearLen = 0,
               disableSmear = false, smudgeAlpha = 1.0, u_isSmudge = false, smudgeSampleRadius = 0, smudgeAngle = 0,
-              brushRotation = 0, smudgeMix = 0) {
+              brushRotation = 0, smudgeMix = 0, isWatercolor = false) {
         const gl = this.gl;
         const cw = this.canvas.width;
         const ch = this.canvas.height;
@@ -455,6 +457,12 @@ class BaseWebGLPainter {
         gl.activeTexture(gl.TEXTURE4);
         gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeHeatmap);
         gl.uniform1i(this.locations.u_smudgeHeatmap, 4);
+
+        // 湿纸热度图绑定到 TEXTURE5，供水彩笔 shader 读取湿度
+        gl.activeTexture(gl.TEXTURE5);
+        gl.bindTexture(gl.TEXTURE_2D, this.textures.wetHeatmap);
+        gl.uniform1i(this.locations.u_wetHeatmap, 5);
+        gl.uniform1f(this.locations.u_isWatercolor, isWatercolor ? 1.0 : 0.0);
 
         const positions = new Float32Array([
             x - halfSize, y - halfSize,
