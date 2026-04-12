@@ -36,6 +36,12 @@ function _createR8Texture(width, height) {
 function setupHeatmapTextures(w, h) {
     this.textures.smudgeHeatmap  = this._createR8Texture(w, h);
     this.textures.smudgeHeatTemp = this._createR8Texture(w, h);
+    // wetHeatmap 复用同一张纹理，不再单独分配
+    this.textures.wetHeatmap  = this.textures.smudgeHeatmap;
+    this.textures.wetHeatTemp = this.textures.smudgeHeatTemp;
+    // 沉积热度图：松开时清空，不衰减，专门驱动咖啡圈效果
+    this.textures.depositHeatmap  = this._createR8Texture(w, h);
+    this.textures.depositHeatTemp = this._createR8Texture(w, h);
 }
 
 /**
@@ -52,6 +58,19 @@ function setupHeatmapFramebuffers() {
     this.framebuffers.smudgeHeatTemp = gl.createFramebuffer();
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.smudgeHeatTemp);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.textures.smudgeHeatTemp, 0);
+
+    // wetHeatmap FB 复用同一个
+    this.framebuffers.wetHeatmap  = this.framebuffers.smudgeHeatmap;
+    this.framebuffers.wetHeatTemp = this.framebuffers.smudgeHeatTemp;
+
+    // 沉积热度图 FB
+    this.framebuffers.depositHeatmap = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.depositHeatmap);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.textures.depositHeatmap, 0);
+
+    this.framebuffers.depositHeatTemp = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.depositHeatTemp);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.textures.depositHeatTemp, 0);
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 }
@@ -85,6 +104,7 @@ function _initHeatmapProgram() {
         uniform float u_brushRadius;
         uniform float u_useFalloff;
         uniform float u_heatStep;
+        uniform float u_heatMax;
 
         void main() {
             vec4 brushSample = texture2D(u_brushTexture, v_texCoord);
@@ -103,7 +123,7 @@ function _initHeatmapProgram() {
             vec2 uv = v_canvasCoord / u_resolution;
             uv.y = 1.0 - uv.y;
             float prevHeat = texture2D(u_heatmapTexture, uv).r;
-            float newHeat = min(1.0, prevHeat + aBrush * u_heatStep);
+            float newHeat = min(u_heatMax, prevHeat + aBrush * u_heatStep);
             gl_FragColor = vec4(newHeat, 0.0, 0.0, 1.0);
         }
     `);
@@ -119,6 +139,7 @@ function _initHeatmapProgram() {
         u_brushTexture:    gl.getUniformLocation(this._heatmapProgram, 'u_brushTexture'),
         u_heatmapTexture:  gl.getUniformLocation(this._heatmapProgram, 'u_heatmapTexture'),
         u_heatStep:        gl.getUniformLocation(this._heatmapProgram, 'u_heatStep'),
+        u_heatMax:         gl.getUniformLocation(this._heatmapProgram, 'u_heatMax'),
     };
 }
 
@@ -162,6 +183,7 @@ function updateSmudgeHeatmap(x, y, size, brushCanvas, useFalloff, heatStep = HEA
     gl.uniform1f(this._heatmapLocations.u_brushRadius, size / 2);
     gl.uniform1f(this._heatmapLocations.u_useFalloff, +useFalloff);
     gl.uniform1f(this._heatmapLocations.u_heatStep, heatStep);
+    gl.uniform1f(this._heatmapLocations.u_heatMax,  this._wetHeatCap ?? WET_HEAT_CAP_STEP);
 
     const positions = new Float32Array([
         x - halfSize, y - halfSize,
@@ -182,6 +204,73 @@ function updateSmudgeHeatmap(x, y, size, brushCanvas, useFalloff, heatStep = HEA
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 }
 
+
+/**
+ * 向沉积热度图注热（与 wetHeatmap 同步调用，不衰减，松开时清空）
+ */
+function updateDepositHeatmap(x, y, size, useFalloff, heatStep) {
+    const gl = this.gl;
+    const cw = this.canvas.width;
+    const ch = this.canvas.height;
+    const halfSize = size / 2;
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.depositHeatmap);
+    gl.bindTexture(gl.TEXTURE_2D, this.textures.depositHeatTemp);
+    gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, cw, ch, 0);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+    gl.useProgram(this._heatmapProgram);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.depositHeatmap);
+    gl.viewport(0, 0, cw, ch);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.currentBrushTexture);
+    gl.uniform1i(this._heatmapLocations.u_brushTexture, 0);
+
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.textures.depositHeatTemp);
+    gl.uniform1i(this._heatmapLocations.u_heatmapTexture, 1);
+
+    gl.uniform2f(this._heatmapLocations.u_resolution, cw, ch);
+    gl.uniform2f(this._heatmapLocations.u_currentPosition, x, y);
+    gl.uniform1f(this._heatmapLocations.u_brushRadius, size / 2);
+    gl.uniform1f(this._heatmapLocations.u_useFalloff, +useFalloff);
+    gl.uniform1f(this._heatmapLocations.u_heatStep, heatStep);
+    gl.uniform1f(this._heatmapLocations.u_heatMax,  this._wetHeatCap ?? WET_HEAT_CAP_STEP);
+
+    const positions = new Float32Array([
+        x - halfSize, y - halfSize,
+        x + halfSize, y - halfSize,
+        x - halfSize, y + halfSize,
+        x + halfSize, y + halfSize,
+    ]);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.position);
+    gl.bufferData(gl.ARRAY_BUFFER, positions, gl.DYNAMIC_DRAW);
+    gl.enableVertexAttribArray(this._heatmapLocations.a_position);
+    gl.vertexAttribPointer(this._heatmapLocations.a_position, 2, gl.FLOAT, false, 0, 0);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.texCoord);
+    gl.enableVertexAttribArray(this._heatmapLocations.a_texCoord);
+    gl.vertexAttribPointer(this._heatmapLocations.a_texCoord, 2, gl.FLOAT, false, 0, 0);
+
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+}
+
+/**
+ * 清空沉积热度图（每笔松开时调用）
+ */
+function clearDepositHeatmap() {
+    const gl = this.gl;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.depositHeatmap);
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.depositHeatTemp);
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+}
 
 // ─── 调试可视化 ───────────────────────────────────────────────────────────────
 
@@ -406,8 +495,18 @@ function startHeatmapFadeOut() {
         // 热度衰减（始终运行，让已有热度自然消退）
         painter._decayHeatmap(HEAT_DECAY_STEP);
 
-        // 湿纸物理步进（仅激活时运行）
-        if (painter._wetPaperActive) painter._stepWetPaper();
+        // 水彩激活时：热度帧计数 > 0 才跑扩散和颜色 pass，避免全屏空跑
+        if (painter._wetPaperActive && painter._wetHeatFrames > 0) {
+            painter._wetHeatFrames--;
+
+            painter._spreadWetHeatmap();
+
+            // 仅绘制期间把湿度图渲染为颜色写入 canvas
+            if (painter._wetIsDrawing && painter._wetColor) {
+                painter._applyWetColor(painter._wetColor, painter._wetMixStrength ?? painter.baseMixStrength);
+                painter.flush();
+            }
+        }
 
         // 任一 debug overlay 开启时刷新一次屏幕
         if (painter._debugHeatmapEnabled || painter._debugWetPaperEnabled) painter.flush();
@@ -436,6 +535,8 @@ Object.assign(BaseWebGLPainter.prototype, {
     _initHeatmapProgram,
     _initHeatDecayProgram,
     updateSmudgeHeatmap,
+    updateDepositHeatmap,
+    clearDepositHeatmap,
     _decayHeatmap,
     debugHeatmap,
     _flushHeatOverlay,

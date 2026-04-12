@@ -1433,6 +1433,20 @@ function beginStroke(type, color = null, startX = 0, startY = 0, pressure = 1.0)
         // 涂抹全程从这张快照采样，颜色不会被反复稀释变灰
         if (painter) painter.captureSmudgeSnapshot();
     }
+
+    if (type === 'brush' && currentBrush.type === 'watercolor') {
+        if (painter) {
+            // 落笔时清热度图，防止旧热度区域被新颜色的 smudge pass 染色
+            painter.clearWetHeatmap();
+            painter._wetHeatFrames = 0;
+            painter._wetHeatCap = undefined;      // 重置方向分段上限
+            painter._wetHeatBaseAngle = undefined;
+            painter._wetPaperActive = true;
+            painter._wetIsDrawing = true;
+            painter._wetColor = color ? hexToRgb(color) : { r: 0, g: 0, b: 0 };
+            painter._wetMixStrength = painter.baseMixStrength;
+        }
+    }
 }
 
 /**
@@ -1464,6 +1478,12 @@ function addStrokePoint(x, y, extra = {}) {
 function endStroke() {
     if (currentStroke && currentStroke.points.length > 0) {
         if (painter) painter.startHeatmapFadeOut();
+        if (painter && currentBrush.type === 'watercolor') {
+            painter._wetIsDrawing = false;
+            painter._applyDepositColor();
+            painter.flush();
+            painter.clearDepositHeatmap();
+        }
         pushSnapshot();
         smudgeSnapshotCache = null;
         currentStroke = null;
@@ -1627,11 +1647,6 @@ function drawBrush(x, y, color, prevX = x, prevY = y, pressure = 1.0) {
         false, 1.0, false, 0, 0,
         brushRotation, 0, isWatercolor,
     );
-
-    // 水彩笔：向热度图注入热度，供湿纸 RAF 读取
-    if (isWatercolor) {
-        painter.updateSmudgeHeatmap(x, y, effectiveSize * 2, brushCanvas, isSoftBrush);
-    }
 
     return dirtyRect;
 }
