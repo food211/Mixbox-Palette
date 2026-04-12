@@ -40,8 +40,8 @@ const I18N = {
             inst9: 'UI display issues? Press <strong>F5</strong> to reload from remote',
             statusDraw: '• Mode: <strong style="color: #e8a838;">Draw</strong>',
             statusSmudge: '• Mode: <strong style="color: #c87dd4;">Smudge</strong>',
-            statusEyedropperFg: '• Mode: <strong style="color: #1473e6;">Eyedropper (FG)</strong>',
-            statusEyedropperBg: '• Mode: <strong style="color: #44b556;">Eyedropper (BG)</strong>',
+            statusEyedropperFg: '• Mode: <strong style="color: #1473e6;">Eyedropper</strong>',
+            statusEyedropperBg: '• Mode: <strong style="color: #44b556;">Eyedropper</strong>',
             selectBrushModal: 'Select Brush',
             mixStrengthLabel: 'Mix Strength:',
 
@@ -126,8 +126,8 @@ const I18N = {
             inst9: 'UI 显示异常？按 <strong>F5</strong> 刷新重新获取远端',
             statusDraw: '• 当前模式: <strong style="color: #e8a838;">绘制</strong>',
             statusSmudge: '• 当前模式: <strong style="color: #c87dd4;">涂抹</strong>',
-            statusEyedropperFg: '• 当前模式: <strong style="color: #1473e6;">吸管 (前景色)</strong>',
-            statusEyedropperBg: '• 当前模式: <strong style="color: #44b556;">吸管 (背景色)</strong>',
+            statusEyedropperFg: '• 当前模式: <strong style="color: #1473e6;">吸管</strong>',
+            statusEyedropperBg: '• 当前模式: <strong style="color: #44b556;">吸管</strong>',
             selectBrushModal: '选择笔刷',
             mixStrengthLabel: '混色强度:',
 
