@@ -50,6 +50,8 @@ const I18N = {
             paletteName_digitalArtist: 'Digital Artist Palette',
             paletteName_schminckeHoradam: 'Schmincke Horadam 16',
             paletteName_kuretakeGansai: 'Kuretake Gansai 16',
+            paletteName_rembrandtOil: 'Rembrandt Oil 16',
+            paletteName_wnGouache: 'Winsor & Newton Designers Gouache Mix',
 
             switchLanguage: 'Switch Language (EN / ZH)',
             versionModalTitle: 'Version Info',
@@ -133,6 +135,8 @@ const I18N = {
             paletteName_digitalArtist: '数字艺术家调色板',
             paletteName_schminckeHoradam: '施美尔 Horadam 16色',
             paletteName_kuretakeGansai: '吴竹 Gansai 16色',
+            paletteName_rembrandtOil: '伦勃朗油画 16色',
+            paletteName_wnGouache: '温莎牛顿 Designers Gouache',
 
             switchLanguage: '切换语言 (EN / ZH)',
             versionModalTitle: '版本信息',

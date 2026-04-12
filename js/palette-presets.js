@@ -87,5 +87,59 @@ const palettePresets = {
             { hex: '#795548', name: 'Brown', nameCN: '棕色' },
             { hex: '#607D8B', name: 'Gray', nameCN: '灰色' }
         ]
+    },
+    // 伦勃朗 Rembrandt 油画 16色
+    rembrandtOil: {
+        name: "伦勃朗 Rembrandt 油画 16色",
+        colors: [
+            { hex: '#F5F0DC', name: 'Titanium White', nameCN: '钛白' },
+            { hex: '#F2E04A', name: 'Permanent Lemon Yellow', nameCN: '永固柠檬黄' },
+            { hex: '#E8B84B', name: 'Permanent Yellow Medium', nameCN: '永固中黄' },
+            { hex: '#D4702A', name: 'Permanent Orange', nameCN: '永固橙' },
+            { hex: '#C0392B', name: 'Permanent Red Light', nameCN: '永固浅红' },
+            { hex: '#8B1A1A', name: 'Alizarin Crimson', nameCN: '茜素深红' },
+            { hex: '#6D2B8A', name: 'Permanent Red Violet', nameCN: '永固红紫' },
+            { hex: '#1F3A7A', name: 'Ultramarine Deep', nameCN: '深群青' },
+            { hex: '#1A5276', name: 'Prussian Blue', nameCN: '普鲁士蓝' },
+            { hex: '#1A6B4A', name: 'Viridian', nameCN: '翠绿' },
+            { hex: '#C8A84B', name: 'Yellow Ochre', nameCN: '黄赭石' },
+            { hex: '#A0522D', name: 'Raw Sienna', nameCN: '生赭' },
+            { hex: '#7B3A1E', name: 'Burnt Sienna', nameCN: '熟赭' },
+            { hex: '#4A2C17', name: 'Raw Umber', nameCN: '生褐' },
+            { hex: '#2C1A0E', name: 'Burnt Umber', nameCN: '熟褐' },
+            { hex: '#1C1C1C', name: 'Ivory Black', nameCN: '象牙黑' }
+        ]
+    },
+    // 温莎牛顿 Winsor & Newton Designers Gouache 24色
+    wnGouache: {
+        name: "温莎牛顿 Designers Gouache Mix",
+        colors: [
+            // 粉红 / 玫瑰红系
+            { hex: '#F2607D', name: 'Permanent Rose',       nameCN: '永固玫瑰红' },
+            { hex: '#F4364C', name: 'Primary Red',          nameCN: '原色红' },
+            { hex: '#C2185B', name: 'Magenta',              nameCN: '品红' },
+            { hex: '#E8341C', name: 'Flame Red',            nameCN: '火焰红' },
+            // 紫色系
+            { hex: '#C084C8', name: 'Light Purple',         nameCN: '浅紫' },
+            { hex: '#7B4FA6', name: 'Brilliant Violet',     nameCN: '亮紫罗兰' },
+            { hex: '#6B2D6B', name: 'Perylene Violet',      nameCN: '苝紫' },
+            // 黄色系
+            { hex: '#F5D98B', name: 'Naples Yellow',        nameCN: '那不勒斯黄' },
+            { hex: '#F0A020', name: 'Marigold Yellow',      nameCN: '万寿菊黄' },
+            // 棕色系
+            { hex: '#9B3A2A', name: 'Venetian Red',         nameCN: '威尼斯红' },
+            { hex: '#C8922A', name: 'Gold Ochre',           nameCN: '金赭' },
+            { hex: '#C47A2A', name: 'Raw Sienna',           nameCN: '生赭' },
+            { hex: '#7A5C3A', name: 'Raw Umber',            nameCN: '生棕土' },
+            { hex: '#4A2E1A', name: 'Sepia',                nameCN: '墨褐' },  
+            // 冷色系
+            { hex: '#1B4F9C', name: 'Primary Blue',  nameCN: '原色蓝' },
+            { hex: '#2E86C1', name: 'Cerulean Blue', nameCN: '天蓝' },
+            { hex: '#1A6B4A', name: 'Winsor Green',  nameCN: '温莎绿' },
+            // 中性色
+            { hex: '#8C8C8C', name: 'Neutral Grey',         nameCN: '中性灰' },
+            { hex: '#F5F5F0', name: 'Zinc White',           nameCN: '锌白' },
+            { hex: '#1C1C1A', name: 'Ivory Black',          nameCN: '象牙黑' }
+        ]
     }
 };
