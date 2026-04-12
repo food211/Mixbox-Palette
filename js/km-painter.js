@@ -49,6 +49,23 @@ class KMWebGLPainter extends BaseWebGLPainter {
         uniform float u_smudgeAngle;
         uniform float u_smudgeMix;
         uniform sampler2D u_smudgeHeatmap;
+        uniform sampler2D u_wetHeatmap;
+        uniform sampler2D u_depositHeatmap;
+        uniform float u_isWatercolor;
+        uniform float u_wetSmudgeMix;
+        uniform float u_wetDepositPeak;
+        uniform float u_wetBleedRadius;
+        uniform float u_wetBleedMix;
+        uniform float u_wetColdMix;
+        uniform float u_wetSmearReach;
+
+        const float maxHotWeight = 0.25;
+        const float depositWidth = 0.2;
+
+        // 颜色与白色的距离（0=纯白，1=最远离白色）
+        float colorness(vec3 rgb) {
+            return length(vec3(1.0) - rgb);
+        }
 
         // 13点环形采样，返回加权平均色（纯 GPU，零 readPixels）
         vec3 sampleSmudgeColor(vec2 center, float radius, float angle) {
@@ -57,8 +74,9 @@ class KMWebGLPainter extends BaseWebGLPainter {
 
             vec2 uv0 = center / u_resolution;
             uv0.y = 1.0 - uv0.y;
-            col += texture2D(u_canvasTexture, uv0).rgb * 0.4;
-            totalW += 0.4;
+            vec3 s0 = texture2D(u_canvasTexture, uv0).rgb;
+            float w0 = 0.4 * colorness(s0);
+            col += s0 * w0; totalW += w0;
 
             float r1 = radius * 0.4;
             for (int i = 0; i < 4; i++) {
@@ -67,8 +85,9 @@ class KMWebGLPainter extends BaseWebGLPainter {
                 vec2 uv = (center + offset) / u_resolution;
                 uv.y = 1.0 - uv.y;
                 uv = clamp(uv, 0.0, 1.0);
-                col += texture2D(u_canvasTexture, uv).rgb * 0.1;
-                totalW += 0.1;
+                vec3 s = texture2D(u_canvasTexture, uv).rgb;
+                float w = 0.1 * colorness(s);
+                col += s * w; totalW += w;
             }
 
             for (int i = 0; i < 8; i++) {
@@ -77,10 +96,12 @@ class KMWebGLPainter extends BaseWebGLPainter {
                 vec2 uv = (center + offset) / u_resolution;
                 uv.y = 1.0 - uv.y;
                 uv = clamp(uv, 0.0, 1.0);
-                col += texture2D(u_canvasTexture, uv).rgb * 0.025;
-                totalW += 0.025;
+                vec3 s = texture2D(u_canvasTexture, uv).rgb;
+                float w = 0.025 * colorness(s);
+                col += s * w; totalW += w;
             }
 
+            if (totalW < 0.001) return vec3(1.0); // 全是白色，返回白色
             return col / totalW;
         }
 
@@ -245,14 +266,70 @@ class KMWebGLPainter extends BaseWebGLPainter {
                 vec2 heatUV = v_canvasCoord / u_resolution;
                 heatUV.y = 1.0 - heatUV.y;
                 float heat = texture2D(u_smudgeHeatmap, heatUV).r;
-                effectiveMixStrength = mix(0.01, u_baseMixStrength, heat);
+                // 水彩 smudge pass：冷区涂抹强、热区涂抹弱（颜料已湿润，不需要推）
+                // 普通涂抹工具：热区强、冷区弱
+                if (u_isWatercolor > 0.5) {
+                    effectiveMixStrength = mix(u_baseMixStrength, 0.01, heat);
+                } else {
+                    effectiveMixStrength = mix(0.01, u_baseMixStrength, heat);
+                }
+            }
+
+            // 水彩笔：读取湿纸热度，派生三个蒙版
+            vec2 wetUV = v_canvasCoord / u_resolution;
+            wetUV.y = 1.0 - wetUV.y;
+            float wetness = (u_isWatercolor > 0.5) ? texture2D(u_wetHeatmap, wetUV).r : 0.0;
+
+            // 同向绘制时限制湿度上限为0.25，避免浓度过高
+            const float maxWetnessLimit = 0.25;
+            wetness = min(wetness, maxWetnessLimit);
+
+            // 三个蒙版：冷区 / 交界沉积 / 热区
+            float maskCold    = 1.0 - smoothstep(0.0, 0.4, wetness);
+
+            // 浓度微弱影响宽度：浓度低时阈值高（边缘更窄），浓度高时更宽
+            float depositThresh = mix(0.55, 0.45, u_baseMixStrength);
+            float depositRaw = (u_isWatercolor > 0.5) ? texture2D(u_depositHeatmap, wetUV).r : 0.0;
+            float maskDeposit = smoothstep(depositThresh, depositThresh + depositWidth, depositRaw);
+
+            // 使用depositRaw来计算热区蒙版，但限制最大值，避免同一笔内过度累积
+            float rawHotness = smoothstep(0.8, 1.0, depositRaw);
+            float maskHot = min(rawHotness, maxHotWeight);
+
+            if (u_isWatercolor > 0.5) {
+                // 热区晕染：采样位置向外偏移，颜色往外渗
+                float bleedRadius = maskHot * u_brushRadius * u_wetBleedRadius;
+                vec2 bleedDir = normalize(v_canvasCoord - u_currentPosition + vec2(0.001));
+                vec2 bleedUV = (v_canvasCoord + bleedDir * bleedRadius) / u_resolution;
+                bleedUV.y = 1.0 - bleedUV.y;
+                bleedUV = clamp(bleedUV, 0.0, 1.0);
+                vec4 bleedSample = texture2D(u_canvasTexture, bleedUV);
+                canvasColor = mix(canvasColor, bleedSample, maskHot * u_wetBleedMix);
             }
 
             vec3 finalColor;
-            if (u_disableSmear > 0.5) {
-                float edgeWeight = clamp(aBrush * u_smudgeAlpha, 0.0, 1.0);
-                vec3 mixedColor = km_mix(canvasColor.rgb, activeColor, u_smudgeAlpha * 0.5);
-                finalColor = mix(canvasColor.rgb, mixedColor, edgeWeight);
+            if (u_isWatercolor > 0.5) {
+                // ── 冷区：稀释混色 + smudge 推色 ──
+                float coldPaint = maskCold * u_baseMixStrength * u_wetColdMix;
+                vec3 coldResult = km_mix(canvasColor.rgb, activeColor, aBrush * coldPaint);
+                float smearReach = clamp(u_smearLen, 1.0, u_brushRadius) * u_wetSmearReach;
+                vec2 smearUV = (v_canvasCoord - u_smearDir * smearReach) / u_resolution;
+                smearUV.y = 1.0 - smearUV.y;
+                smearUV = clamp(smearUV, 0.0, 1.0);
+                vec3 smearRGB = texture2D(u_canvasTexture, smearUV).rgb;
+                vec3 coldOut = km_mix(coldResult, smearRGB, aBrush * u_wetSmudgeMix * maskCold);
+
+                // ── 热区：稀释晕染 ──
+                float hotPaint = maskHot * u_baseMixStrength * u_wetBleedMix;
+                vec3 hotOut = km_mix(canvasColor.rgb, activeColor, aBrush * hotPaint);
+
+                // ── 两路叠加（沉积区在松开时单独处理）──
+                float totalMask = clamp(maskCold + maskHot, 0.0, 1.0);
+                vec3 blended = (coldOut * maskCold + hotOut * maskHot)
+                               / max(maskCold + maskHot, 0.001);
+                finalColor = mix(canvasColor.rgb, blended, totalMask * aBrush);
+            } else if (u_disableSmear > 0.5) {
+                finalColor = km_mix(canvasColor.rgb, activeColor, aBrush * effectiveMixStrength);
             } else {
                 float density = effectiveMixStrength * effectiveMixStrength;
 
@@ -273,16 +350,12 @@ class KMWebGLPainter extends BaseWebGLPainter {
                 }
 
                 if (density > 0.98) {
-                    float edgeWeight = clamp(aBrush * effectiveMixStrength, 0.0, 1.0);
-                    vec3 mixedColor = km_mix(canvasColor.rgb, activeColor, clamp(effectiveMixStrength, 0.0, 1.0));
-                    finalColor = mix(canvasColor.rgb, mixedColor, edgeWeight / max(effectiveMixStrength, 0.001));
+                    finalColor = km_mix(canvasColor.rgb, activeColor, aBrush * effectiveMixStrength);
                 } else if (density < 0.01) {
                     finalColor = smearTarget;
                 } else {
-                    float edgeWeight = clamp(aBrush * effectiveMixStrength, 0.0, 1.0);
-                    vec3 mixedColor = km_mix(canvasColor.rgb, activeColor, clamp(effectiveMixStrength, 0.0, 1.0));
-                    vec3 paintResult = mix(canvasColor.rgb, mixedColor, edgeWeight / max(effectiveMixStrength, 0.001));
-                    finalColor = mix(smearTarget, paintResult, density);
+                    vec3 paintResult = km_mix(canvasColor.rgb, activeColor, aBrush * effectiveMixStrength);
+                    finalColor = km_mix(smearTarget, paintResult, density);
                 }
             }
 

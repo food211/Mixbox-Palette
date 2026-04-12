@@ -50,6 +50,7 @@ class MixboxWebGLPainter extends BaseWebGLPainter {
         uniform float u_wetSmearReach;
 
         const float maxHotWeight = 0.25;
+        const float depositWidth = 0.2;
 
         ${mixbox.glsl()}
 
@@ -151,19 +152,24 @@ class MixboxWebGLPainter extends BaseWebGLPainter {
             vec2 wetUV = v_canvasCoord / u_resolution;
             wetUV.y = 1.0 - wetUV.y;
             float wetness = (u_isWatercolor > 0.5) ? texture2D(u_wetHeatmap, wetUV).r : 0.0;
-            
+
             // 同向绘制时限制湿度上限为0.25，避免浓度过高
             const float maxWetnessLimit = 0.25;
             wetness = min(wetness, maxWetnessLimit);
 
             // 三个蒙版：冷区 / 交界沉积 / 热区
             float maskCold    = 1.0 - smoothstep(0.0, 0.4, wetness);
+
             // 浓度微弱影响宽度：浓度低时阈值高（边缘更窄），浓度高时更宽
             // 阈值范围 0.55~0.45，变化量极小
             float depositThresh = mix(0.55, 0.45, u_baseMixStrength);
             float depositRaw = (u_isWatercolor > 0.5) ? texture2D(u_depositHeatmap, wetUV).r : 0.0;
-            float maskDeposit = smoothstep(depositThresh, depositThresh + 0.2, depositRaw);
-            float maskHot     = smoothstep(0.6, 1.0, wetness);
+            float maskDeposit = smoothstep(depositThresh, depositThresh + depositWidth, depositRaw);
+
+            // 使用depositRaw来计算热区蒙版，但限制最大值，避免同一笔内过度累积
+            float rawHotness = smoothstep(0.8, 1.0, depositRaw);
+            // 使用maxHotWeight限制最大热区效果强度
+            float maskHot = min(rawHotness, maxHotWeight);
 
             if (u_isWatercolor > 0.5) {
                 // 热区晕染：采样位置向外偏移，颜色往外渗

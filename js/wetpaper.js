@@ -20,10 +20,10 @@
 const WET_DEPOSIT_STRENGTH = 0.5;
 
 /** 高热区稀释已有颜色的最大强度（0~1) */
-const WET_DILUTE_STRENGTH = 0.5;
+const WET_DILUTE_STRENGTH = 0.3;
 
 /** 梯度采样半径（像素），越大边缘越宽 */
-const WET_GRADIENT_RADIUS = 2.0;
+const WET_GRADIENT_RADIUS = 5.0;
 
 /** 热度扩散采样半径（像素），越大晕染范围越宽 */
 const WET_SPREAD_RADIUS = 2.0;
@@ -275,9 +275,9 @@ function _initWetColorProgram() {
 
             vec4 canvas = texture2D(u_canvas, v_uv);
 
-            // ── 效果1：梯度区颜料沉积（不受浓度影响）──
+            // ── 效果1：梯度区颜料沉积（浓度越高越不工作）──
             float depositMask = smoothstep(u_depositGradMin, u_depositGradMax, grad);
-            float depositAmt  = depositMask * u_depositStr;
+            float depositAmt  = depositMask * u_depositStr * (1.0 - u_mixStrength);
             vec3 deposited = mix(canvas.rgb, u_color, depositAmt);
 
             // ── 效果2：高热区稀释（往画布色与笔刷色的中间色偏移）──
@@ -375,11 +375,42 @@ function _applyWetColor(color, mixStrength) {
 }
 
 /**
- * 松开画笔时，用 depositHeatmap 做一次全屏颜料沉积 pass，然后清空 depositHeatmap。
- * 复用 _wetColorProgram，稀释强度设为 0，只做沉积。
+ * 松开画笔时，用 depositHeatmap 的梯度交界（maskDeposit）做渐进沉积。
+ * 分 8 帧 RAF 叠入，强度线性衰减，完成后清空 depositHeatmap。
  */
 function _applyDepositColor() {
     if (!this._wetColorProgram || !this._wetColor) return;
+
+    const TOTAL_FRAMES = 8;
+    let frame = 0;
+    const color   = this._wetColor;
+    const mixStr  = this._wetMixStrength ?? this.baseMixStrength;
+
+    const tick = () => {
+        if (frame >= TOTAL_FRAMES) {
+            this.clearDepositHeatmap();
+            this.flush();
+            return;
+        }
+
+        // 强度线性衰减：第0帧最强，最后一帧趋近0
+        const t = 1.0 - frame / TOTAL_FRAMES;
+        const frameStr = WET_DEPOSIT_STRENGTH * t * 0.4;
+
+        this._applyDepositColorPass(color, mixStr, frameStr);
+        this.flush();
+        frame++;
+        requestAnimationFrame(tick);
+    };
+
+    requestAnimationFrame(tick);
+}
+
+/**
+ * 单帧沉积 pass：用 depositHeatmap 梯度交界区将笔刷色沉积进画布。
+ */
+function _applyDepositColorPass(color, mixStrength, depositStr) {
+    if (!this._wetColorProgram) return;
 
     const gl = this.gl;
     const cw = this.canvas.width;
@@ -400,17 +431,17 @@ function _applyDepositColor() {
     gl.bindTexture(gl.TEXTURE_2D, this.textures.temp);
     gl.uniform1i(this._wetColorLoc.u_canvas, 0);
 
-    // 用 depositHeatmap 代替 wetHeatmap
+    // depositHeatmap 传入 u_wetHeatmap 槽，shader 用梯度计算交界 mask
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, this.textures.depositHeatmap);
     gl.uniform1i(this._wetColorLoc.u_wetHeatmap, 1);
 
     gl.uniform2f(this._wetColorLoc.u_resolution, cw, ch);
-    gl.uniform3f(this._wetColorLoc.u_color, this._wetColor.r, this._wetColor.g, this._wetColor.b);
-    gl.uniform1f(this._wetColorLoc.u_mixStrength,  this._wetMixStrength ?? this.baseMixStrength);
+    gl.uniform3f(this._wetColorLoc.u_color, color.r, color.g, color.b);
+    gl.uniform1f(this._wetColorLoc.u_mixStrength,        mixStrength);
     gl.uniform1f(this._wetColorLoc.u_gradRadius,         WET_GRADIENT_RADIUS);
-    gl.uniform1f(this._wetColorLoc.u_depositStr,         WET_DEPOSIT_STRENGTH);
-    gl.uniform1f(this._wetColorLoc.u_diluteStr,          0.0);  // 松开时只沉积，不稀释
+    gl.uniform1f(this._wetColorLoc.u_depositStr,         depositStr);
+    gl.uniform1f(this._wetColorLoc.u_diluteStr,          0.0);
     gl.uniform1f(this._wetColorLoc.u_depositGradMin,     WET_DEPOSIT_GRAD_MIN);
     gl.uniform1f(this._wetColorLoc.u_depositGradMax,     WET_DEPOSIT_GRAD_MAX);
     gl.uniform1f(this._wetColorLoc.u_diluteGradSuppress, WET_DILUTE_GRAD_SUPPRESS);
@@ -531,6 +562,7 @@ Object.assign(BaseWebGLPainter.prototype, {
 
     _applyWetColor,
     _applyDepositColor,
+    _applyDepositColorPass,
     setWetPaperActive,
     _startWetPaperRaf,
     _stopWetPaperRaf,

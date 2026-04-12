@@ -1480,9 +1480,7 @@ function endStroke() {
         if (painter) painter.startHeatmapFadeOut();
         if (painter && currentBrush.type === 'watercolor') {
             painter._wetIsDrawing = false;
-            painter._applyDepositColor();
-            painter.flush();
-            painter.clearDepositHeatmap();
+            painter._applyDepositColor(); // 内部 RAF 渐进，末帧自动 flush + clearDepositHeatmap
         }
         pushSnapshot();
         smudgeSnapshotCache = null;
