@@ -208,7 +208,7 @@ function updateSmudgeHeatmap(x, y, size, brushCanvas, useFalloff, heatStep = HEA
 /**
  * 向沉积热度图注热（与 wetHeatmap 同步调用，不衰减，松开时清空）
  */
-function updateDepositHeatmap(x, y, size, useFalloff, heatStep) {
+function updateDepositHeatmap(x, y, size, useFalloff, heatStep = DEPOSITE_HEAT_ACCUMULATE_STEP) {
     const gl = this.gl;
     const cw = this.canvas.width;
     const ch = this.canvas.height;
@@ -469,6 +469,97 @@ function _decayHeatmap(decay = 0.02) {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 }
 
+/**
+ * 在 mixCanvas 上直接用主 WebGL context 渲染沉积热度图叠加层（纯 GPU，零 readPixels）。
+ * console 调用：
+ *   window._painter.debugDepositHeatmap(true)   → 开启
+ *   window._painter.debugDepositHeatmap(false)  → 关闭
+ */
+function debugDepositHeatmap(enable = true) {
+    if (!enable) {
+        this._debugDepositHeatmapEnabled = false;
+        console.log('[debugDepositHeatmap] 关闭');
+        return;
+    }
+
+    // 复用已有的 debugHeatProgram
+    if (!this._debugHeatProgram) {
+        const gl = this.gl;
+
+        const vs = gl.createShader(gl.VERTEX_SHADER);
+        gl.shaderSource(vs, `
+            attribute vec2 a_pos;
+            varying vec2 v_uv;
+            void main() {
+                v_uv = vec2(a_pos.x * 0.5 + 0.5, a_pos.y * 0.5 + 0.5);
+                gl_Position = vec4(a_pos, 0.0, 1.0);
+            }
+        `);
+        gl.compileShader(vs);
+
+        const fs = gl.createShader(gl.FRAGMENT_SHADER);
+        gl.shaderSource(fs, `
+            precision mediump float;
+            uniform sampler2D u_heatmap;
+            uniform float u_opacity;
+            varying vec2 v_uv;
+
+            // 热成像色阶：蓝→青→绿→黄→红→白
+            vec3 heatColor(float t) {
+                vec3 c0 = vec3(0.0, 0.0, 1.0); // 蓝
+                vec3 c1 = vec3(0.0, 1.0, 1.0); // 青
+                vec3 c2 = vec3(0.0, 1.0, 0.0); // 绿
+                vec3 c3 = vec3(1.0, 1.0, 0.0); // 黄
+                vec3 c4 = vec3(1.0, 0.0, 0.0); // 红
+                vec3 c5 = vec3(1.0, 1.0, 1.0); // 白
+
+                if (t < 0.2) return mix(c0, c1, t / 0.2);
+                if (t < 0.4) return mix(c1, c2, (t - 0.2) / 0.2);
+                if (t < 0.6) return mix(c2, c3, (t - 0.4) / 0.2);
+                if (t < 0.8) return mix(c3, c4, (t - 0.6) / 0.2);
+                return mix(c4, c5, (t - 0.8) / 0.2);
+            }
+
+            void main() {
+                float heat = texture2D(u_heatmap, v_uv).r;
+                if (heat < 0.01) discard;
+                float alpha = pow(heat, 0.5) * 0.75 * u_opacity;
+                gl_FragColor = vec4(heatColor(heat), alpha);
+            }
+        `);
+        gl.compileShader(fs);
+
+        const prog = gl.createProgram();
+        gl.attachShader(prog, vs);
+        gl.attachShader(prog, fs);
+        gl.linkProgram(prog);
+        this._debugHeatProgram  = prog;
+        this._debugHeatAPos     = gl.getAttribLocation(prog, 'a_pos');
+        this._debugHeatUTex     = gl.getUniformLocation(prog, 'u_heatmap');
+        this._debugHeatUOpacity = gl.getUniformLocation(prog, 'u_opacity');
+
+        const buf = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+            -1,-1,  1,-1,  -1,1,  1,1
+        ]), gl.STATIC_DRAW);
+        this._debugHeatBuf = buf;
+    }
+
+    // 互斥：关闭其他 debug 模式
+    this._debugHeatmapEnabled = false;
+    this._debugWetPaperEnabled = false;
+
+    this._debugDepositHeatmapEnabled = true;
+    this._flushDebugDepositHeatmap();
+    console.log('[debugDepositHeatmap] 开启 — 调用 window._painter.debugDepositHeatmap(false) 关闭');
+}
+
+function _flushDebugDepositHeatmap(opacity = 1.0) {
+    if (!this._debugDepositHeatmapEnabled) return;
+    this._flushHeatOverlay(this.textures.depositHeatmap, opacity);
+}
+
 // ─── 常驻 RAF：热度衰减 + debug overlay ──────────────────────────────────────
 
 /**
@@ -509,7 +600,7 @@ function startHeatmapFadeOut() {
         }
 
         // 任一 debug overlay 开启时刷新一次屏幕
-        if (painter._debugHeatmapEnabled || painter._debugWetPaperEnabled) painter.flush();
+        if (painter._debugHeatmapEnabled || painter._debugWetPaperEnabled || painter._debugDepositHeatmapEnabled) painter.flush();
 
         painter._fadeRafId = requestAnimationFrame(tick);
     }
@@ -539,8 +630,10 @@ Object.assign(BaseWebGLPainter.prototype, {
     clearDepositHeatmap,
     _decayHeatmap,
     debugHeatmap,
+    debugDepositHeatmap,
     _flushHeatOverlay,
     _flushDebugHeatmap,
+    _flushDebugDepositHeatmap,
     setHeatmapDecayActive,
     startHeatmapFadeOut,
     _resetHeatmapFade,
