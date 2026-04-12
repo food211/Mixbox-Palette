@@ -681,13 +681,17 @@ function bindEvents() {
             // 进入吸管模式
             isEyedropperMode = true;
             eyedropperBtn.classList.add('active');
-            updateStatus('eyedropper');
+            mixCanvas.classList.add('eyedropper');
+            mixCanvas.classList.remove('brush');
+            updateStatus('eyedropper-fg'); // 改为'eyedropper-fg'而不是'eyedropper'
             console.log('✅ 进入吸管模式');
         } else {
             // 退出吸管模式
             isEyedropperMode = false;
             eyedropperBtn.classList.remove('active');
-            updateStatus('ready');
+            mixCanvas.classList.remove('eyedropper');
+            mixCanvas.classList.add('brush');
+            updateStatus('draw'); // 改为'draw'而不是'ready'
             console.log('✅ 退出吸管模式');
         }
     });
