@@ -1,5 +1,5 @@
 // ─── 水彩笔刷纹理参数 ─────────────────────────────────────────────────────────
-const WC_DOT_COUNT      = 23;    // 点数
+const WC_DOT_COUNT      = 35;    // 点数
 const WC_DIST_RANGE     = 0.8;   // 点分布半径（相对笔刷size）
 const WC_DOT_SIZE_MIN   = 0.12;  // 点最小半径（相对size）
 const WC_DOT_SIZE_RANGE = 0.18;  // 点大小随机范围
