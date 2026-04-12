@@ -267,7 +267,8 @@
                 console.log('✅ Service Worker 就绪');
             }
 
-            // 首先加载 i18n
+            // 首先加载参数常数和 i18n
+            await loadScript('js/params.js');
             await loadScript('js/i18n.js');
 
             // 加载混色引擎

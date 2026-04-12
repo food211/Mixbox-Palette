@@ -10,6 +10,7 @@ const CACHE_URLS = [
   './css/controls.css',
   './css/mix-area.css',
   './css/modals.css',
+  './js/params.js',
   './js/i18n.js',
   './js/ps-bridge.js',
   './js/palette-presets.js',
