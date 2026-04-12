@@ -4,12 +4,12 @@
 const HEAT_ACCUMULATE_STEP = 0.08;
 
 /** 每帧衰减的热度量（0~1）。值越大降温越快 */
-const HEAT_DECAY_STEP = 0.01;
+const HEAT_DECAY_STEP = 0.02;
 
 // ─── 混色参数 ─────────────────────────────────────────────────────────────────
 
 /** 混色强度默认值（0~1），对应 UI 滑块初始位置 */
-const DEFAULT_MIX_STRENGTH = 0.2;
+const DEFAULT_MIX_STRENGTH = 0.5;
 
 // ─── GPU 历史池参数 ───────────────────────────────────────────────────────────
 
@@ -41,6 +41,34 @@ const IDLE_SAVE_TIMEOUT_MS = 3000;
 
 /** setTimeout 回退延迟（ms）：不支持 requestIdleCallback 时的画布保存 */
 const IDLE_SAVE_FALLBACK_MS = 100;
+
+// ─── 水彩热度方向分段参数 ─────────────────────────────────────────────────────
+
+/** 方向变化超过此角度（度）才触发热度上限提升 */
+const WET_HEAT_DIR_THRESHOLD_DEG = 30;
+
+/** 每次方向突破后热度上限提升量 */
+const WET_HEAT_CAP_STEP = 0.25;
+
+// ─── 水彩效果参数 ─────────────────────────────────────────────────────────────
+
+/** 边缘堆积抛物线系数：heat*(1-heat)*N，N=4时heat=0.5峰值=1 */
+const WET_DEPOSIT_PEAK  = 4.0;
+
+/** 晕染偏移半径（相对笔刷半径的比例） */
+const WET_BLEED_RADIUS  = 0.3;
+
+/** 晕染混合强度（热区颜色向外渗出的比例） */
+const WET_BLEED_MIX     = 0.4;
+
+/** 冷区基础混色强度（相对 baseMixStrength 的比例） */
+const WET_COLD_MIX      = 0.25;
+
+/** smudge 采样距离系数（相对 smearLen/brushRadius） */
+const WET_SMEAR_REACH   = 0.8;
+
+/** 水彩 smudge 推色强度 */
+const WET_SMUDGE_MIX    = 0.38;
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -200,7 +228,14 @@ class BaseWebGLPainter {
             u_smudgeMix:          gl.getUniformLocation(this.program, 'u_smudgeMix'),
             u_smudgeHeatmap:      gl.getUniformLocation(this.program, 'u_smudgeHeatmap'),
             u_wetHeatmap:         gl.getUniformLocation(this.program, 'u_wetHeatmap'),
+            u_depositHeatmap:     gl.getUniformLocation(this.program, 'u_depositHeatmap'),
             u_isWatercolor:       gl.getUniformLocation(this.program, 'u_isWatercolor'),
+            u_wetSmudgeMix:       gl.getUniformLocation(this.program, 'u_wetSmudgeMix'),
+            u_wetDepositPeak:     gl.getUniformLocation(this.program, 'u_wetDepositPeak'),
+            u_wetBleedRadius:     gl.getUniformLocation(this.program, 'u_wetBleedRadius'),
+            u_wetBleedMix:        gl.getUniformLocation(this.program, 'u_wetBleedMix'),
+            u_wetColdMix:         gl.getUniformLocation(this.program, 'u_wetColdMix'),
+            u_wetSmearReach:      gl.getUniformLocation(this.program, 'u_wetSmearReach'),
         };
 
         for (const name of this._getExtraUniformNames()) {
@@ -245,7 +280,7 @@ class BaseWebGLPainter {
         this.textures.temp           = this.createEmptyTexture(w, h);
         this.textures.smudgeSnapshot  = this.createEmptyTexture(w, h);
         this.setupHeatmapTextures(w, h);
-        this.setupWetPaperTextures(w, h);
+        // wetHeatmap 纹理/FB 由 heatmap.js 统一建立别名，无需单独创建
     }
 
     setupFramebuffers() {
@@ -267,7 +302,7 @@ class BaseWebGLPainter {
         this._copyReadFB = gl.createFramebuffer();
 
         this.setupHeatmapFramebuffers();
-        this.setupWetPaperFramebuffers();
+        // wetHeatmap FB 由 heatmap.js 统一建立别名，无需单独创建
 
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     }
@@ -416,6 +451,27 @@ class BaseWebGLPainter {
             this.lastBrushCanvas = brushCanvas;
         }
 
+        // 水彩模式：向 wetHeatmap 注热，同时走主混色 pass（mixbox_lerp 负责颜色，RAF 的 _applyWetColor 叠加湿纸效果）
+        if (isWatercolor) {
+            // 方向追踪：方向变化超过阈值时提升热度上限
+            const curAngle = Math.atan2(smearDir.y, smearDir.x);
+            if (this._wetHeatCap === undefined) {
+                this._wetHeatCap = WET_HEAT_CAP_STEP;
+                this._wetHeatBaseAngle = curAngle;
+            } else if (smearLen > 0) {
+                let angleDiff = Math.abs(curAngle - this._wetHeatBaseAngle);
+                if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
+                const threshRad = WET_HEAT_DIR_THRESHOLD_DEG * Math.PI / 180;
+                if (angleDiff > threshRad) {
+                    this._wetHeatCap = Math.min(1.0, this._wetHeatCap + WET_HEAT_CAP_STEP);
+                    this._wetHeatBaseAngle = curAngle;
+                }
+            }
+            this.updateWetHeatmap(x, y, size, brushCanvas, useFalloff, HEAT_ACCUMULATE_STEP * this.baseMixStrength);
+            this._wetSmearDir = smearDir;
+            this._wetSmearLen = smearLen;
+        }
+
         // 渲染前先把 canvas 完整同步到 temp，保证 temp 笔刷区域之外的像素正确
         // 注意：不能用 this.framebuffers.canvas（会随 swapTextures 轮换），
         // 必须用辅助 FB 直接绑定当前 textures.canvas 来读取。
@@ -458,11 +514,20 @@ class BaseWebGLPainter {
         gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeHeatmap);
         gl.uniform1i(this.locations.u_smudgeHeatmap, 4);
 
-        // 湿纸热度图绑定到 TEXTURE5，供水彩笔 shader 读取湿度
+        // 湿纸热度图绑定到 TEXTURE5（非水彩时传空纹理，shader 不使用）
         gl.activeTexture(gl.TEXTURE5);
         gl.bindTexture(gl.TEXTURE_2D, this.textures.wetHeatmap);
         gl.uniform1i(this.locations.u_wetHeatmap, 5);
-        gl.uniform1f(this.locations.u_isWatercolor, isWatercolor ? 1.0 : 0.0);
+        gl.activeTexture(gl.TEXTURE6);
+        gl.bindTexture(gl.TEXTURE_2D, this.textures.depositHeatmap);
+        gl.uniform1i(this.locations.u_depositHeatmap, 6);
+        gl.uniform1f(this.locations.u_isWatercolor,   isWatercolor ? 1.0 : 0.0);
+        gl.uniform1f(this.locations.u_wetSmudgeMix,   isWatercolor ? WET_SMUDGE_MIX   : 0.0);
+        gl.uniform1f(this.locations.u_wetDepositPeak, isWatercolor ? WET_DEPOSIT_PEAK  : 0.0);
+        gl.uniform1f(this.locations.u_wetBleedRadius, isWatercolor ? WET_BLEED_RADIUS  : 0.0);
+        gl.uniform1f(this.locations.u_wetBleedMix,    isWatercolor ? WET_BLEED_MIX     : 0.0);
+        gl.uniform1f(this.locations.u_wetColdMix,     isWatercolor ? WET_COLD_MIX      : 0.0);
+        gl.uniform1f(this.locations.u_wetSmearReach,  isWatercolor ? WET_SMEAR_REACH   : 0.0);
 
         const positions = new Float32Array([
             x - halfSize, y - halfSize,
@@ -483,11 +548,12 @@ class BaseWebGLPainter {
         this.swapTextures();
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
-        // 涂抹模式：每次 drawcall 后先更新热度图，再更新累积混色缓存
+        // 涂抹模式：每次 drawcall 后更新热度图
         if (u_isSmudge) {
             this.updateSmudgeHeatmap(x, y, size, brushCanvas, useFalloff, HEAT_ACCUMULATE_STEP);
         }
 
+        // 水彩 smudge 已内联进主 pass shader（u_wetSmudgeMix），无需额外 pass
 
         return { x: rx0, y: ry0, w: rw, h: rh };
     }

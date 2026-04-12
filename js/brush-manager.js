@@ -1,3 +1,12 @@
+// ─── 水彩笔刷纹理参数 ─────────────────────────────────────────────────────────
+const WC_DOT_COUNT      = 18;    // 点数
+const WC_DIST_RANGE     = 0.8;   // 点分布半径（相对笔刷size）
+const WC_DOT_SIZE_MIN   = 0.12;  // 点最小半径（相对size）
+const WC_DOT_SIZE_RANGE = 0.15;  // 点大小随机范围
+const WC_ALPHA_CENTER   = 0.9;   // 渐变中心 alpha
+const WC_ALPHA_MID      = 0.6;   // 渐变中间 alpha（stop=0.5）
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
  * 笔刷管理器
  * 管理笔刷预览和笔刷生成
@@ -43,16 +52,14 @@ class BrushManager {
                 break;
                 
             case 'watercolor':
-                ctx.globalAlpha = 0.6;
-                ctx.beginPath();
-                ctx.arc(x, y, size, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.globalAlpha = 0.3;
-                for (let i = 0; i < 3; i++) {
-                    const offsetX = (Math.random() - 0.5) * size * 0.5;
-                    const offsetY = (Math.random() - 0.5) * size * 0.5;
+                ctx.globalAlpha = 0.8;
+                for (let i = 0; i < 20; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const dotSize = size * (0.1 + Math.random() * 0.2);
+                    const maxDist = size * 0.9 - dotSize;
+                    const dist = Math.random() * maxDist;
                     ctx.beginPath();
-                    ctx.arc(x + offsetX, y + offsetY, size * 0.6, 0, Math.PI * 2);
+                    ctx.arc(x + Math.cos(angle) * dist, y + Math.sin(angle) * dist, dotSize, 0, Math.PI * 2);
                     ctx.fill();
                 }
                 ctx.globalAlpha = 1;
@@ -160,38 +167,21 @@ class BrushManager {
                     break;
                     
                 case 'watercolor': {
-                    // 边缘堆积水彩：逐像素环形 alpha，中心柔和、边缘堆积
-                    const wcData = ctx.createImageData(size * 2, size * 2);
-                    const wd = wcData.data;
-                    for (let py = 0; py < size * 2; py++) {
-                        for (let px = 0; px < size * 2; px++) {
-                            const dx = px - centerX;
-                            const dy = py - centerY;
-                            const dist = Math.sqrt(dx * dx + dy * dy) / (size * 0.92);
-                            if (dist > 1) continue;
-                            // 中心平缓（smoothstep），边缘快速堆积后收边
-                            const t = dist < 0.7
-                                ? dist * dist * (3 - 2 * dist) / (0.7 * 0.7 * (3 - 2 * 0.7))  // smoothstep 归一化到 0→1
-                                : (1 - dist) / 0.3;  // 边缘快速收边
-                            const alpha = 0.04 + t * t * 0.96;
-                            const idx = (py * size * 2 + px) * 4;
-                            wd[idx + 3] = Math.round(alpha * 255);
-                        }
-                    }
-                    ctx.putImageData(wcData, 0, 0);
-                    // 极少量边缘毛边，只贴在最外圈，不进入中间区域
-                    ctx.fillStyle = '#000';
-                    const edgeCount = 8;
-                    for (let i = 0; i < edgeCount; i++) {
-                        const angle = (Math.PI * 2 * i) / edgeCount + (i % 3) * 0.25;
-                        const r = size * (0.88 + (i % 3) * 0.015);
-                        const blobSize = size * 0.04;
-                        ctx.globalAlpha = 0.4 + (i % 2) * 0.2;
+                    for (let i = 0; i < WC_DOT_COUNT; i++) {
+                        const angle = Math.random() * Math.PI * 2;
+                        const dist = Math.sqrt(Math.random()) * size * WC_DIST_RANGE;
+                        const dotSize = size * (WC_DOT_SIZE_MIN + Math.random() * WC_DOT_SIZE_RANGE);
+                        const cx = centerX + Math.cos(angle) * dist;
+                        const cy = centerY + Math.sin(angle) * dist;
+                        const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, dotSize);
+                        grad.addColorStop(0,   `rgba(0,0,0,${WC_ALPHA_CENTER})`);
+                        grad.addColorStop(0.5, `rgba(0,0,0,${WC_ALPHA_MID})`);
+                        grad.addColorStop(1,   'rgba(0,0,0,0)');
+                        ctx.fillStyle = grad;
                         ctx.beginPath();
-                        ctx.arc(centerX + Math.cos(angle) * r, centerY + Math.sin(angle) * r, blobSize, 0, Math.PI * 2);
+                        ctx.arc(cx, cy, dotSize, 0, Math.PI * 2);
                         ctx.fill();
                     }
-                    ctx.globalAlpha = 1;
                     break;
                 }
                     
