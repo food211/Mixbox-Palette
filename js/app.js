@@ -16,6 +16,7 @@ let currentBrushColor = foregroundColor;
 let brushSize = 15;
 let brushSpacingRatio = 0.05;  // 笔刷工具间距系数
 let smudgeSpacingRatio = 0.05; // 涂抹工具间距系数
+let watercolorWetness = 50;    // 水彩湿度（1~100）
 let isDrawing = false;
 let isEyedropperMode = false;
 let currentBrush = { type: 'dry', image: null };
@@ -71,6 +72,7 @@ async function switchEngine(engine) {
     await painter.init();
     window._painter = painter;
     painter.setMixStrength(oldMixStrength);
+    painter.setWetness(watercolorWetness / 100);
     painter.setHeatmapDecayActive(currentTool === 'smudge');
     painter.startHeatmapFadeOut();
     painter.setWetPaperActive(currentTool === 'brush' && currentBrush.type === 'watercolor');
@@ -154,8 +156,9 @@ async function initApp() {
         }
         if (savedBrushSettings.brushSpacing != null) {
             brushSpacingRatio = savedBrushSettings.brushSpacing / 100;
-            if (brushSpacingSlider) brushSpacingSlider.value = savedBrushSettings.brushSpacing;
-            if (brushSpacingValue) brushSpacingValue.textContent = savedBrushSettings.brushSpacing;
+        }
+        if (savedBrushSettings.watercolorWetness != null) {
+            watercolorWetness = savedBrushSettings.watercolorWetness;
         }
         syncAllRangeThumbs();
         console.log('✅ 已加载保存的笔刷设置');
@@ -228,6 +231,7 @@ function saveBrushSettings() {
         brushSize: brushSize,
         mixStrength: parseInt(brushMixValue.textContent),
         brushSpacing: Math.round(brushSpacingRatio * 100),
+        watercolorWetness,
     });
     paletteStorage.saveAppSettings({ smudgeBrushSize, smudgeStrength, smudgeBrushType });
 }
@@ -282,8 +286,10 @@ async function initCanvas() {
             saveState();
         }
 
+        painter.setWetness(watercolorWetness / 100);
         updateColorDisplay();
         updateBrushPreview();
+        updateSpacingSliderMode();
 
         console.log('✅ 混色引擎初始化完成:', currentEngine);
     } catch (error) {
@@ -414,6 +420,37 @@ function updateColorPicker() {
  * 绑定事件
  */
 /**
+ * 根据当前笔刷类型切换 spacing 滑条的语义：
+ *   水彩笔 → 湿度模式（1~100，当前 watercolorWetness）
+ *   其他笔 → 间距模式（原有行为）
+ */
+function updateSpacingSliderMode() {
+    const label = document.querySelector('.label-spacing');
+    const isWatercolor = currentBrush.type === 'watercolor' && currentTool === 'brush';
+
+    if (isWatercolor) {
+        if (label) {
+            label.dataset.i18n = 'brushWetness';
+            label.dataset.i18nTitle = 'brushWetnessTitle';
+            label.title = t('brushWetnessTitle');
+            label.textContent = t('brushWetness');
+        }
+        if (brushSpacingSlider) brushSpacingSlider.value = watercolorWetness;
+        if (brushSpacingValue) brushSpacingValue.textContent = watercolorWetness;
+    } else {
+        if (label) {
+            label.dataset.i18n = 'brushSpacing';
+            label.dataset.i18nTitle = 'brushSpacingTitle';
+            label.title = t('brushSpacingTitle');
+            label.textContent = t('brushSpacing');
+        }
+        if (brushSpacingSlider) brushSpacingSlider.value = Math.round(brushSpacingRatio * 100);
+        if (brushSpacingValue) brushSpacingValue.textContent = Math.round(brushSpacingRatio * 100);
+    }
+    syncAllRangeThumbs();
+}
+
+/**
  * 初始化自定义滑条，用 pointer events 接管拖动，绕开 Windows Ink 延迟
  */
 function syncAllRangeThumbs() {
@@ -496,8 +533,12 @@ function bindEvents() {
         brushSpacingValue.textContent = value;
 
         if (currentTool === 'smudge') {
-            smudgeSpacingRatio = value / 100;  // ← 涂抹工具更新自己的变量
+            smudgeSpacingRatio = value / 100;
             paletteStorage.saveAppSettings({ smudgeBrushSize, smudgeStrength, smudgeBrushType, smudgeSpacing: value });
+        } else if (currentBrush.type === 'watercolor') {
+            watercolorWetness = value;
+            if (painter) painter.setWetness(value / 100);
+            saveBrushSettings();
         } else {
             brushSpacingRatio = value / 100;
             saveBrushSettings();
@@ -567,7 +608,7 @@ function bindEvents() {
             if (painter) painter.setMixStrength(mixSliderToStrength(smudgeStrength));
             brushSpacingSlider.value = Math.round(smudgeSpacingRatio * 100);
             brushSpacingValue.textContent = Math.round(smudgeSpacingRatio * 100);
-            syncAllRangeThumbs();
+            updateSpacingSliderMode();
             if (painter) painter.setHeatmapDecayActive(true);
             if (painter) painter.setWetPaperActive(false);
             console.log('✅ 切换到涂抹工具');
@@ -599,11 +640,9 @@ function bindEvents() {
                 painter.setMixStrength(mixSliderToStrength(savedBrushSettings.mixStrength));
                 if (savedBrushSettings.brushSpacing != null) {
                     brushSpacingRatio = savedBrushSettings.brushSpacing / 100;
-                    brushSpacingSlider.value = savedBrushSettings.brushSpacing;
-                    brushSpacingValue.textContent = savedBrushSettings.brushSpacing;
                 }
             }
-            syncAllRangeThumbs();
+            updateSpacingSliderMode();
             if (painter) painter.setWetPaperActive(currentBrush.type === 'watercolor');
             console.log('✅ 切换回笔刷工具');
         }
@@ -1263,6 +1302,7 @@ function initBrushSelector() {
             updateBrushPreview();
             brushModal.classList.remove('active');
             saveBrushSettings(); // 保存笔刷设置
+            updateSpacingSliderMode();
             if (painter) painter.setWetPaperActive(currentTool === 'brush' && brush.type === 'watercolor');
         });
         

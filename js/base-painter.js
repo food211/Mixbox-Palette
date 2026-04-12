@@ -1,77 +1,4 @@
-// ─── 热度图参数 ───────────────────────────────────────────────────────────────
-
-/** 每次涂抹 drawcall 叠加的热度量（0~1）。值越大升温越快，约 1/HEAT_ACCUMULATE_STEP 次到顶 */
-const HEAT_ACCUMULATE_STEP = 0.08;
-const DEPOSITE_HEAT_ACCUMULATE_STEP = 0.12; // 交界沉积热度叠加量（相对 HEAT_ACCUMULATE_STEP 的比例）
-
-/** 每帧衰减的热度量（0~1）。值越大降温越快 */
-const HEAT_DECAY_STEP = 0.02;
-
-// ─── 混色参数 ─────────────────────────────────────────────────────────────────
-
-/** 混色强度默认值（0~1），对应 UI 滑块初始位置 */
-const DEFAULT_MIX_STRENGTH = 0.5;
-
-// ─── GPU 历史池参数 ───────────────────────────────────────────────────────────
-
-/** GPU 显存预算估算（MB）：假设可用总量 */
-const GPU_BUDGET_MB = 200;
-
-/** GPU 运行时基础占用估算（MB），从预算中扣除 */
-const GPU_RUNTIME_OVERHEAD_MB = 20;
-
-/** GPU 历史纹理槽上限（受显存预算限制，不超过此值） */
-const GPU_SLOTS_MAX = 50;
-
-/** GPU 历史纹理槽下限（显存极小时保底） */
-const GPU_SLOTS_MIN = 10;
-
-/** 历史帧数组超出 GPU slot 上限多少帧后开始驱逐最老帧 */
-const HISTORY_OVERFLOW_BUFFER = 5;
-
-// ─── 异步任务超时 ─────────────────────────────────────────────────────────────
-
-/** requestIdleCallback 强制超时（ms）：CPU 历史备份任务 */
-const IDLE_BACKUP_TIMEOUT_MS = 5000;
-
-/** setTimeout 回退延迟（ms）：不支持 requestIdleCallback 时的 CPU 历史备份 */
-const IDLE_BACKUP_FALLBACK_MS = 200;
-
-/** requestIdleCallback 强制超时（ms）：画布 idle 保存任务 */
-const IDLE_SAVE_TIMEOUT_MS = 3000;
-
-/** setTimeout 回退延迟（ms）：不支持 requestIdleCallback 时的画布保存 */
-const IDLE_SAVE_FALLBACK_MS = 100;
-
-// ─── 水彩热度方向分段参数 ─────────────────────────────────────────────────────
-
-/** 方向变化超过此角度（度）才触发热度上限提升 */
-const WET_HEAT_DIR_THRESHOLD_DEG = 30;
-
-/** 每次方向突破后热度上限提升量 */
-const WET_HEAT_CAP_STEP = 0.25;
-
-// ─── 水彩效果参数 ─────────────────────────────────────────────────────────────
-
-/** 边缘堆积抛物线系数：heat*(1-heat)*N，N=4时heat=0.5峰值=1 */
-const WET_DEPOSIT_PEAK  = 4.0;
-
-/** 晕染偏移半径（相对笔刷半径的比例） */
-const WET_BLEED_RADIUS  = 0.3;
-
-/** 晕染混合强度（热区颜色向外渗出的比例） */
-const WET_BLEED_MIX     = 0.4;
-
-/** 冷区基础混色强度（相对 baseMixStrength 的比例） */
-const WET_COLD_MIX      = 0.25;
-
-/** smudge 采样距离系数（相对 smearLen/brushRadius） */
-const WET_SMEAR_REACH   = 0.8;
-
-/** 水彩 smudge 推色强度 */
-const WET_SMUDGE_MIX    = 0.38;
-
-// ─────────────────────────────────────────────────────────────────────────────
+// 所有渲染参数常数见 js/params.js
 
 /**
  * BaseWebGLPainter — 共享 WebGL 基类
@@ -396,6 +323,17 @@ class BaseWebGLPainter {
     }
 
     /**
+     * 设置水彩湿度（0~1）。
+     * 控制每笔热度上限的基础值：1.0 = 最湿，0.0 = 最干（仍保留 WET_HEAT_CAP_STEP 下限）。
+     */
+    setWetness(wetness) {
+        const w = Math.max(0, Math.min(1, wetness));
+        this._wetness = w;
+        // 映射到 [WET_HEAT_CAP_STEP, 1.0]，避免完全干燥时失去水彩感
+        this._wetHeatCapBase = WET_HEAT_CAP_STEP + (1.0 - WET_HEAT_CAP_STEP) * w;
+    }
+
+    /**
      * 落笔时调用：把当前 canvas 纹理复制到 smudgeSnapshot，
      * 涂抹期间 shader 从此快照采样，避免颜色被反复稀释变灰。
      * 同时清零热度图，让新笔从热度 0 开始累积。
@@ -457,7 +395,7 @@ class BaseWebGLPainter {
             // 方向追踪：方向变化超过阈值时提升热度上限
             const curAngle = Math.atan2(smearDir.y, smearDir.x);
             if (this._wetHeatCap === undefined) {
-                this._wetHeatCap = WET_HEAT_CAP_STEP;
+                this._wetHeatCap = this._wetHeatCapBase ?? WET_HEAT_CAP_STEP;
                 this._wetHeatBaseAngle = curAngle;
             } else if (smearLen > 0) {
                 let angleDiff = Math.abs(curAngle - this._wetHeatBaseAngle);
@@ -522,12 +460,17 @@ class BaseWebGLPainter {
         gl.activeTexture(gl.TEXTURE6);
         gl.bindTexture(gl.TEXTURE_2D, this.textures.depositHeatmap);
         gl.uniform1i(this.locations.u_depositHeatmap, 6);
+        // wet低→颜料浓（coldMix高）；wet高→晕染强（bleedMix/bleedRadius高）
+        const w = this._wetness ?? 0.5;
+        const wetBleedMix    = WET_BLEED_MIX    * (WET_BLEED_SCALE_MIN + (WET_BLEED_SCALE_MAX - WET_BLEED_SCALE_MIN) * w);
+        const wetBleedRadius = WET_BLEED_RADIUS * (WET_BLEED_SCALE_MIN + (WET_BLEED_SCALE_MAX - WET_BLEED_SCALE_MIN) * w);
+        const wetColdMix     = WET_COLD_MIX     * (WET_COLD_SCALE_MAX  + (WET_COLD_SCALE_MIN  - WET_COLD_SCALE_MAX)  * w);
         gl.uniform1f(this.locations.u_isWatercolor,   isWatercolor ? 1.0 : 0.0);
         gl.uniform1f(this.locations.u_wetSmudgeMix,   isWatercolor ? WET_SMUDGE_MIX   : 0.0);
         gl.uniform1f(this.locations.u_wetDepositPeak, isWatercolor ? WET_DEPOSIT_PEAK  : 0.0);
-        gl.uniform1f(this.locations.u_wetBleedRadius, isWatercolor ? WET_BLEED_RADIUS  : 0.0);
-        gl.uniform1f(this.locations.u_wetBleedMix,    isWatercolor ? WET_BLEED_MIX     : 0.0);
-        gl.uniform1f(this.locations.u_wetColdMix,     isWatercolor ? WET_COLD_MIX      : 0.0);
+        gl.uniform1f(this.locations.u_wetBleedRadius, isWatercolor ? wetBleedRadius    : 0.0);
+        gl.uniform1f(this.locations.u_wetBleedMix,    isWatercolor ? wetBleedMix       : 0.0);
+        gl.uniform1f(this.locations.u_wetColdMix,     isWatercolor ? wetColdMix        : 0.0);
         gl.uniform1f(this.locations.u_wetSmearReach,  isWatercolor ? WET_SMEAR_REACH   : 0.0);
 
         const positions = new Float32Array([

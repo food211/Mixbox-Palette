@@ -309,8 +309,11 @@ class KMWebGLPainter extends BaseWebGLPainter {
 
             vec3 finalColor;
             if (u_isWatercolor > 0.5) {
+                // KM 光谱混色比 MB 更饱和，水彩混色强度映射到原滑条50%的表现（0.30/0.85≈0.353）
+                float wcMixStr = u_baseMixStrength * 0.353;
+
                 // ── 冷区：稀释混色 + smudge 推色 ──
-                float coldPaint = maskCold * u_baseMixStrength * u_wetColdMix;
+                float coldPaint = maskCold * wcMixStr * u_wetColdMix;
                 vec3 coldResult = km_mix(canvasColor.rgb, activeColor, aBrush * coldPaint);
                 float smearReach = clamp(u_smearLen, 1.0, u_brushRadius) * u_wetSmearReach;
                 vec2 smearUV = (v_canvasCoord - u_smearDir * smearReach) / u_resolution;
@@ -320,7 +323,7 @@ class KMWebGLPainter extends BaseWebGLPainter {
                 vec3 coldOut = km_mix(coldResult, smearRGB, aBrush * u_wetSmudgeMix * maskCold);
 
                 // ── 热区：稀释晕染 ──
-                float hotPaint = maskHot * u_baseMixStrength * u_wetBleedMix;
+                float hotPaint = maskHot * wcMixStr * u_wetBleedMix;
                 vec3 hotOut = km_mix(canvasColor.rgb, activeColor, aBrush * hotPaint);
 
                 // ── 两路叠加（沉积区在松开时单独处理）──
