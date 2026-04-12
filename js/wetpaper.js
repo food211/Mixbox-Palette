@@ -275,14 +275,14 @@ function _initWetColorProgram() {
 
             vec4 canvas = texture2D(u_canvas, v_uv);
 
-            // ── 效果1：梯度区颜料沉积 ──
+            // ── 效果1：梯度区颜料沉积（不受浓度影响）──
             float depositMask = smoothstep(u_depositGradMin, u_depositGradMax, grad);
-            float depositAmt  = depositMask * u_depositStr * u_mixStrength;
+            float depositAmt  = depositMask * u_depositStr;
             vec3 deposited = mix(canvas.rgb, u_color, depositAmt);
 
             // ── 效果2：高热区稀释（往画布色与笔刷色的中间色偏移）──
             float diluteMask = heat * (1.0 - smoothstep(0.1, u_diluteGradSuppress, grad));
-            float diluteAmt  = diluteMask * u_diluteStr;
+            float diluteAmt  = diluteMask * u_diluteStr * u_mixStrength;
             vec3 diluteTarget = mix(canvas.rgb, u_color, 0.5);
             vec3 outRGB = mix(deposited, diluteTarget, diluteAmt);
 

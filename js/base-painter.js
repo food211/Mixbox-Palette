@@ -2,6 +2,7 @@
 
 /** 每次涂抹 drawcall 叠加的热度量（0~1）。值越大升温越快，约 1/HEAT_ACCUMULATE_STEP 次到顶 */
 const HEAT_ACCUMULATE_STEP = 0.08;
+const DEPOSITE_HEAT_ACCUMULATE_STEP = 0.12; // 交界沉积热度叠加量（相对 HEAT_ACCUMULATE_STEP 的比例）
 
 /** 每帧衰减的热度量（0~1）。值越大降温越快 */
 const HEAT_DECAY_STEP = 0.02;
@@ -589,6 +590,7 @@ class BaseWebGLPainter {
         // 调试：热度图 / 湿纸 overlay（互斥，各自检查自己的 flag）
         if (this._debugHeatmapEnabled)  this._flushDebugHeatmap(this._debugHeatOpacity ?? 1.0);
         if (this._debugWetPaperEnabled) this._flushDebugWetPaper(this._debugHeatOpacity ?? 1.0);
+        if (this._debugDepositHeatmapEnabled) this._flushDebugDepositHeatmap(this._debugHeatOpacity ?? 1.0);
     }
 
     swapTextures() {

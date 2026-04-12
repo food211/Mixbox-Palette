@@ -1,10 +1,10 @@
 // ─── 水彩笔刷纹理参数 ─────────────────────────────────────────────────────────
-const WC_DOT_COUNT      = 18;    // 点数
+const WC_DOT_COUNT      = 23;    // 点数
 const WC_DIST_RANGE     = 0.8;   // 点分布半径（相对笔刷size）
 const WC_DOT_SIZE_MIN   = 0.12;  // 点最小半径（相对size）
-const WC_DOT_SIZE_RANGE = 0.15;  // 点大小随机范围
-const WC_ALPHA_CENTER   = 0.9;   // 渐变中心 alpha
-const WC_ALPHA_MID      = 0.6;   // 渐变中间 alpha（stop=0.5）
+const WC_DOT_SIZE_RANGE = 0.18;  // 点大小随机范围
+const WC_ALPHA_CENTER   = 0.5;   // 渐变中心 alpha
+const WC_ALPHA_MID      = 0.3;   // 渐变中间 alpha（stop=0.5）
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**

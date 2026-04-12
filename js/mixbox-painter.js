@@ -49,6 +49,8 @@ class MixboxWebGLPainter extends BaseWebGLPainter {
         uniform float u_wetColdMix;
         uniform float u_wetSmearReach;
 
+        const float maxHotWeight = 0.25;
+
         ${mixbox.glsl()}
 
         // 13点环形采样，从实时画布采样（搅动效果）
@@ -149,10 +151,18 @@ class MixboxWebGLPainter extends BaseWebGLPainter {
             vec2 wetUV = v_canvasCoord / u_resolution;
             wetUV.y = 1.0 - wetUV.y;
             float wetness = (u_isWatercolor > 0.5) ? texture2D(u_wetHeatmap, wetUV).r : 0.0;
+            
+            // 同向绘制时限制湿度上限为0.25，避免浓度过高
+            const float maxWetnessLimit = 0.25;
+            wetness = min(wetness, maxWetnessLimit);
 
             // 三个蒙版：冷区 / 交界沉积 / 热区
             float maskCold    = 1.0 - smoothstep(0.0, 0.4, wetness);
-            float maskDeposit = (u_isWatercolor > 0.5) ? texture2D(u_depositHeatmap, wetUV).r : 0.0;
+            // 浓度微弱影响宽度：浓度低时阈值高（边缘更窄），浓度高时更宽
+            // 阈值范围 0.55~0.45，变化量极小
+            float depositThresh = mix(0.55, 0.45, u_baseMixStrength);
+            float depositRaw = (u_isWatercolor > 0.5) ? texture2D(u_depositHeatmap, wetUV).r : 0.0;
+            float maskDeposit = smoothstep(depositThresh, depositThresh + 0.2, depositRaw);
             float maskHot     = smoothstep(0.6, 1.0, wetness);
 
             if (u_isWatercolor > 0.5) {
