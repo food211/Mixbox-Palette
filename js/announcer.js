@@ -98,6 +98,7 @@ const Announcer = {
         // 版本信息标签（本地数据，立即可用）
         const appVer  = Updater.CURRENT_VERSION;
         const hostVer = (typeof getHostVersion === 'function') ? getHostVersion() : null;
+        // Service Worker 版本（通过缓存名称解析，格式为 km-palette-v{version}）
         const swVer   = await caches.keys().then(keys => {
             const name = keys.find(k => k.startsWith('km-palette'));
             if (!name) return '—';
@@ -105,11 +106,23 @@ const Announcer = {
             return m ? m[1] : name;
         }).catch(() => '—');
 
-        const buildTags = (appVerStr) => [
-            `${t('versionTagApp')}: ${appVerStr}`,
-            ...(hostVer ? [`${t('versionTagHost')}: ${hostVer}`] : []),
-            `${t('versionTagCache')}: ${swVer}`,
-        ];
+        const buildTags = (appVerStr) => {
+        // 检查是否有箭头，表示有更新版本
+        if (appVerStr.includes('→')) {
+            const [currentVer, targetVer] = appVerStr.split('→').map(v => v.trim());
+            return [
+                `${t('versionTagApp')}: ${currentVer} → <span style="color:#6abf6a">${targetVer}</span>`,
+                ...(hostVer ? [`${t('versionTagHost')}: ${hostVer}`] : []),
+                `${t('versionTagCache')}: ${swVer}`,
+            ];
+            } else {
+                return [
+                    `${t('versionTagApp')}: ${appVerStr}`,
+                    ...(hostVer ? [`${t('versionTagHost')}: ${hostVer}`] : []),
+                    `${t('versionTagCache')}: ${swVer}`,
+                ];
+            }
+        };
 
         let currentTags = buildTags(appVer);
         versionInfo.innerHTML = currentTags.map(tag =>

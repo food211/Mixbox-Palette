@@ -1,5 +1,14 @@
 # 更新日志 / Changelog
 
+== V1.3.5a ==
+[ZH]
+### 优化
+- **新增2款色板** — 温莎牛顿 Designers Gouache, 伦勃朗 Rembrandt 油画 16色
+
+[EN]
+### Improvement
+- **New Color Palettes** - Winsor & Newton Designers Gouache Mix, Rembrandt Oil 16
+
 == V1.3.5 ==
 [ZH]
 ### 优化
