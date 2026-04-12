@@ -39,6 +39,8 @@ class MixboxWebGLPainter extends BaseWebGLPainter {
         uniform float u_smudgeAngle;
         uniform float u_smudgeMix;
         uniform sampler2D u_smudgeHeatmap;
+        uniform sampler2D u_wetHeatmap;
+        uniform float u_isWatercolor;
 
         ${mixbox.glsl()}
 
@@ -128,6 +130,26 @@ class MixboxWebGLPainter extends BaseWebGLPainter {
                 heatUV.y = 1.0 - heatUV.y;
                 float heat = texture2D(u_smudgeHeatmap, heatUV).r;
                 effectiveMixStrength = mix(0.01, u_baseMixStrength, heat);
+            }
+
+            // 水彩笔：读取湿纸热度，影响混色行为
+            vec2 wetUV = v_canvasCoord / u_resolution;
+            wetUV.y = 1.0 - wetUV.y;
+            float wetness = (u_isWatercolor > 0.5) ? texture2D(u_wetHeatmap, wetUV).r : 0.0;
+
+            if (u_isWatercolor > 0.5) {
+                // 湿区抑制新颜料（越湿越难上色）
+                effectiveMixStrength *= (1.0 - wetness * 0.85);
+
+                // 湿区晕染：在湿度高的地方，采样位置向外偏移，颜色往外渗
+                float bleedRadius = wetness * u_brushRadius * 0.3;
+                vec2 bleedDir = normalize(v_canvasCoord - u_currentPosition + vec2(0.001));
+                vec2 bleedUV = (v_canvasCoord + bleedDir * bleedRadius) / u_resolution;
+                bleedUV.y = 1.0 - bleedUV.y;
+                bleedUV = clamp(bleedUV, 0.0, 1.0);
+                vec4 bleedSample = texture2D(u_canvasTexture, bleedUV);
+                // 湿度高时，canvasColor 混入周围渗出的颜色
+                canvasColor = mix(canvasColor, bleedSample, wetness * 0.4);
             }
 
             vec3 outRGB;

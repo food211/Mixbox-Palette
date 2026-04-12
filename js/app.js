@@ -1625,7 +1625,7 @@ function drawBrush(x, y, color, prevX = x, prevY = y, pressure = 1.0) {
         smearDir,
         dist,
         false, 1.0, false, 0, 0,
-        brushRotation,
+        brushRotation, 0, isWatercolor,
     );
 
     // 水彩笔：向热度图注入热度，供湿纸 RAF 读取
