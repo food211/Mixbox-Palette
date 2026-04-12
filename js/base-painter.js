@@ -1,3 +1,49 @@
+// ─── 热度图参数 ───────────────────────────────────────────────────────────────
+
+/** 每次涂抹 drawcall 叠加的热度量（0~1）。值越大升温越快，约 1/HEAT_ACCUMULATE_STEP 次到顶 */
+const HEAT_ACCUMULATE_STEP = 0.08;
+
+/** 每帧衰减的热度量（0~1）。值越大降温越快 */
+const HEAT_DECAY_STEP = 0.01;
+
+// ─── 混色参数 ─────────────────────────────────────────────────────────────────
+
+/** 混色强度默认值（0~1），对应 UI 滑块初始位置 */
+const DEFAULT_MIX_STRENGTH = 0.2;
+
+// ─── GPU 历史池参数 ───────────────────────────────────────────────────────────
+
+/** GPU 显存预算估算（MB）：假设可用总量 */
+const GPU_BUDGET_MB = 200;
+
+/** GPU 运行时基础占用估算（MB），从预算中扣除 */
+const GPU_RUNTIME_OVERHEAD_MB = 20;
+
+/** GPU 历史纹理槽上限（受显存预算限制，不超过此值） */
+const GPU_SLOTS_MAX = 50;
+
+/** GPU 历史纹理槽下限（显存极小时保底） */
+const GPU_SLOTS_MIN = 10;
+
+/** 历史帧数组超出 GPU slot 上限多少帧后开始驱逐最老帧 */
+const HISTORY_OVERFLOW_BUFFER = 5;
+
+// ─── 异步任务超时 ─────────────────────────────────────────────────────────────
+
+/** requestIdleCallback 强制超时（ms）：CPU 历史备份任务 */
+const IDLE_BACKUP_TIMEOUT_MS = 5000;
+
+/** setTimeout 回退延迟（ms）：不支持 requestIdleCallback 时的 CPU 历史备份 */
+const IDLE_BACKUP_FALLBACK_MS = 200;
+
+/** requestIdleCallback 强制超时（ms）：画布 idle 保存任务 */
+const IDLE_SAVE_TIMEOUT_MS = 3000;
+
+/** setTimeout 回退延迟（ms）：不支持 requestIdleCallback 时的画布保存 */
+const IDLE_SAVE_FALLBACK_MS = 100;
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
  * BaseWebGLPainter — 共享 WebGL 基类
  *
@@ -24,13 +70,13 @@ class BaseWebGLPainter {
         this.locations = {};
         this.currentBrushTexture = null;
 
-        this.baseMixStrength = 0.2;
+        this.baseMixStrength = DEFAULT_MIX_STRENGTH;
 
         // GPU 历史池
         this._history = [];          // HistoryFrame[]
         this._historyStep = -1;      // 当前指针
         this._frameCounter = 0;      // 单调递增帧 ID
-        this._maxGpuSlots = 50;      // init 后由 _calcGpuBudget 设定
+        this._maxGpuSlots = GPU_SLOTS_MAX;  // init 后由 _calcGpuBudget 设定
         this._gpuFreeSlots = [];     // 可用 GPU slot 对象 { tex, fb }
         this._engineBirthTime = performance.now();
 
@@ -96,9 +142,8 @@ class BaseWebGLPainter {
 
     _calcGpuBudget() {
         const bytesPerFrame = this.canvas.width * this.canvas.height * 4;
-        // 保守估计：200MB 可用显存，减去运行时约 20MB
-        const budgetBytes = (200 - 20) * 1024 * 1024;
-        this._maxGpuSlots = Math.min(50, Math.max(10, Math.floor(budgetBytes / bytesPerFrame)));
+        const budgetBytes = (GPU_BUDGET_MB - GPU_RUNTIME_OVERHEAD_MB) * 1024 * 1024;
+        this._maxGpuSlots = Math.min(GPU_SLOTS_MAX, Math.max(GPU_SLOTS_MIN, Math.floor(budgetBytes / bytesPerFrame)));
     }
 
     // ─────────────────────────────────────────────
@@ -429,7 +474,7 @@ class BaseWebGLPainter {
 
         // 涂抹模式：每次 drawcall 后先更新热度图，再更新累积混色缓存
         if (u_isSmudge) {
-            this.updateSmudgeHeatmap(x, y, size, brushCanvas, useFalloff, 0.1);
+            this.updateSmudgeHeatmap(x, y, size, brushCanvas, useFalloff, HEAT_ACCUMULATE_STEP);
         }
 
 
@@ -721,7 +766,7 @@ class BaseWebGLPainter {
         this._history.push(frame);
 
         // 超出上限时移除最老帧
-        if (this._history.length > this._maxGpuSlots + 5) {
+        if (this._history.length > this._maxGpuSlots + HISTORY_OVERFLOW_BUFFER) {
             const oldest = this._history.shift();
             this._releaseFrame(oldest);
         }
@@ -802,10 +847,10 @@ class BaseWebGLPainter {
         };
 
         if (typeof requestIdleCallback !== 'undefined') {
-            const handle = requestIdleCallback(doBackup, { timeout: 5000 });
+            const handle = requestIdleCallback(doBackup, { timeout: IDLE_BACKUP_TIMEOUT_MS });
             this._pendingIdle.set(frame.id, { type: 'idle', handle });
         } else {
-            const handle = setTimeout(doBackup, 200);
+            const handle = setTimeout(doBackup, IDLE_BACKUP_FALLBACK_MS);
             this._pendingIdle.set(frame.id, { type: 'timeout', handle });
         }
     }
@@ -835,9 +880,9 @@ class BaseWebGLPainter {
      */
     scheduleIdleSave(callback) {
         if (typeof requestIdleCallback !== 'undefined') {
-            requestIdleCallback(callback, { timeout: 3000 });
+            requestIdleCallback(callback, { timeout: IDLE_SAVE_TIMEOUT_MS });
         } else {
-            setTimeout(callback, 100);
+            setTimeout(callback, IDLE_SAVE_FALLBACK_MS);
         }
     }
 

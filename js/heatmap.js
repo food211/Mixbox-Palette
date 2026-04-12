@@ -126,7 +126,7 @@ function _initHeatmapProgram() {
  * 在笔刷覆盖区域更新热度图（每次涂抹 drawcall 后调用）
  * heatStep：每步叠加量，约 0.05 → 约 20 次 drawcall 到顶（约 4 次完整覆盖）
  */
-function updateSmudgeHeatmap(x, y, size, brushCanvas, useFalloff, heatStep = 0.05) {
+function updateSmudgeHeatmap(x, y, size, brushCanvas, useFalloff, heatStep = HEAT_ACCUMULATE_STEP) {
     const gl = this.gl;
     const cw = this.canvas.width;
     const ch = this.canvas.height;
@@ -389,7 +389,7 @@ function startHeatmapFadeOut() {
     if (this._fadeRafId) return;
 
     const painter = this;
-    const STEP = 0.01;
+    const STEP = HEAT_DECAY_STEP; // 见 base-painter.js 顶部常量
 
     function tick() {
         painter._decayHeatmap(STEP);
