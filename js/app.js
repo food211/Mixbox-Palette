@@ -73,6 +73,7 @@ async function switchEngine(engine) {
     painter.setMixStrength(oldMixStrength);
     painter.setHeatmapDecayActive(currentTool === 'smudge');
     painter.startHeatmapFadeOut();
+    painter.setWetPaperActive(currentTool === 'brush' && currentBrush.type === 'watercolor');
     currentEngine = engine;
     localStorage.setItem('mixbox_engine', engine);
 
@@ -568,6 +569,7 @@ function bindEvents() {
             brushSpacingValue.textContent = Math.round(smudgeSpacingRatio * 100);
             syncAllRangeThumbs();
             if (painter) painter.setHeatmapDecayActive(true);
+            if (painter) painter.setWetPaperActive(false);
             console.log('✅ 切换到涂抹工具');
         } else {
             // 切换回笔刷工具：保存涂抹工具设置
@@ -602,6 +604,7 @@ function bindEvents() {
                 }
             }
             syncAllRangeThumbs();
+            if (painter) painter.setWetPaperActive(currentBrush.type === 'watercolor');
             console.log('✅ 切换回笔刷工具');
         }
     });
@@ -1260,6 +1263,7 @@ function initBrushSelector() {
             updateBrushPreview();
             brushModal.classList.remove('active');
             saveBrushSettings(); // 保存笔刷设置
+            if (painter) painter.setWetPaperActive(currentTool === 'brush' && brush.type === 'watercolor');
         });
         
         brushGrid.appendChild(option);
@@ -1459,7 +1463,7 @@ function addStrokePoint(x, y, extra = {}) {
  */
 function endStroke() {
     if (currentStroke && currentStroke.points.length > 0) {
-        if (currentStroke.type === 'smudge' && painter) painter.startHeatmapFadeOut();
+        if (painter) painter.startHeatmapFadeOut();
         pushSnapshot();
         smudgeSnapshotCache = null;
         currentStroke = null;
@@ -1623,6 +1627,11 @@ function drawBrush(x, y, color, prevX = x, prevY = y, pressure = 1.0) {
         false, 1.0, false, 0, 0,
         brushRotation,
     );
+
+    // 水彩笔：向热度图注入热度，供湿纸 RAF 读取
+    if (isWatercolor) {
+        painter.updateSmudgeHeatmap(x, y, effectiveSize * 2, brushCanvas, isSoftBrush);
+    }
 
     return dirtyRect;
 }
