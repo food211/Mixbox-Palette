@@ -52,6 +52,30 @@ const Updater = {
             .join('');
     },
 
+        /**
+     * 创建一个带超时的 fetch 请求
+     * @param {number} timeout - 超时时间（毫秒）
+     */
+    async _fetchWithTimeout(url, options = {}, timeout = 5000) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeout);
+        
+        try {
+            const response = await fetch(url, {
+                ...options,
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            return response;
+        } catch (error) {
+            clearTimeout(timeoutId);
+            if (error.name === 'AbortError') {
+                throw new Error('请求超时');
+            }
+            throw error;
+        }
+    },
+
     /**
      * 自动检查更新。
      * 返回需要展示的更新数据 { version, contentZH, contentEN }，
@@ -59,8 +83,8 @@ const Updater = {
      */
     async check() {
         try {
-            const res = await fetch(this.CHANGELOG_URL, { cache: 'no-store' });
-            if (!res.ok) return null;
+            const res = await this._fetchWithTimeout(this.CHANGELOG_URL, { cache: 'no-store' });
+            if (!res.ok) return { error: true }; // ← 区分失败
             const text = await res.text();
             const parsed = this._parseChangelog(text);
             if (!parsed) return null;
@@ -69,25 +93,25 @@ const Updater = {
             if (dismissed === parsed.version) return null;
             return parsed;
         } catch (e) {
-            return null;
+            return { error: true, timeout: e.message === '请求超时' }; // ← 区分超时和其他错误
         }
     },
 
     /**
      * 手动触发检查（版本号点击）。
-     * 返回更新数据，或 null（已是最新 / 网络失败）。
-     * 网络失败时返回特殊标记 'open-changelog'，由 Announcer 决定打开页面。
+     * 返回更新数据，（已是最新 / 网络失败）。
+     * 网络失败时返回特殊标记
      */
     async checkAndFetch() {
         try {
-            const res = await fetch(this.CHANGELOG_URL, { cache: 'no-store' });
-            if (!res.ok) return 'open-changelog';
+            const res = await this._fetchWithTimeout(this.CHANGELOG_URL, { cache: 'no-store' });
+            if (!res.ok) return { error: true };
             const text = await res.text();
             const parsed = this._parseChangelog(text);
-            if (!parsed || parsed.version === this.CURRENT_VERSION) return 'open-changelog';
+            if (!parsed || parsed.version === this.CURRENT_VERSION) return null; // 真正的"已最新"
             return parsed;
         } catch (e) {
-            return 'open-changelog';
+            return { error: true, timeout: e.message === '请求超时' }; // ← 区分超时和其他错误
         }
     },
 };
