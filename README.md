@@ -60,7 +60,7 @@ The plugin UI and mixing engine are hosted remotely (Cloudflare Pages, with GitH
 
 ### From Adobe Marketplace
 
-1. Visit [KM Watercolor Palette on Adobe Marketplace](https://exchange.adobe.com/apps/cc/cc9344fb/mixbox-watercolor-palette)
+1. Visit [MixBox Watercolor Palette on Adobe Marketplace](https://exchange.adobe.com/apps/cc/cc9344fb/mixbox-watercolor-palette)
 2. Install and open from Photoshop `Plugins` menu
 
 ### From Release (.ccx)
@@ -170,7 +170,7 @@ Adobe Photoshop UXP 调色板插件，内置双混色引擎，模拟真实颜料
 
 ### 通过 Adobe Marketplace
 
-1. 访问 [KM Watercolor Palette - Adobe Marketplace](https://exchange.adobe.com/apps/cc/cc9344fb/mixbox-watercolor-palette)
+1. 访问 [MixBox Watercolor Palette - Adobe Marketplace](https://exchange.adobe.com/apps/cc/cc9344fb/mixbox-watercolor-palette)
 2. 安装后从 Photoshop `插件` 菜单打开
 
 ### 从 Release 下载 (.ccx)
