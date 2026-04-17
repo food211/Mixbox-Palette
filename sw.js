@@ -1,7 +1,7 @@
 /**
  * Service Worker - KM Watercolor Palette 离线缓存
  */
-const CACHE_NAME = 'km-palette-v74';
+const CACHE_NAME = 'km-palette-v76';
 const CACHE_URLS = [
   './app.html',
   './css/base.css',
@@ -73,10 +73,20 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// 更新检测数据：network-only，不走缓存（避免老用户永远拿不到新版本信息）
+const UPDATE_META_PATHS = ['/versions.json', '/recent-changelogs.json'];
+
 // 请求拦截 - 缓存优先，网络回退
 self.addEventListener('fetch', (event) => {
   // 只处理同源请求
   if (!event.request.url.startsWith(self.location.origin)) {
+    return;
+  }
+
+  // 更新元数据：network-only，失败不返回缓存
+  const url = new URL(event.request.url);
+  if (UPDATE_META_PATHS.some(p => url.pathname.endsWith(p))) {
+    event.respondWith(fetch(event.request, { cache: 'no-store' }));
     return;
   }
 

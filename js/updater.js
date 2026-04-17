@@ -1,30 +1,15 @@
 /**
  * 更新检测模块（数据层）
- * 只负责 fetch CHANGELOG、解析版本数据，不操作 DOM，不管理弹窗。
- * 弹窗逻辑全部由 Announcer 负责。
+ * 读取同源 versions.json（轻量）+ recent-changelogs.json（最近 N 版）
+ * 由 scripts/gen-versions.js 在发布时生成，SW 对这两个文件做 network-only
+ * 不操作 DOM，不管理弹窗；弹窗逻辑由 Announcer 负责。
  */
 const Updater = {
-    CHANGELOG_URL: 'https://raw.githubusercontent.com/food211/Mixbox-Palette/main/CHANGELOG.md',
+    VERSIONS_URL: 'versions.json',
+    RECENT_URL: 'recent-changelogs.json',
     CHANGELOG_PAGE: 'https://food211.github.io/Mixbox-Palette/changelog.html',
     STORAGE_KEY: 'mixbox_dismissed_update',
-    CURRENT_VERSION: 'V1.3.5a',
-
-    /** 解析 CHANGELOG.md 文本，返回最新版本 { version, contentZH, contentEN } */
-    _parseChangelog(text) {
-        const parts = text.split(/^== (V[\d.]+[a-z]?) ==$/m);
-        if (parts.length < 3) return null;
-
-        const version = parts[1].trim();
-        const body = parts[2] || '';
-        const zhMatch = body.match(/\[ZH\]([\s\S]*?)(?=\[EN\]|$)/);
-        const enMatch = body.match(/\[EN\]([\s\S]*?)(?=\[ZH\]|== |$)/);
-
-        return {
-            version,
-            contentZH: zhMatch ? zhMatch[1].trim() : '',
-            contentEN: enMatch ? enMatch[1].trim() : '',
-        };
-    },
+    CURRENT_VERSION: 'V1.3.6',
 
     /** 将 markdown 列表转为简单 HTML（支持加粗和链接） */
     _mdToHtml(md) {
@@ -52,66 +37,79 @@ const Updater = {
             .join('');
     },
 
-        /**
-     * 创建一个带超时的 fetch 请求
-     * @param {number} timeout - 超时时间（毫秒）
-     */
+    /** 带超时的 fetch */
     async _fetchWithTimeout(url, options = {}, timeout = 5000) {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), timeout);
-        
         try {
-            const response = await fetch(url, {
-                ...options,
-                signal: controller.signal
-            });
+            const response = await fetch(url, { ...options, signal: controller.signal });
             clearTimeout(timeoutId);
             return response;
         } catch (error) {
             clearTimeout(timeoutId);
-            if (error.name === 'AbortError') {
-                throw new Error('请求超时');
-            }
+            if (error.name === 'AbortError') throw new Error('请求超时');
             throw error;
         }
     },
 
+    /** 截取 all 数组中比 CURRENT_VERSION 更新的版本号（按原顺序） */
+    _newerVersions(all) {
+        const i = all.indexOf(this.CURRENT_VERSION);
+        if (i === -1) return all; // 当前版本不在列表：全部视为新（极端情况）
+        return all.slice(0, i);
+    },
+
     /**
      * 自动检查更新。
-     * 返回需要展示的更新数据 { version, contentZH, contentEN }，
-     * 或 null（无更新 / 已忽略 / 网络失败）。
+     * 返回 { latest, versions: [{version, zh, en}] } | null（无更新/已忽略） | { error, timeout }
      */
     async check() {
         try {
-            const res = await this._fetchWithTimeout(this.CHANGELOG_URL, { cache: 'no-store' });
-            if (!res.ok) return { error: true }; // ← 区分失败
-            const text = await res.text();
-            const parsed = this._parseChangelog(text);
-            if (!parsed) return null;
-            if (parsed.version === this.CURRENT_VERSION) return null;
+            const versionsRes = await this._fetchWithTimeout(this.VERSIONS_URL, { cache: 'no-store' });
+            if (!versionsRes.ok) return { error: true };
+            const versions = await versionsRes.json();
+            if (versions.latest === this.CURRENT_VERSION) return null;
             const dismissed = localStorage.getItem(this.STORAGE_KEY);
-            if (dismissed === parsed.version) return null;
-            return parsed;
+            if (dismissed === versions.latest) return null;
+
+            const newerKeys = this._newerVersions(versions.all || []);
+            if (newerKeys.length === 0) return null;
+
+            const recentRes = await this._fetchWithTimeout(this.RECENT_URL, { cache: 'no-store' });
+            if (!recentRes.ok) return { error: true };
+            const recent = await recentRes.json();
+            const shown = (recent.versions || []).filter(v => newerKeys.includes(v.version));
+            if (shown.length === 0) return null;
+
+            return { latest: versions.latest, versions: shown, totalNewer: newerKeys.length };
         } catch (e) {
-            return { error: true, timeout: e.message === '请求超时' }; // ← 区分超时和其他错误
+            return { error: true, timeout: e.message === '请求超时' };
         }
     },
 
     /**
-     * 手动触发检查（版本号点击）。
-     * 返回更新数据，（已是最新 / 网络失败）。
-     * 网络失败时返回特殊标记
+     * 手动触发检查（点击版本号）。不考虑 dismissed。
+     * 返回 { latest, versions, totalNewer } | null（已最新） | { error, timeout }
      */
     async checkAndFetch() {
         try {
-            const res = await this._fetchWithTimeout(this.CHANGELOG_URL, { cache: 'no-store' });
-            if (!res.ok) return { error: true };
-            const text = await res.text();
-            const parsed = this._parseChangelog(text);
-            if (!parsed || parsed.version === this.CURRENT_VERSION) return null; // 真正的"已最新"
-            return parsed;
+            const versionsRes = await this._fetchWithTimeout(this.VERSIONS_URL, { cache: 'no-store' });
+            if (!versionsRes.ok) return { error: true };
+            const versions = await versionsRes.json();
+            if (versions.latest === this.CURRENT_VERSION) return null;
+
+            const newerKeys = this._newerVersions(versions.all || []);
+            if (newerKeys.length === 0) return null;
+
+            const recentRes = await this._fetchWithTimeout(this.RECENT_URL, { cache: 'no-store' });
+            if (!recentRes.ok) return { error: true };
+            const recent = await recentRes.json();
+            const shown = (recent.versions || []).filter(v => newerKeys.includes(v.version));
+            if (shown.length === 0) return null;
+
+            return { latest: versions.latest, versions: shown, totalNewer: newerKeys.length };
         } catch (e) {
-            return { error: true, timeout: e.message === '请求超时' }; // ← 区分超时和其他错误
+            return { error: true, timeout: e.message === '请求超时' };
         }
     },
 };

@@ -194,6 +194,27 @@
     padding-left: 4px;
 }
 
+.update-modal-body .update-version-block {
+    padding: 6px 0 10px;
+    border-bottom: 1px solid #333;
+}
+.update-modal-body .update-version-block:last-of-type {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+.update-modal-body .update-version-label {
+    font-size: 11px;
+    color: #7e94a8;
+    letter-spacing: 0.05em;
+    margin: 0 0 4px;
+}
+.update-modal-body .update-more-hint {
+    font-size: 12px;
+    color: #8a8a8a;
+    margin: 8px 0 0;
+    font-style: italic;
+}
+
 .update-changelog-link {
     display: block;
     font-size: 12px;

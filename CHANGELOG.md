@@ -1,5 +1,16 @@
 # 更新日志 / Changelog
 
+== V1.3.6 ==
+[ZH]
+### 优化
+- **启动速度提升** — 启动加载方式全面优化，首屏响应更快
+- **更新提示改进** — 支持一次展示多个未读版本的更新说明，不会再错过中间版本
+
+[EN]
+### Improvement
+- **Faster startup** — Overhauled loading pipeline for snappier first paint
+- **Better update notifications** — Missed several releases? Now you'll see all their changelogs at once
+
 == V1.3.5a ==
 [ZH]
 ### 优化

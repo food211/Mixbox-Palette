@@ -17,8 +17,34 @@
     <link rel="stylesheet" href="css/controls.css">
     <link rel="stylesheet" href="css/mix-area.css">
     <link rel="stylesheet" href="css/modals.css">
+    <style>
+        /* 启动期间隐藏半成品 UI，显示 loading 覆盖层 */
+        body:not(.app-ready) > .container { visibility: hidden; }
+        #appLoader {
+            position: fixed; inset: 0; z-index: 9999;
+            background: #2b2b2b; color: #f0f0f0;
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            transition: opacity 0.25s ease;
+        }
+        #appLoader.hidden { opacity: 0; pointer-events: none; }
+        #appLoader .icon { font-size: 42px; margin-bottom: 16px; }
+        #appLoader .title { font-size: 18px; margin-bottom: 18px; }
+        #appLoader .spinner {
+            width: 28px; height: 28px; border-radius: 50%;
+            border: 3px solid #404040; border-top-color: #4a9eff;
+            animation: app-spin 0.9s linear infinite;
+        }
+        @keyframes app-spin { to { transform: rotate(360deg); } }
+    </style>
 </head>
 <body oncontextmenu="return false">
+    <div id="appLoader">
+        <div class="icon">🎨</div>
+        <div class="title">Mixbox Palette</div>
+        <div class="spinner"></div>
+    </div>
     <div class="resize-handle resize-handle-left" id="resizeHandleLeft"></div>
     <div class="container">
         <div class="focus-indicator" id="focusIndicator"><span data-i18n="focusHint">Hold Space + click PS canvas to return shortcuts</span></div>
@@ -340,6 +366,14 @@
             console.log('🚀 正在初始化应用...');
             window.initApp();
 
+            // 揭示主界面，淡出 loading 覆盖层
+            document.body.classList.add('app-ready');
+            const loader = document.getElementById('appLoader');
+            if (loader) {
+                loader.classList.add('hidden');
+                setTimeout(() => loader.remove(), 300);
+            }
+
             // 辅助模块加载完后再挂版本号 / 公告
             auxPromise.then(() => {
                 const versionLabel = document.getElementById('versionLabel');
@@ -354,12 +388,26 @@
 
         } catch (error) {
             console.error('初始化失败:', error);
+            // 揭示主界面避免卡在 loading，便于用户看到 alert / 错误状态
+            document.body.classList.add('app-ready');
+            const loader = document.getElementById('appLoader');
+            if (loader) loader.remove();
             alert('加载应用程序时出错，请检查控制台获取详细信息。');
         }
     }
     
     // 页面加载完成后加载脚本
     window.addEventListener('DOMContentLoaded', loadAppScripts);
+
+    // 兜底：15 秒仍未 ready 就揭示主界面，避免 loader 卡死
+    setTimeout(() => {
+        if (!document.body.classList.contains('app-ready')) {
+            console.warn('⚠️ 加载超时 15 秒，强制揭示主界面');
+            document.body.classList.add('app-ready');
+            const loader = document.getElementById('appLoader');
+            if (loader) loader.remove();
+        }
+    }, 15000);
 
     // 注册 Service Worker（file:// 协议不支持，跳过）
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
