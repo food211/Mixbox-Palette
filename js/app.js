@@ -5,6 +5,14 @@ function mixSliderToStrength(sliderValue) {
     return 0.85 * Math.pow(sliderValue / 100, 1.5);
 }
 
+function track(name, params) {
+    try {
+        if (typeof window.gtag === 'function') {
+            window.gtag('event', name, params || {});
+        }
+    } catch (_) {}
+}
+
 // 当前颜料预设
 let currentPalette = 'winsorNewtonCotman';
 let colors = palettePresets[currentPalette].colors;
@@ -375,6 +383,7 @@ function updatePaletteInfo() {
  */
 function switchPalette(paletteKey) {
     if (palettePresets[paletteKey] && paletteKey !== currentPalette) {
+        track('palette_preset_change', { from: currentPalette, to: paletteKey });
         currentPalette = paletteKey;
         colors = palettePresets[paletteKey].colors;
         
@@ -824,6 +833,7 @@ function bindEvents() {
         engineBtn.classList.toggle('active', currentEngine === 'km');
         engineBtn.addEventListener('click', () => {
             const nextEngine = currentEngine === 'mixbox' ? 'km' : 'mixbox';
+            track('engine_switch', { from: currentEngine, to: nextEngine });
             switchEngine(nextEngine);
         });
     }
@@ -1353,6 +1363,7 @@ function initBrushSelector() {
             saveBrushSettings(); // 保存笔刷设置
             updateSpacingSliderMode();
             if (painter) painter.setWetPaperActive(currentTool === 'brush' && brush.type === 'watercolor');
+            track('brush_select', { brush_type: brush.type, tool: currentTool });
         });
         
         brushGrid.appendChild(option);
@@ -1508,7 +1519,8 @@ function beginStroke(type, color = null, startX = 0, startY = 0, pressure = 1.0)
         color: color,
         brushSize: brushSize,
         brushType: currentBrush.type,
-        mixStrength: painter ? painter.getMixStrength() : 0.5
+        mixStrength: painter ? painter.getMixStrength() : 0.5,
+        startedAt: performance.now()
     };
     brushManager.refreshRandomBrush(effectiveSize, currentBrush);
     currentStrokeBrushCanvas = brushManager.createBrushTexture(effectiveSize, currentBrush);
@@ -1573,6 +1585,12 @@ function endStroke() {
             painter._wetIsDrawing = false;
             painter._applyDepositColor(); // 内部 RAF 渐进，末帧自动 flush + clearDepositHeatmap
         }
+        track('paint_stroke', {
+            duration_ms: Math.round(performance.now() - currentStroke.startedAt),
+            stroke_type: currentStroke.type,
+            brush_type: currentStroke.brushType,
+            engine: currentEngine
+        });
         pushSnapshot();
         smudgeSnapshotCache = null;
         currentStroke = null;
