@@ -1,5 +1,14 @@
 # 更新日志 / Changelog
 
+== V1.3.7 ==
+[ZH]
+### 新增
+- **匿名使用统计** — 新增匿名统计功能，仅记录笔刷、引擎、调色盘的使用偏好以及绘制时长，用于帮助我改进插件。不会收集任何画作内容或个人信息，如不希望参与可通过浏览器的广告拦截插件屏蔽 Google Analytics
+
+[EN]
+### New
+- **Anonymous usage analytics** — Added opt-out anonymous tracking of brush / engine / palette preferences and stroke duration to help improve the plugin. No artwork or personal info is collected; you can block Google Analytics with any ad blocker if you'd rather not participate
+
 == V1.3.6 ==
 [ZH]
 ### 优化
