@@ -373,29 +373,30 @@ class KMWebGLPainter extends BaseWebGLPainter {
     }
 
     async _loadLUT() {
+        const LUT_URL = 'assets/km-lut.png';
         try {
-            this._buildLUTFromDataURL(KM_LUT_DATA);
-            console.log('✅ KM LUT 加载完成（从 km-lut-data.js 全局变量）');
+            const u8 = await this._fetchBinary(LUT_URL);
+            this._buildLUTFromBytes(u8);
+            console.log('✅ KM LUT 加载完成（assets/km-lut.png）');
             return;
         } catch (err) {
-            console.warn('⚠️ KM LUT 首次解析失败，尝试绕过缓存重新拉取 km-lut-data.js:', err);
+            console.warn('⚠️ KM LUT 首次加载失败，尝试绕过缓存重新拉取:', err);
         }
 
-        // 资源可能损坏（缓存/网络），尝试 no-cache 重拉源文件并正则提取
-        const freshDataURL = await this._refetchLUTDataURL();
-        this._buildLUTFromDataURL(freshDataURL);
+        // 资源可能损坏（缓存/网络），绕过缓存重试一次
+        const u8 = await this._fetchBinary(LUT_URL, { cache: 'reload' });
+        this._buildLUTFromBytes(u8);
         console.log('✅ KM LUT 加载完成（重新拉取后）');
     }
 
-    _buildLUTFromDataURL(dataURL) {
-        if (typeof dataURL !== 'string' || !dataURL.includes(',')) {
-            throw new Error('LUT data URL 格式错误');
-        }
-        const b64 = dataURL.split(',')[1];
-        const bin = atob(b64);
-        const u8  = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    async _fetchBinary(url, init) {
+        const resp = await fetch(url, init);
+        if (!resp.ok) throw new Error(`fetch ${url} 失败: HTTP ${resp.status}`);
+        const buf = await resp.arrayBuffer();
+        return new Uint8Array(buf);
+    }
 
+    _buildLUTFromBytes(u8) {
         const { width, height, pixels } = this._decodePNG(u8);
 
         const gl = this.gl;
@@ -411,15 +412,6 @@ class KMWebGLPainter extends BaseWebGLPainter {
         // 释放旧纹理，避免重试时泄漏
         if (this.textures.lut) gl.deleteTexture(this.textures.lut);
         this.textures.lut = tex;
-    }
-
-    async _refetchLUTDataURL() {
-        const resp = await fetch('js/km-lut-data.js', { cache: 'reload' });
-        if (!resp.ok) throw new Error(`重新拉取 km-lut-data.js 失败: HTTP ${resp.status}`);
-        const src = await resp.text();
-        const m = src.match(/["'](data:image\/[a-z]+;base64,[A-Za-z0-9+/=]+)["']/);
-        if (!m) throw new Error('km-lut-data.js 内未找到 data URL');
-        return m[1];
     }
 
     _bindLUT() {

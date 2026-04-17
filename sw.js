@@ -1,7 +1,7 @@
 /**
  * Service Worker - KM Watercolor Palette 离线缓存
  */
-const CACHE_NAME = 'km-palette-v73';
+const CACHE_NAME = 'km-palette-v74';
 const CACHE_URLS = [
   './app.html',
   './css/base.css',
@@ -26,6 +26,7 @@ const CACHE_URLS = [
   './js/palette-storage.js',
   './js/updater.js',
   './js/announcer.js',
+  './assets/km-lut.png',
   './icons/smudge.svg',
   './icons/eyedropper.svg',
   './icons/rect-select.svg',
