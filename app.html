@@ -17,8 +17,34 @@
     <link rel="stylesheet" href="css/controls.css">
     <link rel="stylesheet" href="css/mix-area.css">
     <link rel="stylesheet" href="css/modals.css">
+    <style>
+        /* 启动期间隐藏半成品 UI，显示 loading 覆盖层 */
+        body:not(.app-ready) > .container { visibility: hidden; }
+        #appLoader {
+            position: fixed; inset: 0; z-index: 9999;
+            background: #2b2b2b; color: #f0f0f0;
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            transition: opacity 0.25s ease;
+        }
+        #appLoader.hidden { opacity: 0; pointer-events: none; }
+        #appLoader .icon { font-size: 42px; margin-bottom: 16px; }
+        #appLoader .title { font-size: 18px; margin-bottom: 18px; }
+        #appLoader .spinner {
+            width: 28px; height: 28px; border-radius: 50%;
+            border: 3px solid #404040; border-top-color: #4a9eff;
+            animation: app-spin 0.9s linear infinite;
+        }
+        @keyframes app-spin { to { transform: rotate(360deg); } }
+    </style>
 </head>
 <body oncontextmenu="return false">
+    <div id="appLoader">
+        <div class="icon">🎨</div>
+        <div class="title">Mixbox Palette</div>
+        <div class="spinner"></div>
+    </div>
     <div class="resize-handle resize-handle-left" id="resizeHandleLeft"></div>
     <div class="container">
         <div class="focus-indicator" id="focusIndicator"><span data-i18n="focusHint">Hold Space + click PS canvas to return shortcuts</span></div>
@@ -233,19 +259,30 @@
 
 <!-- 脚本加载 -->
 <script>
-    // 创建script标签加载适当的库
+    // 创建script标签加载适当的库（同一 src 只加载一次，返回同一 Promise）
+    const _loadScriptCache = new Map();
     function loadScript(src) {
-        return new Promise((resolve, reject) => {
+        if (_loadScriptCache.has(src)) return _loadScriptCache.get(src);
+        const p = new Promise((resolve, reject) => {
             const script = document.createElement('script');
             script.src = src;
             script.onload = () => resolve();
             script.onerror = () => {
+                _loadScriptCache.delete(src); // 失败允许重试
                 console.error(`Failed to load script: ${src}`);
                 reject(new Error(`Failed to load script: ${src}`));
             };
             document.head.appendChild(script);
         });
+        _loadScriptCache.set(src, p);
+        return p;
     }
+
+    // 供 app.js 在切换到 KM 或启动时按需加载 KM 引擎
+    // LUT 数据由 km-painter.js 内部 fetch('assets/km-lut.png') 加载
+    window.ensureKMLoaded = async function() {
+        await loadScript('js/km-painter.js');
+    };
     
     // 检测WebGL支持
     function isWebGLSupported() {
@@ -267,70 +304,110 @@
                 console.log('✅ Service Worker 就绪');
             }
 
-            // 首先加载参数常数和 i18n
-            await loadScript('js/params.js');
-            await loadScript('js/i18n.js');
-
-            // 加载混色引擎
-            if (isWebGLSupported()) {
-                // 加载 Mixbox（默认引擎）
-                await loadScript('js/mixbox.js');
-                console.log('✅ mixbox.js 已加载');
-                await loadScript('js/base-painter.js');
-                console.log('✅ base-painter.js 已加载');
-                await loadScript('js/heatmap.js');
-                console.log('✅ heatmap.js 已加载');
-                await loadScript('js/wetpaper.js');
-                console.log('✅ wetpaper.js 已加载');
-                await loadScript('js/mixbox-painter.js');
-                console.log('✅ mixbox-painter.js 已加载');
-                // 加载 KM（可选引擎）
-                await loadScript('js/km-lut-data.js');
-                await loadScript('js/km-painter.js');
-                console.log('✅ km-painter.js 已加载');
+            if (!isWebGLSupported()) {
+                alert('您的浏览器不支持 WebGL，无法运行本应用。');
+                return;
             }
-            
-            // 加载其他依赖
-            await Promise.all([
+
+            // 判断启动引擎：若用户上次用的是 KM，首帧就需要 KM
+            const savedEngine = localStorage.getItem('mixbox_engine') || 'mixbox';
+
+            // Tier 0：无依赖的脚本全部并行下载
+            const tier0 = Promise.all([
+                loadScript('js/params.js'),
+                loadScript('js/i18n.js'),
+                loadScript('js/mixbox.js'),
+                loadScript('js/base-painter.js'),
                 loadScript('js/brush-manager.js'),
                 loadScript('js/palette-storage.js'),
                 loadScript('js/ps-bridge.js'),
                 loadScript('js/palette-presets.js'),
-                loadScript('js/zoom.js')
+                loadScript('js/zoom.js'),
             ]);
-            console.log('✅ 其他依赖已加载');
 
-            // 最后加载应用主逻辑
+            // Tier 1：依赖 base-painter.js（class 定义 / prototype 挂载）
+            await loadScript('js/base-painter.js'); // dedupe 命中，仅等 tier0 中的同一份
+            const tier1 = Promise.all([
+                loadScript('js/heatmap.js'),
+                loadScript('js/wetpaper.js'),
+                loadScript('js/mixbox-painter.js'),
+            ]);
+
+            // updater / announcer 不依赖其他脚本，此时就发起下载（不 await，让请求尽早排队）
+            const auxPromise = Promise.all([
+                loadScript('js/updater.js'),
+                loadScript('js/announcer.js'),
+            ]);
+
+            // 用户上次选 KM：立刻加载；否则 idle 时再预取（不阻塞首屏）
+            let kmPromise = null;
+            if (savedEngine === 'km') {
+                kmPromise = window.ensureKMLoaded();
+            } else {
+                (window.requestIdleCallback || ((cb) => setTimeout(cb, 2000)))(() => {
+                    window.ensureKMLoaded().then(() => console.log('✅ KM 引擎已空闲预取'));
+                });
+            }
+
+            await tier0;
+            await tier1;
+            console.log('✅ 核心依赖已加载');
+
+            if (kmPromise) {
+                await kmPromise;
+                console.log('✅ KM 引擎已加载（启动引擎为 KM）');
+            }
+
+            // app.js 依赖以上全部
             await loadScript('js/app.js');
             console.log('✅ app.js 已加载');
-
-            // 加载更新检测模块和公告组件
-            await loadScript('js/updater.js');
-            await loadScript('js/announcer.js');
-
-            // 显示版本号
-            const versionLabel = document.getElementById('versionLabel');
-            if (versionLabel && typeof Updater !== 'undefined') {
-                versionLabel.textContent = Updater.CURRENT_VERSION;
-                versionLabel.title = I18N.getLang() === 'zh' ? '点击检查更新' : 'Click to check for updates';
-                versionLabel.addEventListener('click', () => Announcer.checkUpdate());
-            }
 
             // 重要：手动调用 app.js 中的 initApp 函数
             console.log('🚀 正在初始化应用...');
             window.initApp();
 
-            // 延迟启动公告组件（包揽更新检测 + 公告推送）
-            setTimeout(() => Announcer.init(), 3000);
-            
+            // 揭示主界面，淡出 loading 覆盖层
+            document.body.classList.add('app-ready');
+            const loader = document.getElementById('appLoader');
+            if (loader) {
+                loader.classList.add('hidden');
+                setTimeout(() => loader.remove(), 300);
+            }
+
+            // 辅助模块加载完后再挂版本号 / 公告
+            auxPromise.then(() => {
+                const versionLabel = document.getElementById('versionLabel');
+                if (versionLabel && typeof Updater !== 'undefined') {
+                    versionLabel.textContent = Updater.CURRENT_VERSION;
+                    versionLabel.title = I18N.getLang() === 'zh' ? '点击检查更新' : 'Click to check for updates';
+                    versionLabel.addEventListener('click', () => Announcer.checkUpdate());
+                }
+                // 延迟启动公告组件（包揽更新检测 + 公告推送）
+                setTimeout(() => Announcer.init(), 3000);
+            });
+
         } catch (error) {
             console.error('初始化失败:', error);
+            // 揭示主界面避免卡在 loading，便于用户看到 alert / 错误状态
+            document.body.classList.add('app-ready');
+            const loader = document.getElementById('appLoader');
+            if (loader) loader.remove();
             alert('加载应用程序时出错，请检查控制台获取详细信息。');
         }
     }
     
     // 页面加载完成后加载脚本
     window.addEventListener('DOMContentLoaded', loadAppScripts);
+
+    // 兜底：15 秒仍未 ready 就揭示主界面，避免 loader 卡死
+    setTimeout(() => {
+        if (!document.body.classList.contains('app-ready')) {
+            console.warn('⚠️ 加载超时 15 秒，强制揭示主界面');
+            document.body.classList.add('app-ready');
+            const loader = document.getElementById('appLoader');
+            if (loader) loader.remove();
+        }
+    }, 15000);
 
     // 注册 Service Worker（file:// 协议不支持，跳过）
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {

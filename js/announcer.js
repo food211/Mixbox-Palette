@@ -156,7 +156,7 @@ const Announcer = {
         refreshBtn.disabled      = true;
 
         const close = (dismissed, updateData) => {
-            if (dismissed && updateData) localStorage.setItem(Updater.STORAGE_KEY, updateData.version);
+            if (dismissed && updateData) localStorage.setItem(Updater.STORAGE_KEY, updateData.latest);
             modal.classList.remove('active');
         };
         closeBtn.onclick   = () => close(false, null);
@@ -190,7 +190,7 @@ const Announcer = {
 
         // 有更新时更新版本标签
         if (updateData) {
-            currentTags = buildTags(`${appVer} → ${updateData.version}`);
+            currentTags = buildTags(`${appVer} → ${updateData.latest}`);
             versionInfo.innerHTML = currentTags.map(tag =>
                 `<span class="update-version-tag">${tag}</span>`
             ).join('');
@@ -198,15 +198,15 @@ const Announcer = {
 
         // 填充 changelog
         if (updateData) {
-            const content = isZH ? updateData.contentZH || updateData.contentEN : updateData.contentEN || updateData.contentZH;
-            bodyEl.innerHTML = Updater._mdToHtml(content);
+            bodyEl.innerHTML = this._renderVersionsHtml(updateData, isZH);
         } else {
             bodyEl.innerHTML = `<p style="color:#6abf6a;">${t('versionUpToDate')}</p>`;
+            // 已最新：展示当前版本（recent-changelogs 的第一条）的更新说明
             try {
-                const text = await fetch(Updater.CHANGELOG_URL, { cache: 'no-store' }).then(r => r.text());
-                const parsed = Updater._parseChangelog(text);
-                if (parsed) {
-                    const content = isZH ? parsed.contentZH || parsed.contentEN : parsed.contentEN || parsed.contentZH;
+                const recent = await fetch(Updater.RECENT_URL, { cache: 'no-store' }).then(r => r.json());
+                const cur = (recent.versions || []).find(v => v.version === appVer) || (recent.versions || [])[0];
+                if (cur) {
+                    const content = isZH ? cur.zh || cur.en : cur.en || cur.zh;
                     bodyEl.innerHTML += Updater._mdToHtml(content);
                 }
             } catch (e) { /* 离线时静默失败 */ }
@@ -225,7 +225,7 @@ const Announcer = {
             refreshBtn.disabled    = false;
             dismissBtn.onclick     = () => close(true, updateData);
             refreshBtn.onclick     = () => {
-                localStorage.setItem(Updater.STORAGE_KEY, updateData.version);
+                localStorage.setItem(Updater.STORAGE_KEY, updateData.latest);
                 this._showReloadOverlay();
             };
         } else {
@@ -236,11 +236,28 @@ const Announcer = {
 
     // ── 更新弹窗 ──────────────────────────────────────────────────────────
 
-    _showUpdateModal({ version, contentZH, contentEN }, { onDone }) {
+    /** 把 updateData.versions 数组渲染为多版本堆叠 HTML */
+    _renderVersionsHtml(data, isZH) {
+        const shown = data.versions;
+        const parts = shown.map(v => {
+            const content = isZH ? v.zh || v.en : v.en || v.zh;
+            const label = isZH ? `版本 ${v.version}` : `Version ${v.version}`;
+            return `<div class="update-version-block"><p class="update-version-label">${label}</p>${Updater._mdToHtml(content)}</div>`;
+        });
+        // 超过展示数量时附加"还有更多"提示
+        if (data.totalNewer > shown.length) {
+            const more = data.totalNewer - shown.length;
+            const moreText = isZH
+                ? `还有 ${more} 个较早版本的更新，查看完整日志了解详情 →`
+                : `${more} earlier version(s) not shown. View full changelog for details →`;
+            parts.push(`<p class="update-more-hint">${moreText}</p>`);
+        }
+        return parts.join('');
+    },
+
+    _showUpdateModal(data, { onDone }) {
         const lang  = this._getLang();
         const isZH  = lang === 'zh';
-        const content     = isZH ? contentZH || contentEN : contentEN || contentZH;
-        const contentHtml = Updater._mdToHtml(content);
 
         const modal      = document.getElementById('updateModal');
         const titleEl    = document.getElementById('updateModalTitle');
@@ -252,9 +269,9 @@ const Announcer = {
         const refreshBtn = document.getElementById('updateRefreshBtn');
 
         titleEl.textContent = isZH
-            ? `🆕 发现新版本 ${version}`
-            : `🆕 New Version Available: ${version}`;
-        bodyEl.innerHTML = contentHtml;
+            ? `🆕 发现新版本 ${data.latest}`
+            : `🆕 New Version Available: ${data.latest}`;
+        bodyEl.innerHTML = this._renderVersionsHtml(data, isZH);
         changelogLink.textContent = isZH ? '查看完整更新日志 →' : 'View Full Changelog →';
         changelogLink.href = Updater.CHANGELOG_PAGE;
         laterBtn.textContent  = isZH ? '稍后' : 'Later';
@@ -262,7 +279,7 @@ const Announcer = {
         refreshBtn.textContent = isZH ? '立即更新' : 'Update Now';
 
         const close = (dismissed) => {
-            if (dismissed) localStorage.setItem(Updater.STORAGE_KEY, version);
+            if (dismissed) localStorage.setItem(Updater.STORAGE_KEY, data.latest);
             modal.classList.remove('active');
             if (onDone) onDone();
         };
@@ -271,7 +288,7 @@ const Announcer = {
         laterBtn.onclick  = () => close(false);
         dismissBtn.onclick = () => close(true);
         refreshBtn.onclick = () => {
-            localStorage.setItem(Updater.STORAGE_KEY, version);
+            localStorage.setItem(Updater.STORAGE_KEY, data.latest);
             this._showReloadOverlay();
         };
 

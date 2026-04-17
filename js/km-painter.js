@@ -373,11 +373,30 @@ class KMWebGLPainter extends BaseWebGLPainter {
     }
 
     async _loadLUT() {
-        const b64 = KM_LUT_DATA.split(',')[1];
-        const bin = atob(b64);
-        const u8  = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+        const LUT_URL = 'assets/km-lut.png';
+        try {
+            const u8 = await this._fetchBinary(LUT_URL);
+            this._buildLUTFromBytes(u8);
+            console.log('✅ KM LUT 加载完成（assets/km-lut.png）');
+            return;
+        } catch (err) {
+            console.warn('⚠️ KM LUT 首次加载失败，尝试绕过缓存重新拉取:', err);
+        }
 
+        // 资源可能损坏（缓存/网络），绕过缓存重试一次
+        const u8 = await this._fetchBinary(LUT_URL, { cache: 'reload' });
+        this._buildLUTFromBytes(u8);
+        console.log('✅ KM LUT 加载完成（重新拉取后）');
+    }
+
+    async _fetchBinary(url, init) {
+        const resp = await fetch(url, init);
+        if (!resp.ok) throw new Error(`fetch ${url} 失败: HTTP ${resp.status}`);
+        const buf = await resp.arrayBuffer();
+        return new Uint8Array(buf);
+    }
+
+    _buildLUTFromBytes(u8) {
         const { width, height, pixels } = this._decodePNG(u8);
 
         const gl = this.gl;
@@ -390,8 +409,9 @@ class KMWebGLPainter extends BaseWebGLPainter {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
         gl.bindTexture(gl.TEXTURE_2D, null);
+        // 释放旧纹理，避免重试时泄漏
+        if (this.textures.lut) gl.deleteTexture(this.textures.lut);
         this.textures.lut = tex;
-        console.log(`✅ KM LUT 加载完成（${width}×${height}，纯JS解码）`);
     }
 
     _bindLUT() {

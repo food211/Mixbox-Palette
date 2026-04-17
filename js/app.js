@@ -68,8 +68,25 @@ async function switchEngine(engine) {
     const oldPixels = painter ? painter.readPixelRegion(0, 0, mixCanvas.width, mixCanvas.height) : null;
 
     // 旧 painter 的历史池随实例一起废弃
-    painter = createPainter(engine, mixCanvas);
-    await painter.init();
+    let newPainter;
+    try {
+        // 按需加载 KM 引擎（首屏可能没预取到）
+        if (engine === 'km' && typeof KMWebGLPainter === 'undefined' && typeof window.ensureKMLoaded === 'function') {
+            await window.ensureKMLoaded();
+        }
+        newPainter = createPainter(engine, mixCanvas);
+        await newPainter.init();
+    } catch (err) {
+        console.error('❌ 引擎切换失败:', err);
+        const msg = I18N.getLang() === 'zh'
+            ? '引擎初始化失败，需要刷新页面重新加载资源。\n点击确定后将自动刷新。'
+            : 'Engine initialization failed. The page needs to reload.\nClick OK to refresh.';
+        if (confirm(msg)) location.reload();
+        return;
+    }
+    // 停掉旧 painter 的衰减 RAF，避免闭包持有旧实例的 GL 资源持续运行
+    if (painter && painter.stopHeatmapFadeOut) painter.stopHeatmapFadeOut();
+    painter = newPainter;
     window._painter = painter;
     painter.setMixStrength(oldMixStrength);
     painter.setWetness(watercolorWetness / 100);
@@ -258,32 +275,33 @@ async function initCanvas() {
         currentEngine = savedEngine;
 
         const savedDataURL = paletteStorage.load();
+        // 先让画布可用（清空），快照异步恢复避免阻塞首屏
+        painter.clear(CANVAS_BG);
+        saveState();
         if (savedDataURL) {
-            await new Promise(resolve => {
-                const img = new Image();
-                img.onload = () => {
-                    // 用临时 2D canvas 解码 PNG → 读取像素 → 上传 WebGL
-                    const tmpCanvas = document.createElement('canvas');
-                    tmpCanvas.width = mixCanvas.width;
-                    tmpCanvas.height = mixCanvas.height;
-                    const tmpCtx = tmpCanvas.getContext('2d');
-                    tmpCtx.drawImage(img, 0, 0);
-                    const imageData = tmpCtx.getImageData(0, 0, mixCanvas.width, mixCanvas.height);
-                    painter.writeFromPixels(imageData.data, mixCanvas.width, mixCanvas.height);
-                    saveState();
-                    resolve();
-                };
-                img.onerror = () => {
-                    painter.clear(CANVAS_BG);
-                    saveState();
-                    resolve();
-                };
-                img.src = savedDataURL;
-            });
-            console.log('✅ 画布内容已从快照恢复');
-        } else {
-            painter.clear(CANVAS_BG);
-            saveState();
+            // 捕获 painter 引用：恢复期间若切换引擎，则放弃写入到新 painter
+            const targetPainter = painter;
+            const baseHistoryLen = painter.getHistoryLength();
+            const img = new Image();
+            img.onload = () => {
+                // 若用户已经画了新笔画或切换了引擎，放弃恢复以免覆盖
+                if (painter !== targetPainter) return;
+                if (painter.getHistoryLength() > baseHistoryLen) {
+                    console.log('ℹ️ 用户已开始绘制，跳过快照恢复');
+                    return;
+                }
+                const tmpCanvas = document.createElement('canvas');
+                tmpCanvas.width = mixCanvas.width;
+                tmpCanvas.height = mixCanvas.height;
+                const tmpCtx = tmpCanvas.getContext('2d');
+                tmpCtx.drawImage(img, 0, 0);
+                const imageData = tmpCtx.getImageData(0, 0, mixCanvas.width, mixCanvas.height);
+                painter.writeFromPixels(imageData.data, mixCanvas.width, mixCanvas.height);
+                saveState();
+                console.log('✅ 画布内容已从快照恢复');
+            };
+            img.onerror = () => console.warn('画布快照解码失败，已使用空白画布');
+            img.src = savedDataURL;
         }
 
         painter.setWetness(watercolorWetness / 100);
