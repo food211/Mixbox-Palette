@@ -366,6 +366,7 @@ function _applyDepositColor() {
     const color = this._wetColor;
 
     const tick = () => {
+        if (this._disposed) return;
         if (frame >= TOTAL_FRAMES) {
             this.clearDepositHeatmap();
             this.flush();

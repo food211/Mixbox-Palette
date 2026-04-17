@@ -43,6 +43,15 @@ class BaseWebGLPainter {
 
         // 待处理的 idle 任务 Map<frameId, handle>
         this._pendingIdle = new Map();
+
+        // 历史压缩 Worker（惰性创建）
+        this._historyWorker = null;
+        this._workerMsgId = 0;
+        this._workerPending = new Map();   // msgId → { resolve, reject }
+        this._decompressCache = new Map(); // frameId → Uint8ClampedArray（LRU 简版）
+        this._decompressCacheMax = 3;
+        this._lastRestoreDir = 0;          // +1 redo, -1 undo, 0 未知
+        this._lastRestoreStep = -1;
     }
 
     // ─────────────────────────────────────────────
@@ -525,6 +534,10 @@ class BaseWebGLPainter {
         gl.uniform1i(this._blitLocations.u_src, 0);
         gl.uniform2f(this._blitLocations.u_resolution, cw, ch);
 
+        // 禁用所有可能残留启用的 attribute（避免跨 program 状态污染）
+        const maxAttrs = gl.getParameter(gl.MAX_VERTEX_ATTRIBS);
+        for (let i = 0; i < maxAttrs; i++) gl.disableVertexAttribArray(i);
+
         gl.bindBuffer(gl.ARRAY_BUFFER, this._blitBuffer);
         gl.enableVertexAttribArray(this._blitLocations.a_clipPos);
         gl.vertexAttribPointer(this._blitLocations.a_clipPos, 2, gl.FLOAT, false, 0, 0);
@@ -847,27 +860,52 @@ class BaseWebGLPainter {
      * @param {number} step - _history 数组下标
      * @returns {boolean} 是否成功
      */
-    restoreHistoryFrame(step) {
+    async restoreHistoryFrame(step) {
         if (step < 0 || step >= this._history.length) return false;
 
         const frame = this._history[step];
+        let pixels = null;
 
         if (frame.gpuSlot) {
             // GPU 路径：blit，零 readPixels
             this._copySlotToCanvas(frame.gpuSlot);
-        } else if (frame.cpuReady && frame.cpuPixels) {
-            // CPU 回退：重新上传到 GPU
-            this.writeFromPixels(frame.cpuPixels, this.canvas.width, this.canvas.height);
-            // 重新为此帧分配 GPU slot，避免下次再走 CPU
-            const slot = this._acquireGpuSlot();
-            this._copyCanvasToSlot(slot);
-            frame.gpuSlot = slot;
+        } else if (frame.cpuPixels) {
+            pixels = frame.cpuPixels;
+        } else if (this._decompressCache.has(frame.id)) {
+            pixels = this._decompressCache.get(frame.id);
+        } else if (frame.cpuBlob) {
+            // 从压缩 blob 解压
+            try {
+                pixels = await this._decompressFrame(frame);
+            } catch (e) {
+                console.warn('BaseWebGLPainter: 解压失败', e);
+                return false;
+            }
         } else {
-            console.warn('BaseWebGLPainter: 帧数据不可用（GPU 和 CPU 都没有）');
+            console.warn('BaseWebGLPainter: 帧数据不可用');
             return false;
         }
 
+        if (pixels) {
+            this.writeFromPixels(pixels, this.canvas.width, this.canvas.height);
+            // 回写 GPU slot，下次零延迟
+            const slot = this._acquireGpuSlot();
+            if (slot) {
+                this._copyCanvasToSlot(slot);
+                frame.gpuSlot = slot;
+            }
+        }
+
+        // 方向追踪：用于预解下一帧
+        if (this._lastRestoreStep >= 0) {
+            const diff = step - this._lastRestoreStep;
+            if (diff !== 0) this._lastRestoreDir = diff > 0 ? 1 : -1;
+        }
+        this._lastRestoreStep = step;
         this._historyStep = step;
+
+        // 触发朝同方向预解下一帧
+        this._prefetchAdjacentFrame();
         return true;
     }
 
@@ -899,6 +937,123 @@ class BaseWebGLPainter {
     }
 
     // ─────────────────────────────────────────────
+    // 历史压缩 Worker
+    // ─────────────────────────────────────────────
+
+    _ensureHistoryWorker() {
+        if (this._historyWorker) return this._historyWorker;
+        try {
+            this._historyWorker = new Worker('js/history-worker.js');
+            this._historyWorker.onmessage = (e) => {
+                const { type, id } = e.data;
+                const entry = this._workerPending.get(id);
+                if (!entry) return;
+                this._workerPending.delete(id);
+                if (type === 'error') entry.reject(new Error(e.data.reason));
+                else if (type === 'compressed') entry.resolve(e.data.blob);
+                else if (type === 'decompressed') entry.resolve(new Uint8ClampedArray(e.data.pixels));
+            };
+            this._historyWorker.onerror = (err) => {
+                console.error('[history-worker] error:', err);
+            };
+        } catch (err) {
+            console.warn('[history-worker] 创建失败，历史压缩禁用', err);
+            this._historyWorker = null;
+        }
+        return this._historyWorker;
+    }
+
+    _workerRequest(msg, transfer) {
+        const w = this._ensureHistoryWorker();
+        if (!w) return Promise.reject(new Error('worker unavailable'));
+        const id = ++this._workerMsgId;
+        return new Promise((resolve, reject) => {
+            this._workerPending.set(id, { resolve, reject });
+            w.postMessage({ ...msg, id }, transfer || []);
+        });
+    }
+
+    /** 把已经读到 CPU 的帧压缩成 blob，压完释放 cpuPixels */
+    async _compressFrame(frame) {
+        if (!frame.cpuReady || !frame.cpuPixels || frame.cpuBlob) return;
+        const w = this.canvas.width;
+        const h = this.canvas.height;
+        const buf = frame.cpuPixels.buffer.slice(0); // 拷贝一份给 worker transfer
+        try {
+            const blob = await this._workerRequest(
+                { type: 'compress', pixels: buf, w, h },
+                [buf]
+            );
+            // 帧可能已经被丢弃
+            if (!this._history.includes(frame)) return;
+            frame.cpuBlob = blob;
+            frame.cpuBlobW = w;
+            frame.cpuBlobH = h;
+            frame.cpuPixels = null; // 释放未压缩数据
+        } catch (e) {
+            // 压缩失败保留 cpuPixels
+        }
+    }
+
+    /** 从 blob 解压回 Uint8ClampedArray（带缓存） */
+    async _decompressFrame(frame) {
+        if (frame.cpuPixels) return frame.cpuPixels;
+        if (this._decompressCache.has(frame.id)) {
+            const px = this._decompressCache.get(frame.id);
+            // LRU 触达
+            this._decompressCache.delete(frame.id);
+            this._decompressCache.set(frame.id, px);
+            return px;
+        }
+        if (!frame.cpuBlob) return null;
+        const pixels = await this._workerRequest({
+            type: 'decompress',
+            blob: frame.cpuBlob,
+            w: frame.cpuBlobW,
+            h: frame.cpuBlobH,
+        });
+        this._decompressCachePut(frame.id, pixels);
+        return pixels;
+    }
+
+    _decompressCachePut(frameId, pixels) {
+        if (this._decompressCache.has(frameId)) {
+            this._decompressCache.delete(frameId);
+        }
+        this._decompressCache.set(frameId, pixels);
+        while (this._decompressCache.size > this._decompressCacheMax) {
+            const firstKey = this._decompressCache.keys().next().value;
+            this._decompressCache.delete(firstKey);
+        }
+    }
+
+    /** 把"距离当前步较远"的帧异步压缩成 blob，释放 cpuPixels */
+    _maybeCompressOldFrames() {
+        const keepNear = HISTORY_UNCOMPRESSED_NEAR;
+        for (let i = 0; i < this._history.length; i++) {
+            const frame = this._history[i];
+            if (Math.abs(i - this._historyStep) <= keepNear) continue;
+            if (!frame.cpuReady || !frame.cpuPixels) continue;
+            if (frame.cpuBlob) continue;
+            this._compressFrame(frame).catch(() => {});
+        }
+    }
+
+    /** 朝上次撤销方向预解一帧（fire-and-forget） */
+    _prefetchAdjacentFrame() {
+        if (!this._lastRestoreDir) return;
+        const next = this._historyStep + this._lastRestoreDir;
+        if (next < 0 || next >= this._history.length) return;
+        const frame = this._history[next];
+        if (!frame) return;
+        if (frame.gpuSlot || frame.cpuPixels) return;
+        if (this._decompressCache.has(frame.id)) return;
+        if (!frame.cpuBlob) return;
+        // 异步解，不等结果
+        this._decompressFrame(frame).catch(() => {});
+    }
+
+    // ─────────────────────────────────────────────
     // 异步 CPU 备份
     // ─────────────────────────────────────────────
 
@@ -907,8 +1062,11 @@ class BaseWebGLPainter {
             this._pendingIdle.delete(frame.id);
             // 帧可能已被丢弃（新笔画截断历史）
             if (!this._history.includes(frame)) return;
-            if (frame.cpuReady || !frame.gpuSlot) return;
-            this._syncReadFrameToCPU(frame);
+            if (!frame.cpuReady && frame.gpuSlot) {
+                this._syncReadFrameToCPU(frame);
+            }
+            // 压缩较老的帧（保留最近 N 帧未压缩以便快速撤销）
+            this._maybeCompressOldFrames();
         };
 
         if (typeof requestIdleCallback !== 'undefined') {
@@ -936,6 +1094,10 @@ class BaseWebGLPainter {
         }
         frame.cpuPixels = null;
         frame.cpuReady  = false;
+        frame.cpuBlob   = null;
+        if (this._decompressCache && this._decompressCache.has(frame.id)) {
+            this._decompressCache.delete(frame.id);
+        }
     }
 
     /**
@@ -954,6 +1116,19 @@ class BaseWebGLPainter {
         if (typeof this.stopHeatmapFadeOut === 'function') {
             try { this.stopHeatmapFadeOut(); } catch (_) {}
         }
+
+        // 终止压缩 Worker
+        if (this._historyWorker) {
+            try { this._historyWorker.terminate(); } catch (_) {}
+            this._historyWorker = null;
+        }
+        if (this._workerPending) {
+            for (const { reject } of this._workerPending.values()) {
+                try { reject(new Error('disposed')); } catch (_) {}
+            }
+            this._workerPending.clear();
+        }
+        if (this._decompressCache) this._decompressCache.clear();
 
         // 销毁历史帧
         if (this._history) {

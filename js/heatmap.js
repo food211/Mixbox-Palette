@@ -583,6 +583,7 @@ function startHeatmapFadeOut() {
     const painter = this;
 
     function tick() {
+        if (painter._disposed) return;
         // 热度衰减（始终运行，让已有热度自然消退）
         painter._decayHeatmap(HEAT_DECAY_STEP);
 

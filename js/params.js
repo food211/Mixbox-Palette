@@ -62,6 +62,9 @@ const GPU_SLOTS_MIN = 10;
 /** 历史帧数组超出 GPU slot 上限多少帧后开始驱逐最老帧 */
 const HISTORY_OVERFLOW_BUFFER = 5;
 
+/** 距离当前步 <= 此值的历史帧保持未压缩（快速撤销），更远的帧异步压成 WebP */
+const HISTORY_UNCOMPRESSED_NEAR = 5;
+
 // ─── 异步任务超时 ─────────────────────────────────────────────────────────────
 
 /** requestIdleCallback 强制超时（ms）：CPU 历史备份任务 */

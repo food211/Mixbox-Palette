@@ -1659,11 +1659,10 @@ function pushSnapshot() {
 /**
  * 恢复到指定历史步骤
  */
-function restoreState(step) {
+async function restoreState(step) {
     if (!painter) return;
-    if (painter.restoreHistoryFrame(step)) {
-        updateHistoryButtons();
-    }
+    const ok = await painter.restoreHistoryFrame(step);
+    if (ok) updateHistoryButtons();
 }
 
 /**

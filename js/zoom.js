@@ -1,6 +1,6 @@
 // ============ 画布宽度调整 ============
 const RESIZE_MIN = 480;   // container 最小宽度（同时作为默认值和 canvas 比例基准）
-const RESIZE_MAX = 2000;
+const RESIZE_MAX = 1000;
 const RESIZE_STORAGE_KEY = 'mixbox_container_width';
 
 // 当前 container max-width（像素，不含 zoom）
