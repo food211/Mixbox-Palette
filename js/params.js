@@ -44,8 +44,11 @@ const DEFAULT_MIX_STRENGTH = 0.5;
 
 // ─── GPU 历史池 ───────────────────────────────────────────────────────────────
 
-/** GPU 显存预算估算（MB）：假设可用总量 */
+/** GPU 显存预算估算（MB）：首次尝试的预算 */
 const GPU_BUDGET_MB = 200;
+
+/** GPU 显存降级预算（MB）：检测到分配失败时回退到此预算 */
+const GPU_BUDGET_FALLBACK_MB = 100;
 
 /** GPU 运行时基础占用估算（MB），从预算中扣除 */
 const GPU_RUNTIME_OVERHEAD_MB = 20;

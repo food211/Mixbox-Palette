@@ -97,9 +97,10 @@ class BaseWebGLPainter {
     // GPU 预算计算
     // ─────────────────────────────────────────────
 
-    _calcGpuBudget() {
+    _calcGpuBudget(budgetMB = GPU_BUDGET_MB) {
+        this._gpuBudgetMB = budgetMB;
         const bytesPerFrame = this.canvas.width * this.canvas.height * 4;
-        const budgetBytes = (GPU_BUDGET_MB - GPU_RUNTIME_OVERHEAD_MB) * 1024 * 1024;
+        const budgetBytes = (budgetMB - GPU_RUNTIME_OVERHEAD_MB) * 1024 * 1024;
         this._maxGpuSlots = Math.min(GPU_SLOTS_MAX, Math.max(GPU_SLOTS_MIN, Math.floor(budgetBytes / bytesPerFrame)));
     }
 
@@ -640,10 +641,12 @@ class BaseWebGLPainter {
         // 检查是否还有预算新建
         const usedSlots = this._history.filter(f => f.gpuSlot !== null).length;
         if (usedSlots < this._maxGpuSlots) {
-            return this._createGpuSlot();
+            const slot = this._createGpuSlot();
+            if (slot) return slot;
+            // 创建失败（已触发降级）→ 退路：驱逐最老帧
         }
 
-        // 超出预算，驱逐最老的、不是当前步的帧
+        // 超出预算或创建失败，驱逐最老的、不是当前步的帧
         return this._evictOldestGpuSlot();
     }
 
@@ -652,13 +655,45 @@ class BaseWebGLPainter {
         const cw = this.canvas.width;
         const ch = this.canvas.height;
 
+        // 清空先前的错误状态，避免误判
+        while (gl.getError() !== gl.NO_ERROR) {}
+
         const tex = this.createEmptyTexture(cw, ch);
+        const err = gl.getError();
+        if (!tex || err === gl.OUT_OF_MEMORY) {
+            if (tex) gl.deleteTexture(tex);
+            this._tryDowngradeGpuBudget();
+            return null;
+        }
+
         const fb  = gl.createFramebuffer();
         gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
         gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
         return { tex, fb };
+    }
+
+    /**
+     * 检测到 GPU 分配失败时降级到备用预算。
+     * 只降级一次（再失败就保持 MIN 保底，后续靠 CPU 备份救场）。
+     */
+    _tryDowngradeGpuBudget() {
+        if (this._gpuBudgetDowngraded) return;
+        this._gpuBudgetDowngraded = true;
+        const oldMax = this._maxGpuSlots;
+        this._calcGpuBudget(GPU_BUDGET_FALLBACK_MB);
+        console.warn(`[GPU] 分配失败，历史槽位 ${oldMax} → ${this._maxGpuSlots}`);
+        try {
+            if (typeof window !== 'undefined' && typeof window.gtag === 'function') {
+                window.gtag('event', 'gpu_budget_downgrade', {
+                    canvas_w: this.canvas.width,
+                    canvas_h: this.canvas.height,
+                    old_slots: oldMax,
+                    new_slots: this._maxGpuSlots
+                });
+            }
+        } catch (_) {}
     }
 
     _evictOldestGpuSlot() {
@@ -679,7 +714,12 @@ class BaseWebGLPainter {
 
         // 所有帧都是当前步（理论上不会发生），新建一个
         console.warn('BaseWebGLPainter: 无法驱逐任何帧，强制新建 GPU slot');
-        return this._createGpuSlot();
+        const slot = this._createGpuSlot();
+        if (slot) return slot;
+        // 极端兜底：连新建都失败（极小显存），复用当前步的 slot
+        // 这里返回 null 让上层决定是否跳过保存这一帧
+        console.error('BaseWebGLPainter: GPU 分配彻底失败，跳过本次历史保存');
+        return null;
     }
 
     /** 同步从 GPU 读取帧数据到 CPU（仅在驱逐前必要时调用）*/
@@ -777,6 +817,7 @@ class BaseWebGLPainter {
         }
 
         const slot = this._acquireGpuSlot();
+        if (!slot) return; // 极端情况：GPU 彻底无法分配，放弃本次快照
         this._copyCanvasToSlot(slot);
 
         const frame = {
@@ -895,6 +936,102 @@ class BaseWebGLPainter {
         }
         frame.cpuPixels = null;
         frame.cpuReady  = false;
+    }
+
+    /**
+     * 释放该 painter 持有的所有 GPU/CPU 资源。
+     * 切换引擎或修改画布尺寸前调用，避免旧实例资源泄漏。
+     * 调用后此实例不可再用。
+     */
+    dispose() {
+        if (this._disposed) return;
+        this._disposed = true;
+
+        const gl = this.gl;
+        if (!gl) return;
+
+        // 停 RAF
+        if (typeof this.stopHeatmapFadeOut === 'function') {
+            try { this.stopHeatmapFadeOut(); } catch (_) {}
+        }
+
+        // 销毁历史帧
+        if (this._history) {
+            for (const frame of this._history) {
+                this._cancelIdleBackup(frame);
+                if (frame.gpuSlot) {
+                    gl.deleteTexture(frame.gpuSlot.tex);
+                    gl.deleteFramebuffer(frame.gpuSlot.fb);
+                    frame.gpuSlot = null;
+                }
+                frame.cpuPixels = null;
+            }
+            this._history.length = 0;
+        }
+
+        // 销毁空闲池
+        if (this._gpuFreeSlots) {
+            for (const slot of this._gpuFreeSlots) {
+                gl.deleteTexture(slot.tex);
+                gl.deleteFramebuffer(slot.fb);
+            }
+            this._gpuFreeSlots.length = 0;
+        }
+
+        // 销毁运行时纹理
+        if (this.textures) {
+            const seen = new Set();
+            for (const key in this.textures) {
+                const tex = this.textures[key];
+                if (tex && !seen.has(tex)) {
+                    seen.add(tex);
+                    gl.deleteTexture(tex);
+                }
+            }
+            this.textures = {};
+        }
+
+        // 销毁 framebuffer
+        if (this.framebuffers) {
+            const seen = new Set();
+            for (const key in this.framebuffers) {
+                const fb = this.framebuffers[key];
+                if (fb && !seen.has(fb)) {
+                    seen.add(fb);
+                    gl.deleteFramebuffer(fb);
+                }
+            }
+            this.framebuffers = {};
+        }
+
+        // 销毁笔刷纹理
+        if (this.currentBrushTexture) {
+            gl.deleteTexture(this.currentBrushTexture);
+            this.currentBrushTexture = null;
+        }
+        this.lastBrushCanvas = null;
+
+        // 销毁 vertex buffers
+        if (this.buffers) {
+            for (const key in this.buffers) {
+                if (this.buffers[key]) gl.deleteBuffer(this.buffers[key]);
+            }
+            this.buffers = {};
+        }
+        if (this._blitBuffer) {
+            gl.deleteBuffer(this._blitBuffer);
+            this._blitBuffer = null;
+        }
+
+        // 销毁 shader programs
+        if (this.program) {
+            gl.deleteProgram(this.program);
+            this.program = null;
+        }
+        if (this._blitProgram) {
+            gl.deleteProgram(this._blitProgram);
+            this._blitProgram = null;
+        }
     }
 
     /**

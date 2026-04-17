@@ -119,8 +119,8 @@ async function switchEngine(engine) {
         if (confirm(msg)) location.reload();
         return;
     }
-    // 停掉旧 painter 的衰减 RAF，避免闭包持有旧实例的 GL 资源持续运行
-    if (painter && painter.stopHeatmapFadeOut) painter.stopHeatmapFadeOut();
+    // 释放旧 painter 的 RAF 和 GPU/CPU 资源，避免泄漏
+    if (painter && typeof painter.dispose === 'function') painter.dispose();
     painter = newPainter;
     window._painter = painter;
     painter.setMixStrength(oldMixStrength);

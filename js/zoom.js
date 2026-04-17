@@ -178,7 +178,8 @@ async function _commitResize(newWidth) {
     // 3. 读取最终像素
     const newPixels = dstCtx.getImageData(0, 0, newCanvasW, newCanvasH).data;
 
-    // 4. Resize canvas 并重建 painter
+    // 4. 释放旧 painter 资源、Resize canvas 并重建
+    if (painter && typeof painter.dispose === 'function') painter.dispose();
     mixCanvas.width  = newCanvasW;
     mixCanvas.height = newCanvasH;
     painter = createPainter(currentEngine, mixCanvas);
