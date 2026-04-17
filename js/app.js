@@ -13,6 +13,33 @@ function track(name, params) {
     } catch (_) {}
 }
 
+function reportAnalyticsEnv() {
+    try {
+        if (typeof window.gtag !== 'function') return;
+        const isUXP = typeof window.uxpHost !== 'undefined';
+        const ua = navigator.userAgent || '';
+        const platform = navigator.platform || '';
+        let os = 'other';
+        if (/Windows/i.test(ua) || /Win/i.test(platform)) os = 'windows';
+        else if (/Mac/i.test(ua) || /Mac/i.test(platform)) os = 'mac';
+        else if (/Android/i.test(ua)) os = 'android';
+        else if (/iPhone|iPad|iPod/i.test(ua)) os = 'ios';
+        else if (/Linux/i.test(ua)) os = 'linux';
+        const isTouch = matchMedia('(pointer:coarse)').matches;
+        const deviceType = isUXP ? 'desktop' : (isTouch ? 'mobile' : 'desktop');
+        window.gtag('set', 'user_properties', {
+            app_env: isUXP ? 'uxp_plugin' : 'web_browser',
+            device_os: os,
+            device_type: deviceType
+        });
+        track('app_env', {
+            env: isUXP ? 'uxp_plugin' : 'web_browser',
+            device_os: os,
+            device_type: deviceType
+        });
+    } catch (_) {}
+}
+
 // 当前颜料预设
 let currentPalette = 'winsorNewtonCotman';
 let colors = palettePresets[currentPalette].colors;
@@ -149,6 +176,8 @@ const brushSpacingValue = document.getElementById('brushSpacingValue');
 async function initApp() {
     // 0. 检查宿主版本兼容性
     if (!checkHostCompatibility()) return;
+
+    reportAnalyticsEnv();
 
     // 1. 初始化笔刷管理器
     brushManager = new BrushManager();
