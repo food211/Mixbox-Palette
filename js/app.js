@@ -68,8 +68,21 @@ async function switchEngine(engine) {
     const oldPixels = painter ? painter.readPixelRegion(0, 0, mixCanvas.width, mixCanvas.height) : null;
 
     // 旧 painter 的历史池随实例一起废弃
-    painter = createPainter(engine, mixCanvas);
-    await painter.init();
+    let newPainter;
+    try {
+        newPainter = createPainter(engine, mixCanvas);
+        await newPainter.init();
+    } catch (err) {
+        console.error('❌ 引擎切换失败:', err);
+        const msg = I18N.getLang() === 'zh'
+            ? '引擎初始化失败，需要刷新页面重新加载资源。\n点击确定后将自动刷新。'
+            : 'Engine initialization failed. The page needs to reload.\nClick OK to refresh.';
+        if (confirm(msg)) location.reload();
+        return;
+    }
+    // 停掉旧 painter 的衰减 RAF，避免闭包持有旧实例的 GL 资源持续运行
+    if (painter && painter.stopHeatmapFadeOut) painter.stopHeatmapFadeOut();
+    painter = newPainter;
     window._painter = painter;
     painter.setMixStrength(oldMixStrength);
     painter.setWetness(watercolorWetness / 100);

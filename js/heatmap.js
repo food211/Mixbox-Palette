@@ -616,6 +616,16 @@ function _resetHeatmapFade() {
     // RAF 常驻运行，无需任何操作
 }
 
+/**
+ * 停止衰减 RAF。切换引擎或销毁 painter 时调用，避免旧实例的 RAF 持续运行。
+ */
+function stopHeatmapFadeOut() {
+    if (this._fadeRafId) {
+        cancelAnimationFrame(this._fadeRafId);
+        this._fadeRafId = null;
+    }
+}
+
 
 // ─── 挂载到 BaseWebGLPainter.prototype ───────────────────────────────────────
 
@@ -636,6 +646,7 @@ Object.assign(BaseWebGLPainter.prototype, {
     _flushDebugDepositHeatmap,
     setHeatmapDecayActive,
     startHeatmapFadeOut,
+    stopHeatmapFadeOut,
     _resetHeatmapFade,
 });
 

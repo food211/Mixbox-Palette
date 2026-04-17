@@ -373,7 +373,25 @@ class KMWebGLPainter extends BaseWebGLPainter {
     }
 
     async _loadLUT() {
-        const b64 = KM_LUT_DATA.split(',')[1];
+        try {
+            this._buildLUTFromDataURL(KM_LUT_DATA);
+            console.log('✅ KM LUT 加载完成（从 km-lut-data.js 全局变量）');
+            return;
+        } catch (err) {
+            console.warn('⚠️ KM LUT 首次解析失败，尝试绕过缓存重新拉取 km-lut-data.js:', err);
+        }
+
+        // 资源可能损坏（缓存/网络），尝试 no-cache 重拉源文件并正则提取
+        const freshDataURL = await this._refetchLUTDataURL();
+        this._buildLUTFromDataURL(freshDataURL);
+        console.log('✅ KM LUT 加载完成（重新拉取后）');
+    }
+
+    _buildLUTFromDataURL(dataURL) {
+        if (typeof dataURL !== 'string' || !dataURL.includes(',')) {
+            throw new Error('LUT data URL 格式错误');
+        }
+        const b64 = dataURL.split(',')[1];
         const bin = atob(b64);
         const u8  = new Uint8Array(bin.length);
         for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
@@ -390,8 +408,18 @@ class KMWebGLPainter extends BaseWebGLPainter {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
         gl.bindTexture(gl.TEXTURE_2D, null);
+        // 释放旧纹理，避免重试时泄漏
+        if (this.textures.lut) gl.deleteTexture(this.textures.lut);
         this.textures.lut = tex;
-        console.log(`✅ KM LUT 加载完成（${width}×${height}，纯JS解码）`);
+    }
+
+    async _refetchLUTDataURL() {
+        const resp = await fetch('js/km-lut-data.js', { cache: 'reload' });
+        if (!resp.ok) throw new Error(`重新拉取 km-lut-data.js 失败: HTTP ${resp.status}`);
+        const src = await resp.text();
+        const m = src.match(/["'](data:image\/[a-z]+;base64,[A-Za-z0-9+/=]+)["']/);
+        if (!m) throw new Error('km-lut-data.js 内未找到 data URL');
+        return m[1];
     }
 
     _bindLUT() {
