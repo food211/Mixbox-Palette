@@ -259,6 +259,11 @@ const Announcer = {
         const lang  = this._getLang();
         const isZH  = lang === 'zh';
 
+        const track = (name, params) => {
+            try { if (typeof window.gtag === 'function') window.gtag('event', name, params || {}); } catch (_) {}
+        };
+        track('update_modal_shown', { from_version: Updater.CURRENT_VERSION, to_version: data.latest });
+
         const modal      = document.getElementById('updateModal');
         const titleEl    = document.getElementById('updateModalTitle');
         const bodyEl     = document.getElementById('updateModalBody');
@@ -284,10 +289,12 @@ const Announcer = {
             if (onDone) onDone();
         };
 
-        closeBtn.onclick  = () => close(false);
-        laterBtn.onclick  = () => close(false);
-        dismissBtn.onclick = () => close(true);
+        const trackAction = (action) => track('update_action', { action, to_version: data.latest });
+        closeBtn.onclick  = () => { trackAction('close'); close(false); };
+        laterBtn.onclick  = () => { trackAction('later'); close(false); };
+        dismissBtn.onclick = () => { trackAction('dismiss'); close(true); };
         refreshBtn.onclick = () => {
+            trackAction('refresh');
             localStorage.setItem(Updater.STORAGE_KEY, data.latest);
             this._showReloadOverlay();
         };

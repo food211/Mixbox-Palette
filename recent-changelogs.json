@@ -1,6 +1,11 @@
 {
   "versions": [
     {
+      "version": "V1.3.7",
+      "zh": "### 新增\r\n- **匿名使用统计** — 新增匿名统计功能，仅记录笔刷、引擎、调色盘的使用偏好以及绘制时长，用于帮助我改进插件。不会收集任何画作内容或个人信息，如不希望参与可通过浏览器的广告拦截插件屏蔽 Google Analytics",
+      "en": "### New\r\n- **Anonymous usage analytics** — Added opt-out anonymous tracking of brush / engine / palette preferences and stroke duration to help improve the plugin. No artwork or personal info is collected; you can block Google Analytics with any ad blocker if you'd rather not participate"
+    },
+    {
       "version": "V1.3.6",
       "zh": "### 优化\r\n- **启动速度提升** — 启动加载方式全面优化，首屏响应更快\r\n- **更新提示改进** — 支持一次展示多个未读版本的更新说明，不会再错过中间版本",
       "en": "### Improvement\r\n- **Faster startup** — Overhauled loading pipeline for snappier first paint\r\n- **Better update notifications** — Missed several releases? Now you'll see all their changelogs at once"
@@ -9,12 +14,7 @@
       "version": "V1.3.5a",
       "zh": "### 优化\r\n- **新增2款色板** — 温莎牛顿 Designers Gouache, 伦勃朗 Rembrandt 油画 16色",
       "en": "### Improvement\r\n- **New Color Palettes** - Winsor & Newton Designers Gouache Mix, Rembrandt Oil 16"
-    },
-    {
-      "version": "V1.3.5",
-      "zh": "### 优化\r\n- **水彩笔重做** — 重新设计水彩笔的渲染效果，更加具有真实感。新增湿度（Wet）参数，湿度低时颜料浓重、沉积感强，湿度高时晕染扩散、颜色更轻盈",
-      "en": "### Improvement\r\n- **Watercolor brush rework** — Redesigned the watercolor brush rendering for a more realistic feel. Added a Wetness (Wet) parameter: low wetness produces dense, heavy paint with strong deposits; high wetness creates soft diffusion and lighter color spread"
     }
   ],
-  "generatedAt": "2026-04-17T12:24:28.509Z"
+  "generatedAt": "2026-04-17T18:36:43.219Z"
 }
