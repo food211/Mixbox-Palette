@@ -1166,6 +1166,13 @@ class BaseWebGLPainter {
                 this._pendingIdle.delete(f.id);
             }
 
+            // 清掉已经不需要备份的 shared 表项（处理过后仍挂在表里会无意义地延长排队）
+            for (const [id, entry] of this._pendingIdle) {
+                if (entry.type !== 'shared') continue;
+                const f = this._history.find(fr => fr.id === id);
+                if (!f || f.cpuReady) this._pendingIdle.delete(id);
+            }
+
             // 压缩一个最远的未压缩帧
             this._maybeCompressOldFrames();
 
@@ -1191,17 +1198,42 @@ class BaseWebGLPainter {
     _cancelIdleBackup(frame) {
         const entry = this._pendingIdle.get(frame.id);
         if (!entry) return;
+        this._pendingIdle.delete(frame.id);
+
+        if (entry.type === 'shared') return;
+        // 真 handle 被取消：复位 flag，让下次 pushHistoryFrame 能重新挂 idle。
+        // 如果当下还有 shared 表项在等（其他帧还需要备份），立刻补一次 schedule。
         if (entry.type === 'idle') cancelIdleCallback(entry.handle);
         else if (entry.type === 'timeout') clearTimeout(entry.handle);
-        // type === 'shared' 不持有真实 handle，只需从表里删除
-        this._pendingIdle.delete(frame.id);
+        this._idleBackupScheduled = false;
+        if (this._pendingIdle.size > 0 && this._history.length > 0 && !this._disposed) {
+            this._scheduleIdleBackup(this._history[this._history.length - 1]);
+        }
     }
 
     /**
-     * 把一批被丢弃的帧异步分批释放。每 idle 处理一小批，避免大批 Blob 解引用 + Map 清理
-     * 造成单帧长卡顿（撤销很多次后落新笔会 splice 掉 N 个旧帧）。
+     * 把一批被丢弃的帧"轻量部分"同步处理、重量部分异步分批处理：
+     * - 同步：GPU slot 归还空闲池（必须立刻，否则新笔画会重分配显存导致峰值爆炸）
+     *         + 取消 pending idle 备份记录
+     * - 异步：解引用 cpuPixels / cpuBlob，清 _decompressCache，分批走 idle 降低单帧卡顿
+     *
+     * 场景触发：用户撤销 40+ 次后落新笔，一次性 splice 几十个 frame。
      */
     _scheduleAsyncRelease(frames) {
+        // 同步把 GPU 资源和 idle 取消处理完（轻量、必要）
+        for (const f of frames) {
+            this._cancelIdleBackup(f);
+            if (f.gpuSlot) {
+                this._gpuFreeSlots.push(f.gpuSlot);
+                f.gpuSlot = null;
+            }
+            if (this._decompressCache && this._decompressCache.has(f.id)) {
+                this._decompressCache.delete(f.id);
+            }
+        }
+
+        // cpuPixels / cpuBlob 的 Blob 解引用比较重（浏览器同步释放底层 buffer），
+        // 推到 idle 分批做
         if (!this._releaseQueue) this._releaseQueue = [];
         for (const f of frames) this._releaseQueue.push(f);
         if (this._releaseScheduled) return;
@@ -1212,7 +1244,10 @@ class BaseWebGLPainter {
             if (this._disposed) { this._releaseScheduled = false; return; }
             const n = Math.min(BATCH, this._releaseQueue.length);
             for (let i = 0; i < n; i++) {
-                this._releaseFrame(this._releaseQueue.shift());
+                const f = this._releaseQueue.shift();
+                f.cpuPixels = null;
+                f.cpuReady  = false;
+                f.cpuBlob   = null;
             }
             if (this._releaseQueue.length > 0) {
                 if (typeof requestIdleCallback !== 'undefined') {
@@ -1282,17 +1317,9 @@ class BaseWebGLPainter {
         }
         if (this._decompressCache) this._decompressCache.clear();
 
-        // 清空异步释放队列中未处理的帧（把它们的 slot 也回收到 _gpuFreeSlots，
-        // 这样下面统一销毁 GPU 资源时能覆盖到）
-        if (this._releaseQueue && this._releaseQueue.length) {
-            for (const f of this._releaseQueue) {
-                if (f.gpuSlot) {
-                    this._gpuFreeSlots.push(f.gpuSlot);
-                    f.gpuSlot = null;
-                }
-            }
-            this._releaseQueue.length = 0;
-        }
+        // 释放队列里的 frame gpuSlot 已在 _scheduleAsyncRelease 同步阶段回收过，
+        // 这里只需要清空队列（剩下的 cpuPixels/cpuBlob 随 frame 对象一起被 GC）
+        if (this._releaseQueue) this._releaseQueue.length = 0;
 
         // 销毁历史帧
         if (this._history) {

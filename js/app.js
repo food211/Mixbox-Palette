@@ -1719,9 +1719,13 @@ async function _doSave() {
 
 /**
  * 强制立刻把脏画布写入 localStorage（切换引擎 / resize / beforeunload 时调）。
- * 与节流路径互斥：如果当前有 in-flight 保存会直接跳过。
+ * 如果当前有 in-flight 保存，先等它跑完；等完后如果仍然脏，再跑一次。
  */
 async function flushCanvasSave() {
+    // 若有 in-flight 任务先等它结束，否则新笔画可能被跳过
+    while (_saveInFlight) {
+        await new Promise(r => setTimeout(r, 30));
+    }
     if (!_canvasDirty) return;
     await _doSave();
 }
