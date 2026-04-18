@@ -248,6 +248,10 @@ class MixboxWebGLPainter extends BaseWebGLPainter {
 
     async _loadLUT() {
         this.textures.lut = mixbox.lutTexture(this.gl);
+        // mixbox.lutTexture 是模块级单例（同一 gl 全局只建一张），dispose 不能 deleteTexture
+        // 否则下次 init 时 mixbox 缓存里的纹理 ID 已经失效，shader 采样得全 0，物理混色失效
+        if (!this._externalTextures) this._externalTextures = new Set();
+        this._externalTextures.add(this.textures.lut);
     }
 
     _bindLUT() {

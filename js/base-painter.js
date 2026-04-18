@@ -43,6 +43,16 @@ class BaseWebGLPainter {
 
         // 待处理的 idle 任务 Map<frameId, handle>
         this._pendingIdle = new Map();
+
+        // 历史压缩 Worker（惰性创建）
+        this._historyWorker = null;
+        this._workerMsgId = 0;
+        this._workerPending = new Map();   // msgId → { resolve, reject }
+        this._decompressCache = new Map(); // frameId → Uint8ClampedArray（LRU 简版）
+        this._decompressCacheMax = 3;
+        this._lastRestoreDir = 0;          // +1 redo, -1 undo, 0 未知
+        this._lastRestoreStep = -1;
+        this._restoreSeq = 0;              // 异步 restore 令牌，防止乱序解压结果覆盖正确帧
     }
 
     // ─────────────────────────────────────────────
@@ -97,9 +107,10 @@ class BaseWebGLPainter {
     // GPU 预算计算
     // ─────────────────────────────────────────────
 
-    _calcGpuBudget() {
+    _calcGpuBudget(budgetMB = GPU_BUDGET_MB) {
+        this._gpuBudgetMB = budgetMB;
         const bytesPerFrame = this.canvas.width * this.canvas.height * 4;
-        const budgetBytes = (GPU_BUDGET_MB - GPU_RUNTIME_OVERHEAD_MB) * 1024 * 1024;
+        const budgetBytes = (budgetMB - GPU_RUNTIME_OVERHEAD_MB) * 1024 * 1024;
         this._maxGpuSlots = Math.min(GPU_SLOTS_MAX, Math.max(GPU_SLOTS_MIN, Math.floor(budgetBytes / bytesPerFrame)));
     }
 
@@ -348,7 +359,7 @@ class BaseWebGLPainter {
         const ch = this.canvas.height;
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
         gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeSnapshot);
-        gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, cw, ch, 0);
+        gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, cw, ch);
         gl.bindTexture(gl.TEXTURE_2D, null);
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
@@ -417,7 +428,7 @@ class BaseWebGLPainter {
         gl.bindFramebuffer(gl.FRAMEBUFFER, this._copyReadFB);
         gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.textures.canvas, 0);
         gl.bindTexture(gl.TEXTURE_2D, this.textures.temp);
-        gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, cw, ch, 0);
+        gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, cw, ch);
         gl.bindTexture(gl.TEXTURE_2D, null);
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
@@ -480,6 +491,7 @@ class BaseWebGLPainter {
             x - halfSize, y + halfSize,
             x + halfSize, y + halfSize,
         ]);
+        this._disableAllVertexAttribs();
         gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.position);
         gl.bufferData(gl.ARRAY_BUFFER, positions, gl.DYNAMIC_DRAW);
         gl.enableVertexAttribArray(this.locations.a_position);
@@ -524,6 +536,8 @@ class BaseWebGLPainter {
         gl.uniform1i(this._blitLocations.u_src, 0);
         gl.uniform2f(this._blitLocations.u_resolution, cw, ch);
 
+        this._disableAllVertexAttribs();
+
         gl.bindBuffer(gl.ARRAY_BUFFER, this._blitBuffer);
         gl.enableVertexAttribArray(this._blitLocations.a_clipPos);
         gl.vertexAttribPointer(this._blitLocations.a_clipPos, 2, gl.FLOAT, false, 0, 0);
@@ -535,6 +549,22 @@ class BaseWebGLPainter {
         if (this._debugHeatmapEnabled)  this._flushDebugHeatmap(this._debugHeatOpacity ?? 1.0);
         if (this._debugWetPaperEnabled) this._flushDebugWetPaper(this._debugHeatOpacity ?? 1.0);
         if (this._debugDepositHeatmapEnabled) this._flushDebugDepositHeatmap(this._debugHeatOpacity ?? 1.0);
+    }
+
+    /**
+     * 禁用所有 vertex attribute。
+     * WebGL 的 attribute enabled 状态是全局共享的（不随 program 切换重置），
+     * 切换 program 前统一禁用，避免上个 program 启用的 attribute 在当前 program 上
+     * 造成 "no buffer is bound to enabled attribute" 错误。
+     */
+    _disableAllVertexAttribs() {
+        const gl = this.gl;
+        if (this._maxVertexAttribs === undefined) {
+            this._maxVertexAttribs = gl.getParameter(gl.MAX_VERTEX_ATTRIBS);
+        }
+        for (let i = 0; i < this._maxVertexAttribs; i++) {
+            gl.disableVertexAttribArray(i);
+        }
     }
 
     swapTextures() {
@@ -640,10 +670,12 @@ class BaseWebGLPainter {
         // 检查是否还有预算新建
         const usedSlots = this._history.filter(f => f.gpuSlot !== null).length;
         if (usedSlots < this._maxGpuSlots) {
-            return this._createGpuSlot();
+            const slot = this._createGpuSlot();
+            if (slot) return slot;
+            // 创建失败（已触发降级）→ 退路：驱逐最老帧
         }
 
-        // 超出预算，驱逐最老的、不是当前步的帧
+        // 超出预算或创建失败，驱逐最老的、不是当前步的帧
         return this._evictOldestGpuSlot();
     }
 
@@ -652,13 +684,45 @@ class BaseWebGLPainter {
         const cw = this.canvas.width;
         const ch = this.canvas.height;
 
+        // 清空先前的错误状态，避免误判
+        while (gl.getError() !== gl.NO_ERROR) {}
+
         const tex = this.createEmptyTexture(cw, ch);
+        const err = gl.getError();
+        if (!tex || err === gl.OUT_OF_MEMORY) {
+            if (tex) gl.deleteTexture(tex);
+            this._tryDowngradeGpuBudget();
+            return null;
+        }
+
         const fb  = gl.createFramebuffer();
         gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
         gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
         return { tex, fb };
+    }
+
+    /**
+     * 检测到 GPU 分配失败时降级到备用预算。
+     * 只降级一次（再失败就保持 MIN 保底，后续靠 CPU 备份救场）。
+     */
+    _tryDowngradeGpuBudget() {
+        if (this._gpuBudgetDowngraded) return;
+        this._gpuBudgetDowngraded = true;
+        const oldMax = this._maxGpuSlots;
+        this._calcGpuBudget(GPU_BUDGET_FALLBACK_MB);
+        console.warn(`[GPU] 分配失败，历史槽位 ${oldMax} → ${this._maxGpuSlots}`);
+        try {
+            if (typeof window !== 'undefined' && typeof window.gtag === 'function') {
+                window.gtag('event', 'gpu_budget_downgrade', {
+                    canvas_w: this.canvas.width,
+                    canvas_h: this.canvas.height,
+                    old_slots: oldMax,
+                    new_slots: this._maxGpuSlots
+                });
+            }
+        } catch (_) {}
     }
 
     _evictOldestGpuSlot() {
@@ -679,7 +743,34 @@ class BaseWebGLPainter {
 
         // 所有帧都是当前步（理论上不会发生），新建一个
         console.warn('BaseWebGLPainter: 无法驱逐任何帧，强制新建 GPU slot');
-        return this._createGpuSlot();
+        const slot = this._createGpuSlot();
+        if (slot) return slot;
+        // 极端兜底：连新建都失败（极小显存），复用当前步的 slot
+        // 这里返回 null 让上层决定是否跳过保存这一帧
+        console.error('BaseWebGLPainter: GPU 分配彻底失败，跳过本次历史保存');
+        return null;
+    }
+
+    /** 同步从当前 canvas framebuffer 读取像素到 frame.cpuPixels（GPU slot 无法分配时的兜底）*/
+    _readCanvasToCPU(frame) {
+        const gl = this.gl;
+        const cw = this.canvas.width;
+        const ch = this.canvas.height;
+        try {
+            gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
+            const raw = new Uint8Array(cw * ch * 4);
+            gl.readPixels(0, 0, cw, ch, gl.RGBA, gl.UNSIGNED_BYTE, raw);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            const flipped = new Uint8ClampedArray(raw.length);
+            const rowSize = cw * 4;
+            for (let row = 0; row < ch; row++) {
+                flipped.set(raw.subarray((ch - 1 - row) * rowSize, (ch - row) * rowSize), row * rowSize);
+            }
+            frame.cpuPixels = flipped;
+            frame.cpuReady  = true;
+        } catch (e) {
+            console.error('BaseWebGLPainter: readPixels 失败', e);
+        }
     }
 
     /** 同步从 GPU 读取帧数据到 CPU（仅在驱逐前必要时调用）*/
@@ -717,7 +808,7 @@ class BaseWebGLPainter {
         const ch = this.canvas.height;
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
         gl.bindTexture(gl.TEXTURE_2D, slot.tex);
-        gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, cw, ch, 0);
+        gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, cw, ch);
         gl.bindTexture(gl.TEXTURE_2D, null);
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     }
@@ -744,6 +835,7 @@ class BaseWebGLPainter {
         gl.uniform1i(this._blitLocations.u_src, 0);
         gl.uniform2f(this._blitLocations.u_resolution, cw, ch);
 
+        this._disableAllVertexAttribs();
         gl.bindBuffer(gl.ARRAY_BUFFER, this._blitBuffer);
         gl.enableVertexAttribArray(this._blitLocations.a_clipPos);
         gl.vertexAttribPointer(this._blitLocations.a_clipPos, 2, gl.FLOAT, false, 0, 0);
@@ -754,7 +846,7 @@ class BaseWebGLPainter {
 
         // 同步 temp 纹理（复制 canvas framebuffer 内容，无额外 draw call）
         gl.bindTexture(gl.TEXTURE_2D, this.textures.temp);
-        gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, cw, ch, 0);
+        gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, cw, ch);
 
         gl.bindTexture(gl.TEXTURE_2D, null);
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -770,15 +862,13 @@ class BaseWebGLPainter {
      * 裁掉当前步之后的所有帧，然后保存快照
      */
     pushHistoryFrame() {
-        // 丢弃当前步之后的帧
+        // 丢弃当前步之后的帧。
+        // 先从 _history 断开引用让新帧不被它们干扰，然后分批异步释放，
+        // 避免一次性解引用大量 Blob / 同步扫 Map 造成笔画结束时的卡顿。
         const discarded = this._history.splice(this._historyStep + 1);
-        for (const frame of discarded) {
-            this._releaseFrame(frame);
-        }
+        if (discarded.length > 0) this._scheduleAsyncRelease(discarded);
 
         const slot = this._acquireGpuSlot();
-        this._copyCanvasToSlot(slot);
-
         const frame = {
             id:        this._frameCounter++,
             timestamp: performance.now(),
@@ -786,11 +876,24 @@ class BaseWebGLPainter {
             cpuPixels: null,
             cpuReady:  false,
         };
+        if (slot) {
+            this._copyCanvasToSlot(slot);
+        } else {
+            // GPU 彻底无法分配：同步 readPixels 到 CPU 保底，避免撤销链断档
+            console.warn('BaseWebGLPainter: GPU 分配失败，历史帧回退 CPU 快照');
+            this._readCanvasToCPU(frame);
+            if (!frame.cpuReady) return; // 连 CPU 也失败（极罕见）→ 放弃
+        }
 
         this._history.push(frame);
 
-        // 超出上限时移除最老帧
+        // 软上限：超过 GPU slot 配额一定缓冲后驱逐最老帧
         if (this._history.length > this._maxGpuSlots + HISTORY_OVERFLOW_BUFFER) {
+            const oldest = this._history.shift();
+            this._releaseFrame(oldest);
+        }
+        // 硬上限：防止长时间绘制时 cpuBlob 无限累积
+        while (this._history.length > HISTORY_FRAMES_HARD_CAP) {
             const oldest = this._history.shift();
             this._releaseFrame(oldest);
         }
@@ -806,27 +909,55 @@ class BaseWebGLPainter {
      * @param {number} step - _history 数组下标
      * @returns {boolean} 是否成功
      */
-    restoreHistoryFrame(step) {
+    async restoreHistoryFrame(step) {
         if (step < 0 || step >= this._history.length) return false;
 
         const frame = this._history[step];
+        const seq = ++this._restoreSeq;
+        let pixels = null;
 
         if (frame.gpuSlot) {
-            // GPU 路径：blit，零 readPixels
+            // GPU 路径：blit，零 readPixels（同步完成，无竞态）
             this._copySlotToCanvas(frame.gpuSlot);
-        } else if (frame.cpuReady && frame.cpuPixels) {
-            // CPU 回退：重新上传到 GPU
-            this.writeFromPixels(frame.cpuPixels, this.canvas.width, this.canvas.height);
-            // 重新为此帧分配 GPU slot，避免下次再走 CPU
-            const slot = this._acquireGpuSlot();
-            this._copyCanvasToSlot(slot);
-            frame.gpuSlot = slot;
+        } else if (frame.cpuPixels) {
+            pixels = frame.cpuPixels;
+        } else if (this._decompressCache.has(frame.id)) {
+            pixels = this._decompressCache.get(frame.id);
+        } else if (frame.cpuBlob) {
+            // 从压缩 blob 解压
+            try {
+                pixels = await this._decompressFrame(frame);
+            } catch (e) {
+                console.warn('BaseWebGLPainter: 解压失败', e);
+                return false;
+            }
+            // 异步返回后校验：如果期间又触发了新的 restore（用户连续点撤销/重做），丢弃本次结果
+            if (seq !== this._restoreSeq || this._disposed) return false;
         } else {
-            console.warn('BaseWebGLPainter: 帧数据不可用（GPU 和 CPU 都没有）');
+            console.warn('BaseWebGLPainter: 帧数据不可用');
             return false;
         }
 
+        if (pixels) {
+            this.writeFromPixels(pixels, this.canvas.width, this.canvas.height);
+            // 回写 GPU slot，下次零延迟
+            const slot = this._acquireGpuSlot();
+            if (slot) {
+                this._copyCanvasToSlot(slot);
+                frame.gpuSlot = slot;
+            }
+        }
+
+        // 方向追踪：用于预解下一帧
+        if (this._lastRestoreStep >= 0) {
+            const diff = step - this._lastRestoreStep;
+            if (diff !== 0) this._lastRestoreDir = diff > 0 ? 1 : -1;
+        }
+        this._lastRestoreStep = step;
         this._historyStep = step;
+
+        // 触发朝同方向预解下一帧
+        this._prefetchAdjacentFrame();
         return true;
     }
 
@@ -858,16 +989,201 @@ class BaseWebGLPainter {
     }
 
     // ─────────────────────────────────────────────
+    // 历史压缩 Worker
+    // ─────────────────────────────────────────────
+
+    _ensureHistoryWorker() {
+        if (this._historyWorker) return this._historyWorker;
+        try {
+            // 基于 base-painter.js 的 URL 解析 worker 路径，避免 app 部署在子目录时相对路径失效
+            const base = BaseWebGLPainter._scriptURL;
+            const workerURL = base ? new URL('./history-worker.js', base).href : 'js/history-worker.js';
+            this._historyWorker = new Worker(workerURL);
+            this._historyWorker.onmessage = (e) => {
+                const { type, id } = e.data;
+                const entry = this._workerPending.get(id);
+                if (!entry) return;
+                this._workerPending.delete(id);
+                if (type === 'error') entry.reject(new Error(e.data.reason));
+                else if (type === 'compressed') entry.resolve(e.data.blob);
+                else if (type === 'decompressed') entry.resolve(new Uint8ClampedArray(e.data.pixels));
+            };
+            this._historyWorker.onerror = (err) => {
+                console.error('[history-worker] error:', err);
+            };
+        } catch (err) {
+            console.warn('[history-worker] 创建失败，历史压缩禁用', err);
+            this._historyWorker = null;
+        }
+        return this._historyWorker;
+    }
+
+    _workerRequest(msg, transfer) {
+        const w = this._ensureHistoryWorker();
+        if (!w) return Promise.reject(new Error('worker unavailable'));
+        const id = ++this._workerMsgId;
+        return new Promise((resolve, reject) => {
+            this._workerPending.set(id, { resolve, reject });
+            w.postMessage({ ...msg, id }, transfer || []);
+        });
+    }
+
+    /** 把已经读到 CPU 的帧压缩成 blob，压完释放 cpuPixels */
+    async _compressFrame(frame) {
+        if (!frame.cpuReady || !frame.cpuPixels || frame.cpuBlob) return;
+        // 防止同一帧被多次压缩：idle 循环密集触发时，上一次 await 未完成前可能又被扫到
+        if (frame._compressing) return;
+        frame._compressing = true;
+        const w = this.canvas.width;
+        const h = this.canvas.height;
+        const buf = frame.cpuPixels.buffer.slice(0); // 拷贝一份给 worker transfer
+        try {
+            const blob = await this._workerRequest(
+                { type: 'compress', pixels: buf, w, h },
+                [buf]
+            );
+            // 帧可能已经被丢弃
+            if (!this._history.includes(frame)) return;
+            frame.cpuBlob = blob;
+            frame.cpuBlobW = w;
+            frame.cpuBlobH = h;
+            frame.cpuPixels = null; // 释放未压缩数据
+        } catch (e) {
+            // 压缩失败保留 cpuPixels
+        } finally {
+            frame._compressing = false;
+        }
+    }
+
+    /** 从 blob 解压回 Uint8ClampedArray（带缓存） */
+    async _decompressFrame(frame) {
+        if (frame.cpuPixels) return frame.cpuPixels;
+        if (this._decompressCache.has(frame.id)) {
+            const px = this._decompressCache.get(frame.id);
+            // LRU 触达
+            this._decompressCache.delete(frame.id);
+            this._decompressCache.set(frame.id, px);
+            return px;
+        }
+        if (!frame.cpuBlob) return null;
+        const pixels = await this._workerRequest({
+            type: 'decompress',
+            blob: frame.cpuBlob,
+            w: frame.cpuBlobW,
+            h: frame.cpuBlobH,
+        });
+        this._decompressCachePut(frame.id, pixels);
+        return pixels;
+    }
+
+    _decompressCachePut(frameId, pixels) {
+        if (this._decompressCache.has(frameId)) {
+            this._decompressCache.delete(frameId);
+        }
+        this._decompressCache.set(frameId, pixels);
+        while (this._decompressCache.size > this._decompressCacheMax) {
+            const firstKey = this._decompressCache.keys().next().value;
+            this._decompressCache.delete(firstKey);
+        }
+    }
+
+    /**
+     * 把"距离当前步较远"的帧异步压缩成 blob，释放 cpuPixels。
+     * 每次只挑"最远离当前步"的一帧丢给 worker，避免一次 idle 就把几十帧全扔进队列：
+     * - 减少主线程 ArrayBuffer slice(0) 拷贝次数
+     * - 避免 worker 队列堆 N 份未完成任务，内存峰值爆炸
+     * 下一次 idle 还会再扫，所以迟早都会压完。
+     */
+    _maybeCompressOldFrames() {
+        const keepNear = HISTORY_UNCOMPRESSED_NEAR;
+        let bestIdx = -1;
+        let bestDist = keepNear;
+        for (let i = 0; i < this._history.length; i++) {
+            const frame = this._history[i];
+            if (!frame.cpuReady || !frame.cpuPixels) continue;
+            if (frame.cpuBlob) continue;
+            if (frame._compressing) continue;
+            const dist = Math.abs(i - this._historyStep);
+            if (dist <= keepNear) continue;
+            if (dist > bestDist) { bestDist = dist; bestIdx = i; }
+        }
+        if (bestIdx >= 0) {
+            this._compressFrame(this._history[bestIdx]).catch(() => {});
+        }
+    }
+
+    /** 朝上次撤销方向预解一帧（fire-and-forget） */
+    _prefetchAdjacentFrame() {
+        if (!this._lastRestoreDir) return;
+        const next = this._historyStep + this._lastRestoreDir;
+        if (next < 0 || next >= this._history.length) return;
+        const frame = this._history[next];
+        if (!frame) return;
+        if (frame.gpuSlot || frame.cpuPixels) return;
+        if (this._decompressCache.has(frame.id)) return;
+        if (!frame.cpuBlob) return;
+        // 异步解，不等结果
+        this._decompressFrame(frame).catch(() => {});
+    }
+
+    // ─────────────────────────────────────────────
     // 异步 CPU 备份
     // ─────────────────────────────────────────────
 
+    /**
+     * 为新帧 schedule idle 备份，但全实例只保留一个 pending 任务。
+     * 之前每个 pushHistoryFrame 都会 schedule 一次，用户画 30 笔就有 30 个 idle 回调排队，
+     * 每个回调都做全画布 readPixels（~10-30ms）和 _maybeCompressOldFrames 扫全表，主线程压力巨大。
+     * 现在改成：已有 pending 任务就不再 schedule；任务执行时找"最老的需要处理的帧"来做，
+     * 处理完如果还有剩余的就再 schedule 一次。
+     */
     _scheduleIdleBackup(frame) {
+        // _pendingIdle 仍然用 frame.id 作 key（为了 _cancelIdleBackup 在 _releaseFrame 时能找到
+        // 挂在这一帧上的 pending 记录）。但我们让同一时刻只存在一条"真实"idle handle。
+        if (this._idleBackupScheduled) {
+            // 记录这一帧需要备份即可；共用 idle 任务会扫到它
+            this._pendingIdle.set(frame.id, { type: 'shared' });
+            return;
+        }
+        this._idleBackupScheduled = true;
+
         const doBackup = () => {
-            this._pendingIdle.delete(frame.id);
-            // 帧可能已被丢弃（新笔画截断历史）
-            if (!this._history.includes(frame)) return;
-            if (frame.cpuReady || !frame.gpuSlot) return;
-            this._syncReadFrameToCPU(frame);
+            this._idleBackupScheduled = false;
+            if (this._disposed) return;
+
+            // 挑一个最需要读到 CPU 的帧：有 GPU slot、还没 cpuReady、距当前步最远
+            let readIdx = -1;
+            let readDist = -1;
+            for (let i = 0; i < this._history.length; i++) {
+                const f = this._history[i];
+                if (!f.gpuSlot || f.cpuReady) continue;
+                const d = Math.abs(i - this._historyStep);
+                if (d > readDist) { readDist = d; readIdx = i; }
+            }
+            if (readIdx >= 0) {
+                const f = this._history[readIdx];
+                this._syncReadFrameToCPU(f);
+                this._pendingIdle.delete(f.id);
+            }
+
+            // 清掉已经不需要备份的 shared 表项（处理过后仍挂在表里会无意义地延长排队）
+            for (const [id, entry] of this._pendingIdle) {
+                if (entry.type !== 'shared') continue;
+                const f = this._history.find(fr => fr.id === id);
+                if (!f || f.cpuReady) this._pendingIdle.delete(id);
+            }
+
+            // 压缩一个最远的未压缩帧
+            this._maybeCompressOldFrames();
+
+            // 如果还有待处理的（未 cpuReady 或 有 cpuPixels 未压缩），排下一次 idle
+            const hasMore = this._history.some(f =>
+                (f.gpuSlot && !f.cpuReady) ||
+                (f.cpuReady && f.cpuPixels && !f.cpuBlob && !f._compressing)
+            );
+            if (hasMore && !this._disposed) {
+                this._scheduleIdleBackup(this._history[this._history.length - 1]);
+            }
         };
 
         if (typeof requestIdleCallback !== 'undefined') {
@@ -882,9 +1198,72 @@ class BaseWebGLPainter {
     _cancelIdleBackup(frame) {
         const entry = this._pendingIdle.get(frame.id);
         if (!entry) return;
-        if (entry.type === 'idle') cancelIdleCallback(entry.handle);
-        else clearTimeout(entry.handle);
         this._pendingIdle.delete(frame.id);
+
+        if (entry.type === 'shared') return;
+        // 真 handle 被取消：复位 flag，让下次 pushHistoryFrame 能重新挂 idle。
+        // 如果当下还有 shared 表项在等（其他帧还需要备份），立刻补一次 schedule。
+        if (entry.type === 'idle') cancelIdleCallback(entry.handle);
+        else if (entry.type === 'timeout') clearTimeout(entry.handle);
+        this._idleBackupScheduled = false;
+        if (this._pendingIdle.size > 0 && this._history.length > 0 && !this._disposed) {
+            this._scheduleIdleBackup(this._history[this._history.length - 1]);
+        }
+    }
+
+    /**
+     * 把一批被丢弃的帧"轻量部分"同步处理、重量部分异步分批处理：
+     * - 同步：GPU slot 归还空闲池（必须立刻，否则新笔画会重分配显存导致峰值爆炸）
+     *         + 取消 pending idle 备份记录
+     * - 异步：解引用 cpuPixels / cpuBlob，清 _decompressCache，分批走 idle 降低单帧卡顿
+     *
+     * 场景触发：用户撤销 40+ 次后落新笔，一次性 splice 几十个 frame。
+     */
+    _scheduleAsyncRelease(frames) {
+        // 同步把 GPU 资源和 idle 取消处理完（轻量、必要）
+        for (const f of frames) {
+            this._cancelIdleBackup(f);
+            if (f.gpuSlot) {
+                this._gpuFreeSlots.push(f.gpuSlot);
+                f.gpuSlot = null;
+            }
+            if (this._decompressCache && this._decompressCache.has(f.id)) {
+                this._decompressCache.delete(f.id);
+            }
+        }
+
+        // cpuPixels / cpuBlob 的 Blob 解引用比较重（浏览器同步释放底层 buffer），
+        // 推到 idle 分批做
+        if (!this._releaseQueue) this._releaseQueue = [];
+        for (const f of frames) this._releaseQueue.push(f);
+        if (this._releaseScheduled) return;
+        this._releaseScheduled = true;
+
+        const BATCH = 8;
+        const tick = () => {
+            if (this._disposed) { this._releaseScheduled = false; return; }
+            const n = Math.min(BATCH, this._releaseQueue.length);
+            for (let i = 0; i < n; i++) {
+                const f = this._releaseQueue.shift();
+                f.cpuPixels = null;
+                f.cpuReady  = false;
+                f.cpuBlob   = null;
+            }
+            if (this._releaseQueue.length > 0) {
+                if (typeof requestIdleCallback !== 'undefined') {
+                    requestIdleCallback(tick, { timeout: 500 });
+                } else {
+                    setTimeout(tick, 0);
+                }
+            } else {
+                this._releaseScheduled = false;
+            }
+        };
+        if (typeof requestIdleCallback !== 'undefined') {
+            requestIdleCallback(tick, { timeout: 500 });
+        } else {
+            setTimeout(tick, 0);
+        }
     }
 
     _releaseFrame(frame) {
@@ -895,6 +1274,138 @@ class BaseWebGLPainter {
         }
         frame.cpuPixels = null;
         frame.cpuReady  = false;
+        frame.cpuBlob   = null;
+        if (this._decompressCache && this._decompressCache.has(frame.id)) {
+            this._decompressCache.delete(frame.id);
+        }
+    }
+
+    /**
+     * 释放该 painter 持有的所有 GPU/CPU 资源。
+     * 切换引擎或修改画布尺寸前调用，避免旧实例资源泄漏。
+     * 调用后此实例不可再用。
+     */
+    dispose() {
+        if (this._disposed) return;
+        this._disposed = true;
+
+        const gl = this.gl;
+        if (!gl) return;
+
+        // 停 RAF
+        if (typeof this.stopHeatmapFadeOut === 'function') {
+            try { this.stopHeatmapFadeOut(); } catch (_) {}
+        }
+
+        // 取消挂起的画布保存任务
+        if (this._pendingSaveHandle !== undefined) {
+            if (this._pendingSaveIsIdle) cancelIdleCallback(this._pendingSaveHandle);
+            else clearTimeout(this._pendingSaveHandle);
+            this._pendingSaveHandle = undefined;
+        }
+
+        // 终止压缩 Worker
+        if (this._historyWorker) {
+            try { this._historyWorker.terminate(); } catch (_) {}
+            this._historyWorker = null;
+        }
+        if (this._workerPending) {
+            for (const { reject } of this._workerPending.values()) {
+                try { reject(new Error('disposed')); } catch (_) {}
+            }
+            this._workerPending.clear();
+        }
+        if (this._decompressCache) this._decompressCache.clear();
+
+        // 释放队列里的 frame gpuSlot 已在 _scheduleAsyncRelease 同步阶段回收过，
+        // 这里只需要清空队列（剩下的 cpuPixels/cpuBlob 随 frame 对象一起被 GC）
+        if (this._releaseQueue) this._releaseQueue.length = 0;
+
+        // 销毁历史帧
+        if (this._history) {
+            for (const frame of this._history) {
+                this._cancelIdleBackup(frame);
+                if (frame.gpuSlot) {
+                    gl.deleteTexture(frame.gpuSlot.tex);
+                    gl.deleteFramebuffer(frame.gpuSlot.fb);
+                    frame.gpuSlot = null;
+                }
+                frame.cpuPixels = null;
+            }
+            this._history.length = 0;
+        }
+
+        // 销毁空闲池
+        if (this._gpuFreeSlots) {
+            for (const slot of this._gpuFreeSlots) {
+                gl.deleteTexture(slot.tex);
+                gl.deleteFramebuffer(slot.fb);
+            }
+            this._gpuFreeSlots.length = 0;
+        }
+
+        // 销毁运行时纹理
+        if (this.textures) {
+            const seen = new Set();
+            const external = this._externalTextures || null;
+            for (const key in this.textures) {
+                const tex = this.textures[key];
+                if (tex && !seen.has(tex)) {
+                    seen.add(tex);
+                    // 外部管理的纹理（如 mixbox 模块级单例 LUT）不能 deleteTexture，
+                    // 否则模块缓存里的纹理 ID 失效，下次同 gl 重建时会返回已删的纹理
+                    if (external && external.has(tex)) continue;
+                    gl.deleteTexture(tex);
+                }
+            }
+            this.textures = {};
+        }
+
+        // 销毁 framebuffer
+        if (this.framebuffers) {
+            const seen = new Set();
+            for (const key in this.framebuffers) {
+                const fb = this.framebuffers[key];
+                if (fb && !seen.has(fb)) {
+                    seen.add(fb);
+                    gl.deleteFramebuffer(fb);
+                }
+            }
+            this.framebuffers = {};
+        }
+        if (this._copyReadFB) {
+            gl.deleteFramebuffer(this._copyReadFB);
+            this._copyReadFB = null;
+        }
+
+        // 销毁笔刷纹理
+        if (this.currentBrushTexture) {
+            gl.deleteTexture(this.currentBrushTexture);
+            this.currentBrushTexture = null;
+        }
+        this.lastBrushCanvas = null;
+
+        // 销毁 vertex buffers
+        if (this.buffers) {
+            for (const key in this.buffers) {
+                if (this.buffers[key]) gl.deleteBuffer(this.buffers[key]);
+            }
+            this.buffers = {};
+        }
+        if (this._blitBuffer) {
+            gl.deleteBuffer(this._blitBuffer);
+            this._blitBuffer = null;
+        }
+
+        // 销毁 shader programs
+        if (this.program) {
+            gl.deleteProgram(this.program);
+            this.program = null;
+        }
+        if (this._blitProgram) {
+            gl.deleteProgram(this._blitProgram);
+            this._blitProgram = null;
+        }
     }
 
     /**
@@ -903,10 +1414,23 @@ class BaseWebGLPainter {
      * @param {Function} callback - 接收无参数，负责调用 paletteStorage.save()
      */
     scheduleIdleSave(callback) {
+        // 只保留最新一次请求：前一次还没跑就取消，避免连续笔画时 PNG 编码 + localStorage 写入堆积
+        if (this._pendingSaveHandle !== undefined) {
+            if (this._pendingSaveIsIdle) cancelIdleCallback(this._pendingSaveHandle);
+            else clearTimeout(this._pendingSaveHandle);
+        }
         if (typeof requestIdleCallback !== 'undefined') {
-            requestIdleCallback(callback, { timeout: IDLE_SAVE_TIMEOUT_MS });
+            this._pendingSaveIsIdle = true;
+            this._pendingSaveHandle = requestIdleCallback(() => {
+                this._pendingSaveHandle = undefined;
+                callback();
+            }, { timeout: IDLE_SAVE_TIMEOUT_MS });
         } else {
-            setTimeout(callback, IDLE_SAVE_FALLBACK_MS);
+            this._pendingSaveIsIdle = false;
+            this._pendingSaveHandle = setTimeout(() => {
+                this._pendingSaveHandle = undefined;
+                callback();
+            }, IDLE_SAVE_FALLBACK_MS);
         }
     }
 
@@ -914,7 +1438,7 @@ class BaseWebGLPainter {
      * 把当前画布内容导出为 dataURL（不读 WebGL canvas，避免触发浏览器合成闪烁）
      * 通过 readPixels → 离屏 2D canvas → toDataURL 实现
      */
-    toDataURL(type = 'image/png') {
+    toDataURL(type = 'image/png', quality) {
         const gl = this.gl;
         const cw = this.canvas.width;
         const ch = this.canvas.height;
@@ -937,10 +1461,55 @@ class BaseWebGLPainter {
         offscreen.width  = cw;
         offscreen.height = ch;
         offscreen.getContext('2d').putImageData(new ImageData(flipped, cw, ch), 0, 0);
-        return offscreen.toDataURL(type);
+        return quality !== undefined ? offscreen.toDataURL(type, quality) : offscreen.toDataURL(type);
+    }
+
+    /**
+     * 异步导出 dataURL，编码走浏览器后台线程（不阻塞主线程）。
+     * 大画布下比同步 toDataURL 快很多，适合 idle-save 场景。
+     */
+    async toDataURLAsync(type = 'image/webp', quality = 1.0) {
+        const gl = this.gl;
+        const cw = this.canvas.width;
+        const ch = this.canvas.height;
+
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
+        const raw = new Uint8Array(cw * ch * 4);
+        gl.readPixels(0, 0, cw, ch, gl.RGBA, gl.UNSIGNED_BYTE, raw);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+        const flipped = new Uint8ClampedArray(cw * ch * 4);
+        const rowSize = cw * 4;
+        for (let row = 0; row < ch; row++) {
+            flipped.set(raw.subarray((ch - 1 - row) * rowSize, (ch - row) * rowSize), row * rowSize);
+        }
+
+        // OffscreenCanvas + convertToBlob：编码走浏览器后台，主线程不阻塞
+        let blob;
+        if (typeof OffscreenCanvas !== 'undefined') {
+            const oc = new OffscreenCanvas(cw, ch);
+            oc.getContext('2d').putImageData(new ImageData(flipped, cw, ch), 0, 0);
+            blob = await oc.convertToBlob({ type, quality });
+        } else {
+            // 回退路径
+            const c = document.createElement('canvas');
+            c.width = cw; c.height = ch;
+            c.getContext('2d').putImageData(new ImageData(flipped, cw, ch), 0, 0);
+            blob = await new Promise(r => c.toBlob(r, type, quality));
+        }
+        // blob → dataURL（FileReader 异步）
+        return await new Promise((resolve, reject) => {
+            const fr = new FileReader();
+            fr.onload = () => resolve(fr.result);
+            fr.onerror = () => reject(fr.error);
+            fr.readAsDataURL(blob);
+        });
     }
 
 }
+
+// 记录本脚本 URL，用于 Worker 等相对资源的绝对路径解析（避免子目录部署坏路径）
+BaseWebGLPainter._scriptURL = (document.currentScript && document.currentScript.src) || '';
 
 window.BaseWebGLPainter = BaseWebGLPainter;
 console.log('BaseWebGLPainter 加载成功');

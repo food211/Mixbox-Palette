@@ -156,7 +156,7 @@ function updateSmudgeHeatmap(x, y, size, brushCanvas, useFalloff, heatStep = HEA
     // 把当前热度图拷贝到 temp 纹理，作为 shader 的上一帧输入
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.smudgeHeatmap);
     gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeHeatTemp);
-    gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, cw, ch, 0);
+    gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, cw, ch);
     gl.bindTexture(gl.TEXTURE_2D, null);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
@@ -191,6 +191,7 @@ function updateSmudgeHeatmap(x, y, size, brushCanvas, useFalloff, heatStep = HEA
         x - halfSize, y + halfSize,
         x + halfSize, y + halfSize,
     ]);
+    this._disableAllVertexAttribs();
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.position);
     gl.bufferData(gl.ARRAY_BUFFER, positions, gl.DYNAMIC_DRAW);
     gl.enableVertexAttribArray(this._heatmapLocations.a_position);
@@ -216,7 +217,7 @@ function updateDepositHeatmap(x, y, size, useFalloff, heatStep = DEPOSITE_HEAT_A
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.depositHeatmap);
     gl.bindTexture(gl.TEXTURE_2D, this.textures.depositHeatTemp);
-    gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, cw, ch, 0);
+    gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, cw, ch);
     gl.bindTexture(gl.TEXTURE_2D, null);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
@@ -245,6 +246,7 @@ function updateDepositHeatmap(x, y, size, useFalloff, heatStep = DEPOSITE_HEAT_A
         x - halfSize, y + halfSize,
         x + halfSize, y + halfSize,
     ]);
+    this._disableAllVertexAttribs();
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.position);
     gl.bufferData(gl.ARRAY_BUFFER, positions, gl.DYNAMIC_DRAW);
     gl.enableVertexAttribArray(this._heatmapLocations.a_position);
@@ -382,6 +384,7 @@ function _flushHeatOverlay(texture, opacity = 1.0) {
     gl.uniform1i(this._debugHeatUTex, 0);
     gl.uniform1f(this._debugHeatUOpacity, opacity);
 
+    this._disableAllVertexAttribs();
     gl.bindBuffer(gl.ARRAY_BUFFER, this._debugHeatBuf);
     gl.enableVertexAttribArray(this._debugHeatAPos);
     gl.vertexAttribPointer(this._debugHeatAPos, 2, gl.FLOAT, false, 0, 0);
@@ -447,7 +450,7 @@ function _decayHeatmap(decay = 0.02) {
     // 先拷贝当前热度图到 temp
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.smudgeHeatmap);
     gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeHeatTemp);
-    gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, cw, ch, 0);
+    gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, cw, ch);
     gl.bindTexture(gl.TEXTURE_2D, null);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
@@ -461,6 +464,7 @@ function _decayHeatmap(decay = 0.02) {
     gl.uniform1i(this._heatDecayUTex, 0);
     gl.uniform1f(this._heatDecayUStep, decay);
 
+    this._disableAllVertexAttribs();
     gl.bindBuffer(gl.ARRAY_BUFFER, this._heatDecayBuf);
     gl.enableVertexAttribArray(this._heatDecayAPos);
     gl.vertexAttribPointer(this._heatDecayAPos, 2, gl.FLOAT, false, 0, 0);
@@ -583,6 +587,7 @@ function startHeatmapFadeOut() {
     const painter = this;
 
     function tick() {
+        if (painter._disposed) return;
         // 热度衰减（始终运行，让已有热度自然消退）
         painter._decayHeatmap(HEAT_DECAY_STEP);
 

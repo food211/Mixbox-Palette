@@ -1,5 +1,26 @@
 # 更新日志 / Changelog
 
+== V1.3.8 ==
+[ZH]
+### 优化
+- **长时间绘制更稳定** — 大画布反复绘制、修改画布尺寸、切换引擎时的内存管理全面改进，显著降低卡顿与黑屏概率
+- **撤销/重做更流畅** — 修复了连续撤销时偶发的画面错乱；超长历史记录也不会再越积越多拖慢浏览器
+- **绘制性能提升** — 笔触渲染路径底层优化，持续绘制时更省资源
+
+### 修复
+- 修复极端情况下切换引擎或修改画布后出现黑屏的问题
+- 修复画布尺寸修改后偶尔画不上颜色的问题
+
+[EN]
+### Improvement
+- **More stable long sessions** — Overhauled memory handling around large canvases, canvas resize, and engine switching; far fewer stutters and black-screen incidents
+- **Smoother undo / redo** — Fixed an occasional wrong-frame flash when clicking undo repeatedly; long history stacks no longer bloat memory over time
+- **Faster brush rendering** — Lower-level drawing path optimized; continuous painting uses less resources
+
+### Fix
+- Fixed rare black-screen after switching engine or resizing the canvas
+- Fixed a case where strokes wouldn't register after resizing the canvas
+
 == V1.3.7 ==
 [ZH]
 ### 新增

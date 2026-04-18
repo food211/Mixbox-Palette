@@ -98,6 +98,8 @@ function createPainter(engine, canvas) {
  */
 async function switchEngine(engine) {
     if (engine === currentEngine) return;
+    // 切引擎前把脏画布落盘，避免丢最近几笔
+    await flushCanvasSave();
     const oldMixStrength = painter ? painter.getMixStrength() : 0.3;
     // 切换前从当前 GPU 帧读一次像素，用于迁移画布内容
     const oldPixels = painter ? painter.readPixelRegion(0, 0, mixCanvas.width, mixCanvas.height) : null;
@@ -119,8 +121,8 @@ async function switchEngine(engine) {
         if (confirm(msg)) location.reload();
         return;
     }
-    // 停掉旧 painter 的衰减 RAF，避免闭包持有旧实例的 GL 资源持续运行
-    if (painter && painter.stopHeatmapFadeOut) painter.stopHeatmapFadeOut();
+    // 释放旧 painter 的 RAF 和 GPU/CPU 资源，避免泄漏
+    if (painter && typeof painter.dispose === 'function') painter.dispose();
     painter = newPainter;
     window._painter = painter;
     painter.setMixStrength(oldMixStrength);
@@ -1659,22 +1661,84 @@ function pushSnapshot() {
 /**
  * 恢复到指定历史步骤
  */
-function restoreState(step) {
+async function restoreState(step) {
     if (!painter) return;
-    if (painter.restoreHistoryFrame(step)) {
-        updateHistoryButtons();
-    }
+    const ok = await painter.restoreHistoryFrame(step);
+    if (ok) updateHistoryButtons();
 }
 
 /**
  * 异步写入 localStorage（不阻塞当前帧）
  */
+// ─── 自动保存：节流 + 标脏模式 ─────────────────────────────────────────────
+// 之前每笔 endStroke 都会触发一次"readPixels → 编码 → localStorage.setItem"，
+// 在大画布下持续绘制累积开销很大（readPixels 每次约 10-30ms + 编码后 localStorage
+// 主线程同步写）。现在改为：
+//   - endStroke 只做 _markDirty，标记"画布有新内容待保存"
+//   - 一个定时器以 SAVE_MIN_INTERVAL_MS 为间隔检查，dirty 就做一次真正保存
+//   - engine 切换 / canvas resize / 页面关闭时强制 flush 一次，保证最新状态不丢
+//
+// 结果：用户画 100 笔、30 秒内只会发生 3 次真正保存。
+const SAVE_MIN_INTERVAL_MS = 10_000;
+let _canvasDirty = false;
+let _lastSavedAt = 0;
+let _saveInFlight = false;
+let _saveTimer = null;
+
 function saveCanvasToStorage() {
-    if (!painter) return;
-    painter.scheduleIdleSave(() => {
-        paletteStorage.save(painter.toDataURL('image/png'));
-    });
+    // 改成标脏即返回，实际保存由节流器决定
+    _canvasDirty = true;
+    _ensureSaveTimer();
 }
+
+function _ensureSaveTimer() {
+    if (_saveTimer !== null) return;
+    _saveTimer = setInterval(() => {
+        if (!_canvasDirty) return;
+        const now = performance.now();
+        if (now - _lastSavedAt < SAVE_MIN_INTERVAL_MS) return;
+        _doSave();
+    }, 1_000);
+}
+
+async function _doSave() {
+    if (!painter || _saveInFlight) return;
+    _canvasDirty = false;
+    _saveInFlight = true;
+    _lastSavedAt = performance.now();
+    try {
+        const dataURL = await painter.toDataURLAsync('image/webp', 1.0);
+        paletteStorage.save(dataURL);
+    } catch (e) {
+        console.warn('自动保存失败', e);
+        _canvasDirty = true; // 失败重新标脏，下个窗口再试
+    } finally {
+        _saveInFlight = false;
+    }
+}
+
+/**
+ * 强制立刻把脏画布写入 localStorage（切换引擎 / resize / beforeunload 时调）。
+ * 如果当前有 in-flight 保存，先等它跑完；等完后如果仍然脏，再跑一次。
+ */
+async function flushCanvasSave() {
+    // 若有 in-flight 任务先等它结束，否则新笔画可能被跳过
+    while (_saveInFlight) {
+        await new Promise(r => setTimeout(r, 30));
+    }
+    if (!_canvasDirty) return;
+    await _doSave();
+}
+window.flushCanvasSave = flushCanvasSave;
+
+// 页面关闭前补一次保存（beforeunload 必须同步走完，异步 promise 可能被打断；
+// 这里退回同步的 toDataURL，只在真正关闭时付这一次代价）
+window.addEventListener('beforeunload', () => {
+    if (!_canvasDirty || !painter) return;
+    try {
+        paletteStorage.save(painter.toDataURL('image/webp', 1.0));
+    } catch (_) {}
+});
 
 /**
  * 更新撤销/重做按钮状态

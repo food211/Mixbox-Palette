@@ -44,8 +44,11 @@ const DEFAULT_MIX_STRENGTH = 0.5;
 
 // ─── GPU 历史池 ───────────────────────────────────────────────────────────────
 
-/** GPU 显存预算估算（MB）：假设可用总量 */
+/** GPU 显存预算估算（MB）：首次尝试的预算 */
 const GPU_BUDGET_MB = 200;
+
+/** GPU 显存降级预算（MB）：检测到分配失败时回退到此预算 */
+const GPU_BUDGET_FALLBACK_MB = 100;
 
 /** GPU 运行时基础占用估算（MB），从预算中扣除 */
 const GPU_RUNTIME_OVERHEAD_MB = 20;
@@ -56,8 +59,14 @@ const GPU_SLOTS_MAX = 50;
 /** GPU 历史纹理槽下限（显存极小时保底） */
 const GPU_SLOTS_MIN = 10;
 
-/** 历史帧数组超出 GPU slot 上限多少帧后开始驱逐最老帧 */
+/** 历史帧数组超出 GPU slot 上限多少帧后开始驱逐最老帧（含 CPU 备份残留） */
 const HISTORY_OVERFLOW_BUFFER = 5;
+
+/** 历史帧总数硬上限（含已压缩帧）。防止长时间绘制导致 CPU blob 无限堆积。 */
+const HISTORY_FRAMES_HARD_CAP = 80;
+
+/** 距离当前步 <= 此值的历史帧保持未压缩（快速撤销），更远的帧异步压成 WebP */
+const HISTORY_UNCOMPRESSED_NEAR = 5;
 
 // ─── 异步任务超时 ─────────────────────────────────────────────────────────────
 

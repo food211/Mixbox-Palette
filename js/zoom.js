@@ -1,6 +1,6 @@
 // ============ 画布宽度调整 ============
 const RESIZE_MIN = 480;   // container 最小宽度（同时作为默认值和 canvas 比例基准）
-const RESIZE_MAX = 2000;
+const RESIZE_MAX = 1000;
 const RESIZE_STORAGE_KEY = 'mixbox_container_width';
 
 // 当前 container max-width（像素，不含 zoom）
@@ -141,6 +141,9 @@ async function _commitResize(newWidth) {
     localStorage.setItem(RESIZE_STORAGE_KEY, String(newWidth));
     _applyContainerWidth(newWidth);
 
+    // resize 前把脏画布落盘（避免老画布尺寸的最新内容丢失）
+    if (typeof window.flushCanvasSave === 'function') await window.flushCanvasSave();
+
     // 1. 读取当前画面和参数
     const oldMixStrength = painter.getMixStrength();
     const oldPixels = painter.readPixelRegion(0, 0, oldW, oldH);
@@ -178,7 +181,8 @@ async function _commitResize(newWidth) {
     // 3. 读取最终像素
     const newPixels = dstCtx.getImageData(0, 0, newCanvasW, newCanvasH).data;
 
-    // 4. Resize canvas 并重建 painter
+    // 4. 释放旧 painter 资源、Resize canvas 并重建
+    if (painter && typeof painter.dispose === 'function') painter.dispose();
     mixCanvas.width  = newCanvasW;
     mixCanvas.height = newCanvasH;
     painter = createPainter(currentEngine, mixCanvas);

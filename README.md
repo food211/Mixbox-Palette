@@ -27,7 +27,12 @@ The plugin offers two physical color mixing engines, switchable via the **MB/KM*
 - **Mixbox (MB)** - Default engine. Uses the [Mixbox](https://scrtwpns.com/mixbox/) LUT-based algorithm for high-quality pigment mixing. Licensed under CC BY-NC 4.0.
 - **KM** - Self-implemented engine. Uses a 32³ LUT to map RGB to 38-wavelength reflectance spectra (derived from [spectral.js](https://github.com/rvanwijnen/spectral.js), MIT), then applies Kubelka-Munk mixing in spectral space and converts back to RGB. GPL v3 licensed.
 
-Both engines produce realistic subtractive color mixing (e.g., yellow + blue = green). You can switch between them at any time - the canvas is automatically repainted using your stroke history.
+Both engines produce realistic subtractive color mixing (e.g., yellow + blue = green), but they have **different feel** you can choose from:
+
+- **MB covers faster.** At the same concentration slider, each stroke replaces the canvas color more aggressively. Great when you want to lay down color quickly, or when you need a narrow blend band between two colors.
+- **KM blends more gradually.** Each stroke moves the pixel toward the new color less per pass, producing wider, softer transition bands when layering — closer to how real watercolor and oil paint build up over wet layers.
+
+This is a property of the underlying physical models (latent-space interpolation vs. spectral Kubelka-Munk), not a tuning issue. At 0% and 100% concentration both engines converge; the difference is most visible in the 25–75% range with repeated strokes. Pick whichever matches the medium you're simulating. You can switch between them at any time — the canvas is automatically repainted using your stroke history.
 
 To compare both engines side by side, try the [KM Tuner](https://food211.github.io/Mixbox-Palette/km-tuner.html) tool included in this repository.
 
@@ -151,7 +156,11 @@ Adobe Photoshop UXP 调色板插件，内置双混色引擎，模拟真实颜料
 - **双混色引擎** - 左上角 MB/KM 按钮可随时切换：
   - **Mixbox (MB)** - 默认引擎，基于 [Mixbox](https://scrtwpns.com/mixbox/) LUT 算法（CC BY-NC 4.0）
   - **KM** - 自研引擎。使用 32³ LUT 将 RGB 映射到 38 波长反射率光谱（光谱数据来自 [spectral.js](https://github.com/rvanwijnen/spectral.js)，MIT 许可），在光谱空间中应用 Kubelka-Munk 公式混色后转回 RGB（GPL v3）
-  - 切换引擎后画布会自动用笔画历史重绘，可使用 [KM Tuner](https://food211.github.io/Mixbox-Palette/km-tuner.html) 工具对比两种引擎的混色效果
+  - **两者手感不同，可按需选择**：
+    - **MB 上色快**：同样的浓度滑块下，每一笔覆盖旧色更直接。适合快速铺色，或需要两色之间过渡带较窄的场景
+    - **KM 混色更渐进**：每一笔向目标色推进得更少，叠笔时过渡带更宽、更柔和，更接近真实水彩/油画湿叠的累积感
+  - 这是两种物理模型（潜在空间线性插值 vs. 光谱 Kubelka-Munk）本身的差异，不是 bug。浓度 0% 和 100% 时两引擎重合，差异在 25–75% 叠笔时最明显。选能贴合你想模拟的媒介即可。切换引擎后画布自动用笔画历史重绘
+  - 可使用 [KM Tuner](https://food211.github.io/Mixbox-Palette/km-tuner.html) 对比两引擎的混色效果
 - **可调节颜料浓度** (1-100)，低浓度区域平滑曲线映射，调节更细腻
 - **6 种笔刷预设** - 圆形、柔和、水彩、飞溅、平头、干笔；画笔和涂抹工具各自记忆上次使用的笔刷
 - **涂抹工具** - 在画布上直接混合颜色，独立强度参数
