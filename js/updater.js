@@ -13,6 +13,7 @@ const Updater = {
 
     /** 将 markdown 列表转为简单 HTML（支持加粗和链接） */
     _mdToHtml(md) {
+        if (!md) return '';
         return md
             .split('\n')
             .map(line => {
@@ -35,6 +36,18 @@ const Updater = {
             })
             .filter(Boolean)
             .join('');
+    },
+
+    /**
+     * 检测到新版本后，静默触发 SW 后台更新。
+     * 新 SW 的 install 会预缓存 CACHE_URLS，配合 skipWaiting+clients.claim，
+     * 用户下次 reload 就能拿到完整一致的新版本资源，避免新旧文件混用。
+     */
+    _triggerSwUpdate() {
+        if (typeof navigator === 'undefined' || !navigator.serviceWorker) return;
+        navigator.serviceWorker.getRegistration()
+            .then(reg => { if (reg) reg.update(); })
+            .catch(() => {});
     },
 
     /** 带超时的 fetch */
@@ -69,6 +82,7 @@ const Updater = {
             if (!versionsRes.ok) return { error: true };
             const versions = await versionsRes.json();
             if (versions.latest === this.CURRENT_VERSION) return null;
+            this._triggerSwUpdate();
             const dismissed = localStorage.getItem(this.STORAGE_KEY);
             if (dismissed === versions.latest) return null;
 
@@ -97,6 +111,7 @@ const Updater = {
             if (!versionsRes.ok) return { error: true };
             const versions = await versionsRes.json();
             if (versions.latest === this.CURRENT_VERSION) return null;
+            this._triggerSwUpdate();
 
             const newerKeys = this._newerVersions(versions.all || []);
             if (newerKeys.length === 0) return null;
