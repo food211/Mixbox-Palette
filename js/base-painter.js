@@ -1031,6 +1031,9 @@ class BaseWebGLPainter {
     /** 把已经读到 CPU 的帧压缩成 blob，压完释放 cpuPixels */
     async _compressFrame(frame) {
         if (!frame.cpuReady || !frame.cpuPixels || frame.cpuBlob) return;
+        // 防止同一帧被多次压缩：idle 循环密集触发时，上一次 await 未完成前可能又被扫到
+        if (frame._compressing) return;
+        frame._compressing = true;
         const w = this.canvas.width;
         const h = this.canvas.height;
         const buf = frame.cpuPixels.buffer.slice(0); // 拷贝一份给 worker transfer
@@ -1047,6 +1050,8 @@ class BaseWebGLPainter {
             frame.cpuPixels = null; // 释放未压缩数据
         } catch (e) {
             // 压缩失败保留 cpuPixels
+        } finally {
+            frame._compressing = false;
         }
     }
 
@@ -1082,15 +1087,28 @@ class BaseWebGLPainter {
         }
     }
 
-    /** 把"距离当前步较远"的帧异步压缩成 blob，释放 cpuPixels */
+    /**
+     * 把"距离当前步较远"的帧异步压缩成 blob，释放 cpuPixels。
+     * 每次只挑"最远离当前步"的一帧丢给 worker，避免一次 idle 就把几十帧全扔进队列：
+     * - 减少主线程 ArrayBuffer slice(0) 拷贝次数
+     * - 避免 worker 队列堆 N 份未完成任务，内存峰值爆炸
+     * 下一次 idle 还会再扫，所以迟早都会压完。
+     */
     _maybeCompressOldFrames() {
         const keepNear = HISTORY_UNCOMPRESSED_NEAR;
+        let bestIdx = -1;
+        let bestDist = keepNear;
         for (let i = 0; i < this._history.length; i++) {
             const frame = this._history[i];
-            if (Math.abs(i - this._historyStep) <= keepNear) continue;
             if (!frame.cpuReady || !frame.cpuPixels) continue;
             if (frame.cpuBlob) continue;
-            this._compressFrame(frame).catch(() => {});
+            if (frame._compressing) continue;
+            const dist = Math.abs(i - this._historyStep);
+            if (dist <= keepNear) continue;
+            if (dist > bestDist) { bestDist = dist; bestIdx = i; }
+        }
+        if (bestIdx >= 0) {
+            this._compressFrame(this._history[bestIdx]).catch(() => {});
         }
     }
 
@@ -1112,16 +1130,53 @@ class BaseWebGLPainter {
     // 异步 CPU 备份
     // ─────────────────────────────────────────────
 
+    /**
+     * 为新帧 schedule idle 备份，但全实例只保留一个 pending 任务。
+     * 之前每个 pushHistoryFrame 都会 schedule 一次，用户画 30 笔就有 30 个 idle 回调排队，
+     * 每个回调都做全画布 readPixels（~10-30ms）和 _maybeCompressOldFrames 扫全表，主线程压力巨大。
+     * 现在改成：已有 pending 任务就不再 schedule；任务执行时找"最老的需要处理的帧"来做，
+     * 处理完如果还有剩余的就再 schedule 一次。
+     */
     _scheduleIdleBackup(frame) {
+        // _pendingIdle 仍然用 frame.id 作 key（为了 _cancelIdleBackup 在 _releaseFrame 时能找到
+        // 挂在这一帧上的 pending 记录）。但我们让同一时刻只存在一条"真实"idle handle。
+        if (this._idleBackupScheduled) {
+            // 记录这一帧需要备份即可；共用 idle 任务会扫到它
+            this._pendingIdle.set(frame.id, { type: 'shared' });
+            return;
+        }
+        this._idleBackupScheduled = true;
+
         const doBackup = () => {
-            this._pendingIdle.delete(frame.id);
-            // 帧可能已被丢弃（新笔画截断历史）
-            if (!this._history.includes(frame)) return;
-            if (!frame.cpuReady && frame.gpuSlot) {
-                this._syncReadFrameToCPU(frame);
+            this._idleBackupScheduled = false;
+            if (this._disposed) return;
+
+            // 挑一个最需要读到 CPU 的帧：有 GPU slot、还没 cpuReady、距当前步最远
+            let readIdx = -1;
+            let readDist = -1;
+            for (let i = 0; i < this._history.length; i++) {
+                const f = this._history[i];
+                if (!f.gpuSlot || f.cpuReady) continue;
+                const d = Math.abs(i - this._historyStep);
+                if (d > readDist) { readDist = d; readIdx = i; }
             }
-            // 压缩较老的帧（保留最近 N 帧未压缩以便快速撤销）
+            if (readIdx >= 0) {
+                const f = this._history[readIdx];
+                this._syncReadFrameToCPU(f);
+                this._pendingIdle.delete(f.id);
+            }
+
+            // 压缩一个最远的未压缩帧
             this._maybeCompressOldFrames();
+
+            // 如果还有待处理的（未 cpuReady 或 有 cpuPixels 未压缩），排下一次 idle
+            const hasMore = this._history.some(f =>
+                (f.gpuSlot && !f.cpuReady) ||
+                (f.cpuReady && f.cpuPixels && !f.cpuBlob && !f._compressing)
+            );
+            if (hasMore && !this._disposed) {
+                this._scheduleIdleBackup(this._history[this._history.length - 1]);
+            }
         };
 
         if (typeof requestIdleCallback !== 'undefined') {
@@ -1137,7 +1192,8 @@ class BaseWebGLPainter {
         const entry = this._pendingIdle.get(frame.id);
         if (!entry) return;
         if (entry.type === 'idle') cancelIdleCallback(entry.handle);
-        else clearTimeout(entry.handle);
+        else if (entry.type === 'timeout') clearTimeout(entry.handle);
+        // type === 'shared' 不持有真实 handle，只需从表里删除
         this._pendingIdle.delete(frame.id);
     }
 
