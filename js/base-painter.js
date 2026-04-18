@@ -943,7 +943,10 @@ class BaseWebGLPainter {
     _ensureHistoryWorker() {
         if (this._historyWorker) return this._historyWorker;
         try {
-            this._historyWorker = new Worker('js/history-worker.js');
+            // 基于 base-painter.js 的 URL 解析 worker 路径，避免 app 部署在子目录时相对路径失效
+            const base = BaseWebGLPainter._scriptURL;
+            const workerURL = base ? new URL('./history-worker.js', base).href : 'js/history-worker.js';
+            this._historyWorker = new Worker(workerURL);
             this._historyWorker.onmessage = (e) => {
                 const { type, id } = e.data;
                 const entry = this._workerPending.get(id);
@@ -1178,6 +1181,10 @@ class BaseWebGLPainter {
             }
             this.framebuffers = {};
         }
+        if (this._copyReadFB) {
+            gl.deleteFramebuffer(this._copyReadFB);
+            this._copyReadFB = null;
+        }
 
         // 销毁笔刷纹理
         if (this.currentBrushTexture) {
@@ -1253,6 +1260,9 @@ class BaseWebGLPainter {
     }
 
 }
+
+// 记录本脚本 URL，用于 Worker 等相对资源的绝对路径解析（避免子目录部署坏路径）
+BaseWebGLPainter._scriptURL = (document.currentScript && document.currentScript.src) || '';
 
 window.BaseWebGLPainter = BaseWebGLPainter;
 console.log('BaseWebGLPainter 加载成功');
