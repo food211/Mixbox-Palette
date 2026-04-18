@@ -1670,8 +1670,16 @@ async function restoreState(step) {
  */
 function saveCanvasToStorage() {
     if (!painter) return;
-    painter.scheduleIdleSave(() => {
-        paletteStorage.save(painter.toDataURL('image/png'));
+    painter.scheduleIdleSave(async () => {
+        // 自动保存走 WebP 无损 + 异步编码（OffscreenCanvas.convertToBlob）：
+        // 编码在浏览器后台线程，主线程只承担 readPixels + putImageData 的一次拷贝，连续笔画不再堆积卡顿。
+        // 老用户的 PNG dataURL 仍可被 <img> 加载，兼容无忧。
+        try {
+            const dataURL = await painter.toDataURLAsync('image/webp', 1.0);
+            paletteStorage.save(dataURL);
+        } catch (e) {
+            console.warn('自动保存失败', e);
+        }
     });
 }
 

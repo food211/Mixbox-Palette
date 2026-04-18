@@ -1172,6 +1172,13 @@ class BaseWebGLPainter {
             try { this.stopHeatmapFadeOut(); } catch (_) {}
         }
 
+        // 取消挂起的画布保存任务
+        if (this._pendingSaveHandle !== undefined) {
+            if (this._pendingSaveIsIdle) cancelIdleCallback(this._pendingSaveHandle);
+            else clearTimeout(this._pendingSaveHandle);
+            this._pendingSaveHandle = undefined;
+        }
+
         // 终止压缩 Worker
         if (this._historyWorker) {
             try { this._historyWorker.terminate(); } catch (_) {}
@@ -1274,10 +1281,23 @@ class BaseWebGLPainter {
      * @param {Function} callback - 接收无参数，负责调用 paletteStorage.save()
      */
     scheduleIdleSave(callback) {
+        // 只保留最新一次请求：前一次还没跑就取消，避免连续笔画时 PNG 编码 + localStorage 写入堆积
+        if (this._pendingSaveHandle !== undefined) {
+            if (this._pendingSaveIsIdle) cancelIdleCallback(this._pendingSaveHandle);
+            else clearTimeout(this._pendingSaveHandle);
+        }
         if (typeof requestIdleCallback !== 'undefined') {
-            requestIdleCallback(callback, { timeout: IDLE_SAVE_TIMEOUT_MS });
+            this._pendingSaveIsIdle = true;
+            this._pendingSaveHandle = requestIdleCallback(() => {
+                this._pendingSaveHandle = undefined;
+                callback();
+            }, { timeout: IDLE_SAVE_TIMEOUT_MS });
         } else {
-            setTimeout(callback, IDLE_SAVE_FALLBACK_MS);
+            this._pendingSaveIsIdle = false;
+            this._pendingSaveHandle = setTimeout(() => {
+                this._pendingSaveHandle = undefined;
+                callback();
+            }, IDLE_SAVE_FALLBACK_MS);
         }
     }
 
@@ -1285,7 +1305,7 @@ class BaseWebGLPainter {
      * 把当前画布内容导出为 dataURL（不读 WebGL canvas，避免触发浏览器合成闪烁）
      * 通过 readPixels → 离屏 2D canvas → toDataURL 实现
      */
-    toDataURL(type = 'image/png') {
+    toDataURL(type = 'image/png', quality) {
         const gl = this.gl;
         const cw = this.canvas.width;
         const ch = this.canvas.height;
@@ -1308,7 +1328,49 @@ class BaseWebGLPainter {
         offscreen.width  = cw;
         offscreen.height = ch;
         offscreen.getContext('2d').putImageData(new ImageData(flipped, cw, ch), 0, 0);
-        return offscreen.toDataURL(type);
+        return quality !== undefined ? offscreen.toDataURL(type, quality) : offscreen.toDataURL(type);
+    }
+
+    /**
+     * 异步导出 dataURL，编码走浏览器后台线程（不阻塞主线程）。
+     * 大画布下比同步 toDataURL 快很多，适合 idle-save 场景。
+     */
+    async toDataURLAsync(type = 'image/webp', quality = 1.0) {
+        const gl = this.gl;
+        const cw = this.canvas.width;
+        const ch = this.canvas.height;
+
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
+        const raw = new Uint8Array(cw * ch * 4);
+        gl.readPixels(0, 0, cw, ch, gl.RGBA, gl.UNSIGNED_BYTE, raw);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+        const flipped = new Uint8ClampedArray(cw * ch * 4);
+        const rowSize = cw * 4;
+        for (let row = 0; row < ch; row++) {
+            flipped.set(raw.subarray((ch - 1 - row) * rowSize, (ch - row) * rowSize), row * rowSize);
+        }
+
+        // OffscreenCanvas + convertToBlob：编码走浏览器后台，主线程不阻塞
+        let blob;
+        if (typeof OffscreenCanvas !== 'undefined') {
+            const oc = new OffscreenCanvas(cw, ch);
+            oc.getContext('2d').putImageData(new ImageData(flipped, cw, ch), 0, 0);
+            blob = await oc.convertToBlob({ type, quality });
+        } else {
+            // 回退路径
+            const c = document.createElement('canvas');
+            c.width = cw; c.height = ch;
+            c.getContext('2d').putImageData(new ImageData(flipped, cw, ch), 0, 0);
+            blob = await new Promise(r => c.toBlob(r, type, quality));
+        }
+        // blob → dataURL（FileReader 异步）
+        return await new Promise((resolve, reject) => {
+            const fr = new FileReader();
+            fr.onload = () => resolve(fr.result);
+            fr.onerror = () => reject(fr.error);
+            fr.readAsDataURL(blob);
+        });
     }
 
 }
