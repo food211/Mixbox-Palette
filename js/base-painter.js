@@ -359,7 +359,7 @@ class BaseWebGLPainter {
         const ch = this.canvas.height;
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
         gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeSnapshot);
-        gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, cw, ch, 0);
+        gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, cw, ch);
         gl.bindTexture(gl.TEXTURE_2D, null);
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
@@ -428,7 +428,7 @@ class BaseWebGLPainter {
         gl.bindFramebuffer(gl.FRAMEBUFFER, this._copyReadFB);
         gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.textures.canvas, 0);
         gl.bindTexture(gl.TEXTURE_2D, this.textures.temp);
-        gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, cw, ch, 0);
+        gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, cw, ch);
         gl.bindTexture(gl.TEXTURE_2D, null);
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
@@ -808,7 +808,7 @@ class BaseWebGLPainter {
         const ch = this.canvas.height;
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
         gl.bindTexture(gl.TEXTURE_2D, slot.tex);
-        gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, cw, ch, 0);
+        gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, cw, ch);
         gl.bindTexture(gl.TEXTURE_2D, null);
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     }
@@ -846,7 +846,7 @@ class BaseWebGLPainter {
 
         // 同步 temp 纹理（复制 canvas framebuffer 内容，无额外 draw call）
         gl.bindTexture(gl.TEXTURE_2D, this.textures.temp);
-        gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, cw, ch, 0);
+        gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, cw, ch);
 
         gl.bindTexture(gl.TEXTURE_2D, null);
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);

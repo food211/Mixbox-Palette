@@ -102,7 +102,7 @@ function _spreadWetHeatmap() {
     // 拷当前 smudgeHeatmap → smudgeHeatTemp 作为只读输入
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.smudgeHeatmap);
     gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeHeatTemp);
-    gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, cw, ch, 0);
+    gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, cw, ch);
     gl.bindTexture(gl.TEXTURE_2D, null);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
@@ -150,13 +150,13 @@ function updateWetHeatmap(x, y, size, brushCanvas, useFalloff, heatStep = HEAT_A
     // ── copy 1：wetHeatmap → wetHeatTemp ──
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.wetHeatmap);
     gl.bindTexture(gl.TEXTURE_2D, this.textures.wetHeatTemp);
-    gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, cw, ch, 0);
+    gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, cw, ch);
     gl.bindTexture(gl.TEXTURE_2D, null);
 
     // ── copy 2：depositHeatmap → depositHeatTemp ──
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.depositHeatmap);
     gl.bindTexture(gl.TEXTURE_2D, this.textures.depositHeatTemp);
-    gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, cw, ch, 0);
+    gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, cw, ch);
     gl.bindTexture(gl.TEXTURE_2D, null);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
@@ -316,7 +316,7 @@ function _applyWetColor(color) {
     gl.bindFramebuffer(gl.FRAMEBUFFER, this._copyReadFB);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.textures.canvas, 0);
     gl.bindTexture(gl.TEXTURE_2D, this.textures.temp);
-    gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, cw, ch, 0);
+    gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, cw, ch);
     gl.bindTexture(gl.TEXTURE_2D, null);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
@@ -402,7 +402,7 @@ function _applyDepositColorPass(color, depositStr) {
     gl.bindFramebuffer(gl.FRAMEBUFFER, this._copyReadFB);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.textures.canvas, 0);
     gl.bindTexture(gl.TEXTURE_2D, this.textures.temp);
-    gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, cw, ch, 0);
+    gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, cw, ch);
     gl.bindTexture(gl.TEXTURE_2D, null);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
