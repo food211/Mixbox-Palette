@@ -52,6 +52,7 @@ class BaseWebGLPainter {
         this._decompressCacheMax = 3;
         this._lastRestoreDir = 0;          // +1 redo, -1 undo, 0 未知
         this._lastRestoreStep = -1;
+        this._restoreSeq = 0;              // 异步 restore 令牌，防止乱序解压结果覆盖正确帧
     }
 
     // ─────────────────────────────────────────────
@@ -735,6 +736,28 @@ class BaseWebGLPainter {
         return null;
     }
 
+    /** 同步从当前 canvas framebuffer 读取像素到 frame.cpuPixels（GPU slot 无法分配时的兜底）*/
+    _readCanvasToCPU(frame) {
+        const gl = this.gl;
+        const cw = this.canvas.width;
+        const ch = this.canvas.height;
+        try {
+            gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
+            const raw = new Uint8Array(cw * ch * 4);
+            gl.readPixels(0, 0, cw, ch, gl.RGBA, gl.UNSIGNED_BYTE, raw);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            const flipped = new Uint8ClampedArray(raw.length);
+            const rowSize = cw * 4;
+            for (let row = 0; row < ch; row++) {
+                flipped.set(raw.subarray((ch - 1 - row) * rowSize, (ch - row) * rowSize), row * rowSize);
+            }
+            frame.cpuPixels = flipped;
+            frame.cpuReady  = true;
+        } catch (e) {
+            console.error('BaseWebGLPainter: readPixels 失败', e);
+        }
+    }
+
     /** 同步从 GPU 读取帧数据到 CPU（仅在驱逐前必要时调用）*/
     _syncReadFrameToCPU(frame) {
         if (frame.cpuReady || !frame.gpuSlot) return;
@@ -830,9 +853,6 @@ class BaseWebGLPainter {
         }
 
         const slot = this._acquireGpuSlot();
-        if (!slot) return; // 极端情况：GPU 彻底无法分配，放弃本次快照
-        this._copyCanvasToSlot(slot);
-
         const frame = {
             id:        this._frameCounter++,
             timestamp: performance.now(),
@@ -840,6 +860,14 @@ class BaseWebGLPainter {
             cpuPixels: null,
             cpuReady:  false,
         };
+        if (slot) {
+            this._copyCanvasToSlot(slot);
+        } else {
+            // GPU 彻底无法分配：同步 readPixels 到 CPU 保底，避免撤销链断档
+            console.warn('BaseWebGLPainter: GPU 分配失败，历史帧回退 CPU 快照');
+            this._readCanvasToCPU(frame);
+            if (!frame.cpuReady) return; // 连 CPU 也失败（极罕见）→ 放弃
+        }
 
         this._history.push(frame);
 
@@ -864,10 +892,11 @@ class BaseWebGLPainter {
         if (step < 0 || step >= this._history.length) return false;
 
         const frame = this._history[step];
+        const seq = ++this._restoreSeq;
         let pixels = null;
 
         if (frame.gpuSlot) {
-            // GPU 路径：blit，零 readPixels
+            // GPU 路径：blit，零 readPixels（同步完成，无竞态）
             this._copySlotToCanvas(frame.gpuSlot);
         } else if (frame.cpuPixels) {
             pixels = frame.cpuPixels;
@@ -881,6 +910,8 @@ class BaseWebGLPainter {
                 console.warn('BaseWebGLPainter: 解压失败', e);
                 return false;
             }
+            // 异步返回后校验：如果期间又触发了新的 restore（用户连续点撤销/重做），丢弃本次结果
+            if (seq !== this._restoreSeq || this._disposed) return false;
         } else {
             console.warn('BaseWebGLPainter: 帧数据不可用');
             return false;
