@@ -264,12 +264,8 @@ class KMWebGLPainter extends BaseWebGLPainter {
                 ? sampleSmudgeColor(v_canvasCoord, u_smudgeSampleRadius, u_smudgeAngle)
                 : u_brushColor.rgb;
 
-            // 统一压缩到 KM 引擎的等效浓度范围（见 KM_MIX_SCALE 常量）。
-            // 水彩分支原本的 wcMixStr hack 已由此替代。
-            float kmMixStrength = u_baseMixStrength * KM_MIX_SCALE;
-
             // 涂抹模式下：热度图重映射混合强度，冷区=1%，热区=用户设定值
-            float effectiveMixStrength = kmMixStrength;
+            float effectiveMixStrength = u_baseMixStrength;
             if (u_isSmudge > 0.5) {
                 vec2 heatUV = v_canvasCoord / u_resolution;
                 heatUV.y = 1.0 - heatUV.y;
@@ -277,9 +273,9 @@ class KMWebGLPainter extends BaseWebGLPainter {
                 // 水彩 smudge pass：冷区涂抹强、热区涂抹弱（颜料已湿润，不需要推）
                 // 普通涂抹工具：热区强、冷区弱
                 if (u_isWatercolor > 0.5) {
-                    effectiveMixStrength = mix(kmMixStrength, 0.01, heat);
+                    effectiveMixStrength = mix(u_baseMixStrength, 0.01, heat);
                 } else {
-                    effectiveMixStrength = mix(0.01, kmMixStrength, heat);
+                    effectiveMixStrength = mix(0.01, u_baseMixStrength, heat);
                 }
             }
 
@@ -316,6 +312,9 @@ class KMWebGLPainter extends BaseWebGLPainter {
 
             vec3 finalColor;
             if (u_isWatercolor > 0.5) {
+                // KM 光谱混色比 MB 更饱和，水彩混色强度按 KM_MIX_SCALE 压缩向 MB 对齐
+                float kmMixStrength = u_baseMixStrength * KM_MIX_SCALE;
+
                 // ── 冷区：稀释混色 + smudge 推色 ──
                 float coldPaint = maskCold * kmMixStrength * u_wetColdMix;
                 vec3 coldResult = km_mix(canvasColor.rgb, activeColor, aBrush * coldPaint);
