@@ -1,6 +1,11 @@
 {
   "versions": [
     {
+      "version": "V1.3.8",
+      "zh": "### 优化\r\n- **长时间绘制更稳定** — 大画布反复绘制、修改画布尺寸、切换引擎时的内存管理全面改进，显著降低卡顿与黑屏概率\r\n- **撤销/重做更流畅** — 修复了连续撤销时偶发的画面错乱；超长历史记录也不会再越积越多拖慢浏览器\r\n- **绘制性能提升** — 笔触渲染路径底层优化，持续绘制时更省资源\r\n\r\n### 修复\r\n- 修复极端情况下切换引擎或修改画布后出现黑屏的问题\r\n- 修复画布尺寸修改后偶尔画不上颜色的问题",
+      "en": "### Improvement\r\n- **More stable long sessions** — Overhauled memory handling around large canvases, canvas resize, and engine switching; far fewer stutters and black-screen incidents\r\n- **Smoother undo / redo** — Fixed an occasional wrong-frame flash when clicking undo repeatedly; long history stacks no longer bloat memory over time\r\n- **Faster brush rendering** — Lower-level drawing path optimized; continuous painting uses less resources\r\n\r\n### Fix\r\n- Fixed rare black-screen after switching engine or resizing the canvas\r\n- Fixed a case where strokes wouldn't register after resizing the canvas"
+    },
+    {
       "version": "V1.3.7",
       "zh": "### 新增\r\n- **匿名使用统计** — 新增匿名统计功能，仅记录笔刷、引擎、调色盘的使用偏好以及绘制时长，用于帮助我改进插件。不会收集任何画作内容或个人信息，如不希望参与可通过浏览器的广告拦截插件屏蔽 Google Analytics",
       "en": "### New\r\n- **Anonymous usage analytics** — Added opt-out anonymous tracking of brush / engine / palette preferences and stroke duration to help improve the plugin. No artwork or personal info is collected; you can block Google Analytics with any ad blocker if you'd rather not participate"
@@ -9,12 +14,7 @@
       "version": "V1.3.6",
       "zh": "### 优化\r\n- **启动速度提升** — 启动加载方式全面优化，首屏响应更快\r\n- **更新提示改进** — 支持一次展示多个未读版本的更新说明，不会再错过中间版本",
       "en": "### Improvement\r\n- **Faster startup** — Overhauled loading pipeline for snappier first paint\r\n- **Better update notifications** — Missed several releases? Now you'll see all their changelogs at once"
-    },
-    {
-      "version": "V1.3.5a",
-      "zh": "### 优化\r\n- **新增2款色板** — 温莎牛顿 Designers Gouache, 伦勃朗 Rembrandt 油画 16色",
-      "en": "### Improvement\r\n- **New Color Palettes** - Winsor & Newton Designers Gouache Mix, Rembrandt Oil 16"
     }
   ],
-  "generatedAt": "2026-04-17T18:36:43.219Z"
+  "generatedAt": "2026-04-18T04:33:07.355Z"
 }
