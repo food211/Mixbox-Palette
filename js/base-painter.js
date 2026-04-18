@@ -862,11 +862,11 @@ class BaseWebGLPainter {
      * 裁掉当前步之后的所有帧，然后保存快照
      */
     pushHistoryFrame() {
-        // 丢弃当前步之后的帧
+        // 丢弃当前步之后的帧。
+        // 先从 _history 断开引用让新帧不被它们干扰，然后分批异步释放，
+        // 避免一次性解引用大量 Blob / 同步扫 Map 造成笔画结束时的卡顿。
         const discarded = this._history.splice(this._historyStep + 1);
-        for (const frame of discarded) {
-            this._releaseFrame(frame);
-        }
+        if (discarded.length > 0) this._scheduleAsyncRelease(discarded);
 
         const slot = this._acquireGpuSlot();
         const frame = {
@@ -1197,6 +1197,40 @@ class BaseWebGLPainter {
         this._pendingIdle.delete(frame.id);
     }
 
+    /**
+     * 把一批被丢弃的帧异步分批释放。每 idle 处理一小批，避免大批 Blob 解引用 + Map 清理
+     * 造成单帧长卡顿（撤销很多次后落新笔会 splice 掉 N 个旧帧）。
+     */
+    _scheduleAsyncRelease(frames) {
+        if (!this._releaseQueue) this._releaseQueue = [];
+        for (const f of frames) this._releaseQueue.push(f);
+        if (this._releaseScheduled) return;
+        this._releaseScheduled = true;
+
+        const BATCH = 8;
+        const tick = () => {
+            if (this._disposed) { this._releaseScheduled = false; return; }
+            const n = Math.min(BATCH, this._releaseQueue.length);
+            for (let i = 0; i < n; i++) {
+                this._releaseFrame(this._releaseQueue.shift());
+            }
+            if (this._releaseQueue.length > 0) {
+                if (typeof requestIdleCallback !== 'undefined') {
+                    requestIdleCallback(tick, { timeout: 500 });
+                } else {
+                    setTimeout(tick, 0);
+                }
+            } else {
+                this._releaseScheduled = false;
+            }
+        };
+        if (typeof requestIdleCallback !== 'undefined') {
+            requestIdleCallback(tick, { timeout: 500 });
+        } else {
+            setTimeout(tick, 0);
+        }
+    }
+
     _releaseFrame(frame) {
         this._cancelIdleBackup(frame);
         if (frame.gpuSlot) {
@@ -1247,6 +1281,18 @@ class BaseWebGLPainter {
             this._workerPending.clear();
         }
         if (this._decompressCache) this._decompressCache.clear();
+
+        // 清空异步释放队列中未处理的帧（把它们的 slot 也回收到 _gpuFreeSlots，
+        // 这样下面统一销毁 GPU 资源时能覆盖到）
+        if (this._releaseQueue && this._releaseQueue.length) {
+            for (const f of this._releaseQueue) {
+                if (f.gpuSlot) {
+                    this._gpuFreeSlots.push(f.gpuSlot);
+                    f.gpuSlot = null;
+                }
+            }
+            this._releaseQueue.length = 0;
+        }
 
         // 销毁历史帧
         if (this._history) {
