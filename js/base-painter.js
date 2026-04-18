@@ -1347,10 +1347,14 @@ class BaseWebGLPainter {
         // 销毁运行时纹理
         if (this.textures) {
             const seen = new Set();
+            const external = this._externalTextures || null;
             for (const key in this.textures) {
                 const tex = this.textures[key];
                 if (tex && !seen.has(tex)) {
                     seen.add(tex);
+                    // 外部管理的纹理（如 mixbox 模块级单例 LUT）不能 deleteTexture，
+                    // 否则模块缓存里的纹理 ID 失效，下次同 gl 重建时会返回已删的纹理
+                    if (external && external.has(tex)) continue;
                     gl.deleteTexture(tex);
                 }
             }
