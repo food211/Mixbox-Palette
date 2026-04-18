@@ -491,6 +491,7 @@ class BaseWebGLPainter {
             x - halfSize, y + halfSize,
             x + halfSize, y + halfSize,
         ]);
+        this._disableAllVertexAttribs();
         gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.position);
         gl.bufferData(gl.ARRAY_BUFFER, positions, gl.DYNAMIC_DRAW);
         gl.enableVertexAttribArray(this.locations.a_position);
@@ -535,9 +536,7 @@ class BaseWebGLPainter {
         gl.uniform1i(this._blitLocations.u_src, 0);
         gl.uniform2f(this._blitLocations.u_resolution, cw, ch);
 
-        // 禁用所有可能残留启用的 attribute（避免跨 program 状态污染）
-        const maxAttrs = gl.getParameter(gl.MAX_VERTEX_ATTRIBS);
-        for (let i = 0; i < maxAttrs; i++) gl.disableVertexAttribArray(i);
+        this._disableAllVertexAttribs();
 
         gl.bindBuffer(gl.ARRAY_BUFFER, this._blitBuffer);
         gl.enableVertexAttribArray(this._blitLocations.a_clipPos);
@@ -550,6 +549,22 @@ class BaseWebGLPainter {
         if (this._debugHeatmapEnabled)  this._flushDebugHeatmap(this._debugHeatOpacity ?? 1.0);
         if (this._debugWetPaperEnabled) this._flushDebugWetPaper(this._debugHeatOpacity ?? 1.0);
         if (this._debugDepositHeatmapEnabled) this._flushDebugDepositHeatmap(this._debugHeatOpacity ?? 1.0);
+    }
+
+    /**
+     * 禁用所有 vertex attribute。
+     * WebGL 的 attribute enabled 状态是全局共享的（不随 program 切换重置），
+     * 切换 program 前统一禁用，避免上个 program 启用的 attribute 在当前 program 上
+     * 造成 "no buffer is bound to enabled attribute" 错误。
+     */
+    _disableAllVertexAttribs() {
+        const gl = this.gl;
+        if (this._maxVertexAttribs === undefined) {
+            this._maxVertexAttribs = gl.getParameter(gl.MAX_VERTEX_ATTRIBS);
+        }
+        for (let i = 0; i < this._maxVertexAttribs; i++) {
+            gl.disableVertexAttribArray(i);
+        }
     }
 
     swapTextures() {
@@ -820,6 +835,7 @@ class BaseWebGLPainter {
         gl.uniform1i(this._blitLocations.u_src, 0);
         gl.uniform2f(this._blitLocations.u_resolution, cw, ch);
 
+        this._disableAllVertexAttribs();
         gl.bindBuffer(gl.ARRAY_BUFFER, this._blitBuffer);
         gl.enableVertexAttribArray(this._blitLocations.a_clipPos);
         gl.vertexAttribPointer(this._blitLocations.a_clipPos, 2, gl.FLOAT, false, 0, 0);

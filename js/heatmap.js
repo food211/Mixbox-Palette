@@ -191,6 +191,7 @@ function updateSmudgeHeatmap(x, y, size, brushCanvas, useFalloff, heatStep = HEA
         x - halfSize, y + halfSize,
         x + halfSize, y + halfSize,
     ]);
+    this._disableAllVertexAttribs();
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.position);
     gl.bufferData(gl.ARRAY_BUFFER, positions, gl.DYNAMIC_DRAW);
     gl.enableVertexAttribArray(this._heatmapLocations.a_position);
@@ -245,6 +246,7 @@ function updateDepositHeatmap(x, y, size, useFalloff, heatStep = DEPOSITE_HEAT_A
         x - halfSize, y + halfSize,
         x + halfSize, y + halfSize,
     ]);
+    this._disableAllVertexAttribs();
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.position);
     gl.bufferData(gl.ARRAY_BUFFER, positions, gl.DYNAMIC_DRAW);
     gl.enableVertexAttribArray(this._heatmapLocations.a_position);
@@ -382,6 +384,7 @@ function _flushHeatOverlay(texture, opacity = 1.0) {
     gl.uniform1i(this._debugHeatUTex, 0);
     gl.uniform1f(this._debugHeatUOpacity, opacity);
 
+    this._disableAllVertexAttribs();
     gl.bindBuffer(gl.ARRAY_BUFFER, this._debugHeatBuf);
     gl.enableVertexAttribArray(this._debugHeatAPos);
     gl.vertexAttribPointer(this._debugHeatAPos, 2, gl.FLOAT, false, 0, 0);
@@ -461,6 +464,7 @@ function _decayHeatmap(decay = 0.02) {
     gl.uniform1i(this._heatDecayUTex, 0);
     gl.uniform1f(this._heatDecayUStep, decay);
 
+    this._disableAllVertexAttribs();
     gl.bindBuffer(gl.ARRAY_BUFFER, this._heatDecayBuf);
     gl.enableVertexAttribArray(this._heatDecayAPos);
     gl.vertexAttribPointer(this._heatDecayAPos, 2, gl.FLOAT, false, 0, 0);

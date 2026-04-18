@@ -117,6 +117,7 @@ function _spreadWetHeatmap() {
     gl.uniform1f(this._wetSpreadLoc.u_radius,   WET_SPREAD_RADIUS);
     gl.uniform1f(this._wetSpreadLoc.u_strength, WET_SPREAD_STRENGTH);
 
+    this._disableAllVertexAttribs();
     gl.bindBuffer(gl.ARRAY_BUFFER, this._wetSpreadBuf);
     gl.enableVertexAttribArray(this._wetSpreadLoc.a_pos);
     gl.vertexAttribPointer(this._wetSpreadLoc.a_pos, 2, gl.FLOAT, false, 0, 0);
@@ -180,6 +181,7 @@ function updateWetHeatmap(x, y, size, brushCanvas, useFalloff, heatStep = HEAT_A
         x - halfSize, y + halfSize,
         x + halfSize, y + halfSize,
     ]);
+    this._disableAllVertexAttribs();
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.position);
     gl.bufferData(gl.ARRAY_BUFFER, positions, gl.DYNAMIC_DRAW);
     gl.enableVertexAttribArray(this._heatmapLocations.a_position);
@@ -345,6 +347,7 @@ function _applyWetColor(color) {
     gl.uniform1f(this._wetColorLoc.u_depositGradMax,     WET_DEPOSIT_GRAD_MAX);
     gl.uniform1f(this._wetColorLoc.u_diluteGradSuppress, WET_DILUTE_GRAD_SUPPRESS);
 
+    this._disableAllVertexAttribs();
     gl.bindBuffer(gl.ARRAY_BUFFER, this._wetColorBuf);
     gl.enableVertexAttribArray(this._wetColorLoc.a_pos);
     gl.vertexAttribPointer(this._wetColorLoc.a_pos, 2, gl.FLOAT, false, 0, 0);
@@ -425,6 +428,7 @@ function _applyDepositColorPass(color, depositStr) {
     gl.uniform1f(this._wetColorLoc.u_depositGradMax,     WET_DEPOSIT_GRAD_MAX);
     gl.uniform1f(this._wetColorLoc.u_diluteGradSuppress, WET_DILUTE_GRAD_SUPPRESS);
 
+    this._disableAllVertexAttribs();
     gl.bindBuffer(gl.ARRAY_BUFFER, this._wetColorBuf);
     gl.enableVertexAttribArray(this._wetColorLoc.a_pos);
     gl.vertexAttribPointer(this._wetColorLoc.a_pos, 2, gl.FLOAT, false, 0, 0);
