@@ -141,6 +141,9 @@ async function _commitResize(newWidth) {
     localStorage.setItem(RESIZE_STORAGE_KEY, String(newWidth));
     _applyContainerWidth(newWidth);
 
+    // resize 前把脏画布落盘（避免老画布尺寸的最新内容丢失）
+    if (typeof window.flushCanvasSave === 'function') await window.flushCanvasSave();
+
     // 1. 读取当前画面和参数
     const oldMixStrength = painter.getMixStrength();
     const oldPixels = painter.readPixelRegion(0, 0, oldW, oldH);
