@@ -887,8 +887,13 @@ class BaseWebGLPainter {
 
         this._history.push(frame);
 
-        // 超出上限时移除最老帧
+        // 软上限：超过 GPU slot 配额一定缓冲后驱逐最老帧
         if (this._history.length > this._maxGpuSlots + HISTORY_OVERFLOW_BUFFER) {
+            const oldest = this._history.shift();
+            this._releaseFrame(oldest);
+        }
+        // 硬上限：防止长时间绘制时 cpuBlob 无限累积
+        while (this._history.length > HISTORY_FRAMES_HARD_CAP) {
             const oldest = this._history.shift();
             this._releaseFrame(oldest);
         }
