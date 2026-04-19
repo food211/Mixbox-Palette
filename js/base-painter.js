@@ -53,6 +53,22 @@ class BaseWebGLPainter {
         this._lastRestoreDir = 0;          // +1 redo, -1 undo, 0 未知
         this._lastRestoreStep = -1;
         this._restoreSeq = 0;              // 异步 restore 令牌，防止乱序解压结果覆盖正确帧
+
+        // drawBrush 每帧复用的顶点位置缓冲，避免频繁分配引发 GC
+        this._quadPos = new Float32Array(8);
+
+        // 湿度相关 uniform 缓存：仅在 setWetness 时重算
+        this._wetCache = null;
+        this._recomputeWetCache(0.5);
+    }
+
+    _recomputeWetCache(w) {
+        this._wetCache = {
+            bleedMix:    WET_BLEED_MIX    * (WET_BLEED_SCALE_MIN  + (WET_BLEED_SCALE_MAX  - WET_BLEED_SCALE_MIN)  * w),
+            bleedRadius: WET_BLEED_RADIUS * (WET_BLEED_SCALE_MIN  + (WET_BLEED_SCALE_MAX  - WET_BLEED_SCALE_MIN)  * w),
+            coldMix:     WET_COLD_MIX     * (WET_COLD_SCALE_MAX   + (WET_COLD_SCALE_MIN   - WET_COLD_SCALE_MAX)   * w),
+            smudgeMix:   WET_SMUDGE_MIX   * (WET_SMUDGE_SCALE_MIN + (WET_SMUDGE_SCALE_MAX - WET_SMUDGE_SCALE_MIN) * w),
+        };
     }
 
     // ─────────────────────────────────────────────
@@ -121,6 +137,15 @@ class BaseWebGLPainter {
     compileShaders() {
         const gl = this.gl;
 
+        // 主 program 按引擎子类缓存：每个引擎 shader 只编译一次，后续切换复用。
+        const cacheKey = this.constructor.name;
+        const cached = BaseWebGLPainter._programCache.main.get(cacheKey);
+        if (cached) {
+            this.program = cached.program;
+            this.locations = cached.locations;
+            return;
+        }
+
         const vsSource = `
         attribute vec2 a_position;
         attribute vec2 a_texCoord;
@@ -180,6 +205,11 @@ class BaseWebGLPainter {
         for (const name of this._getExtraUniformNames()) {
             this.locations[name] = gl.getUniformLocation(this.program, name);
         }
+
+        BaseWebGLPainter._programCache.main.set(cacheKey, {
+            program: this.program,
+            locations: this.locations,
+        });
     }
 
     createShader(type, source) {
@@ -247,6 +277,14 @@ class BaseWebGLPainter {
     }
 
     setupGeometry() {
+        // 主 program 的 position/texCoord VBO 整个会话复用，避免切引擎时反复重建
+        const cached = BaseWebGLPainter._programCache.mainGeometry;
+        if (cached) {
+            this.buffers.position = cached.position;
+            this.buffers.texCoord = cached.texCoord;
+            this.pixelAlignmentOffset = 0.0;
+            return;
+        }
         const gl = this.gl;
         this.buffers.position = gl.createBuffer();
 
@@ -256,6 +294,11 @@ class BaseWebGLPainter {
         gl.bufferData(gl.ARRAY_BUFFER, texCoords, gl.STATIC_DRAW);
 
         this.pixelAlignmentOffset = 0.0;
+
+        BaseWebGLPainter._programCache.mainGeometry = {
+            position: this.buffers.position,
+            texCoord: this.buffers.texCoord,
+        };
     }
 
     createEmptyTexture(width, height) {
@@ -291,6 +334,13 @@ class BaseWebGLPainter {
     // ─────────────────────────────────────────────
 
     _initBlitProgram() {
+        const cached = BaseWebGLPainter._programCache.blit;
+        if (cached) {
+            this._blitProgram = cached.program;
+            this._blitLocations = cached.locations;
+            this._blitBuffer = cached.buffer;
+            return;
+        }
         const gl = this.gl;
 
         const vs = this.createShader(gl.VERTEX_SHADER, `
@@ -319,6 +369,12 @@ class BaseWebGLPainter {
             new Float32Array([-1, -1,  1, -1,  -1, 1,  1, 1]),
             gl.STATIC_DRAW);
         gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+        BaseWebGLPainter._programCache.blit = {
+            program:  this._blitProgram,
+            locations: this._blitLocations,
+            buffer:   this._blitBuffer,
+        };
     }
 
     // ─────────────────────────────────────────────
@@ -342,6 +398,7 @@ class BaseWebGLPainter {
         this._wetness = w;
         // 映射到 [WET_HEAT_CAP_STEP, 1.0]，避免完全干燥时失去水彩感
         this._wetHeatCapBase = WET_HEAT_CAP_STEP + (1.0 - WET_HEAT_CAP_STEP) * w;
+        this._recomputeWetCache(w);
     }
 
     /**
@@ -417,7 +474,7 @@ class BaseWebGLPainter {
                     this._wetHeatBaseAngle = curAngle;
                 }
             }
-            this.updateWetHeatmap(x, y, size, brushCanvas, useFalloff, HEAT_ACCUMULATE_STEP * this.baseMixStrength);
+            this.updateWetHeatmap(x, y, size, brushCanvas, useFalloff, HEAT_ACCUMULATE_STEP);
             this._wetSmearDir = smearDir;
             this._wetSmearLen = smearLen;
         }
@@ -472,25 +529,29 @@ class BaseWebGLPainter {
         gl.bindTexture(gl.TEXTURE_2D, this.textures.depositHeatmap);
         gl.uniform1i(this.locations.u_depositHeatmap, 6);
         // wet低→颜料浓（coldMix高）；wet高→晕染强、smudge强（bleedMix/bleedRadius/smudgeMix高）
-        const w = this._wetness ?? 0.5;
-        const wetBleedMix    = WET_BLEED_MIX    * (WET_BLEED_SCALE_MIN  + (WET_BLEED_SCALE_MAX  - WET_BLEED_SCALE_MIN)  * w);
-        const wetBleedRadius = WET_BLEED_RADIUS * (WET_BLEED_SCALE_MIN  + (WET_BLEED_SCALE_MAX  - WET_BLEED_SCALE_MIN)  * w);
-        const wetColdMix     = WET_COLD_MIX     * (WET_COLD_SCALE_MAX   + (WET_COLD_SCALE_MIN   - WET_COLD_SCALE_MAX)   * w);
-        const wetSmudgeMix   = WET_SMUDGE_MIX   * (WET_SMUDGE_SCALE_MIN + (WET_SMUDGE_SCALE_MAX - WET_SMUDGE_SCALE_MIN) * w);
-        gl.uniform1f(this.locations.u_isWatercolor,   isWatercolor ? 1.0 : 0.0);
-        gl.uniform1f(this.locations.u_wetSmudgeMix,   isWatercolor ? wetSmudgeMix     : 0.0);
-        gl.uniform1f(this.locations.u_wetDepositPeak, isWatercolor ? WET_DEPOSIT_PEAK  : 0.0);
-        gl.uniform1f(this.locations.u_wetBleedRadius, isWatercolor ? wetBleedRadius    : 0.0);
-        gl.uniform1f(this.locations.u_wetBleedMix,    isWatercolor ? wetBleedMix       : 0.0);
-        gl.uniform1f(this.locations.u_wetColdMix,     isWatercolor ? wetColdMix        : 0.0);
-        gl.uniform1f(this.locations.u_wetSmearReach,  isWatercolor ? WET_SMEAR_REACH   : 0.0);
+        gl.uniform1f(this.locations.u_isWatercolor, isWatercolor ? 1.0 : 0.0);
+        if (isWatercolor) {
+            const wc = this._wetCache;
+            gl.uniform1f(this.locations.u_wetSmudgeMix,   wc.smudgeMix);
+            gl.uniform1f(this.locations.u_wetDepositPeak, WET_DEPOSIT_PEAK);
+            gl.uniform1f(this.locations.u_wetBleedRadius, wc.bleedRadius);
+            gl.uniform1f(this.locations.u_wetBleedMix,    wc.bleedMix);
+            gl.uniform1f(this.locations.u_wetColdMix,     wc.coldMix);
+            gl.uniform1f(this.locations.u_wetSmearReach,  WET_SMEAR_REACH);
+        } else {
+            gl.uniform1f(this.locations.u_wetSmudgeMix,   0.0);
+            gl.uniform1f(this.locations.u_wetDepositPeak, 0.0);
+            gl.uniform1f(this.locations.u_wetBleedRadius, 0.0);
+            gl.uniform1f(this.locations.u_wetBleedMix,    0.0);
+            gl.uniform1f(this.locations.u_wetColdMix,     0.0);
+            gl.uniform1f(this.locations.u_wetSmearReach,  0.0);
+        }
 
-        const positions = new Float32Array([
-            x - halfSize, y - halfSize,
-            x + halfSize, y - halfSize,
-            x - halfSize, y + halfSize,
-            x + halfSize, y + halfSize,
-        ]);
+        const positions = this._quadPos;
+        positions[0] = x - halfSize; positions[1] = y - halfSize;
+        positions[2] = x + halfSize; positions[3] = y - halfSize;
+        positions[4] = x - halfSize; positions[5] = y + halfSize;
+        positions[6] = x + halfSize; positions[7] = y + halfSize;
         this._disableAllVertexAttribs();
         gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.position);
         gl.bufferData(gl.ARRAY_BUFFER, positions, gl.DYNAMIC_DRAW);
@@ -549,6 +610,7 @@ class BaseWebGLPainter {
         if (this._debugHeatmapEnabled)  this._flushDebugHeatmap(this._debugHeatOpacity ?? 1.0);
         if (this._debugWetPaperEnabled) this._flushDebugWetPaper(this._debugHeatOpacity ?? 1.0);
         if (this._debugDepositHeatmapEnabled) this._flushDebugDepositHeatmap(this._debugHeatOpacity ?? 1.0);
+        if (this._debugWetMaskHeatmapEnabled) this._flushDebugWetMaskHeatmap(this._debugHeatOpacity ?? 1.0);
     }
 
     /**
@@ -1318,8 +1380,16 @@ class BaseWebGLPainter {
         if (this._decompressCache) this._decompressCache.clear();
 
         // 释放队列里的 frame gpuSlot 已在 _scheduleAsyncRelease 同步阶段回收过，
-        // 这里只需要清空队列（剩下的 cpuPixels/cpuBlob 随 frame 对象一起被 GC）
-        if (this._releaseQueue) this._releaseQueue.length = 0;
+        // 这里主动解除 cpuPixels/cpuBlob 引用，避免等 asyncRelease 的 idle tick
+        // 醒来才释放（dispose 时那条 idle chain 的 handle 没存，无法显式 cancel）
+        if (this._releaseQueue) {
+            for (const f of this._releaseQueue) {
+                f.cpuPixels = null;
+                f.cpuReady  = false;
+                f.cpuBlob   = null;
+            }
+            this._releaseQueue.length = 0;
+        }
 
         // 销毁历史帧
         if (this._history) {
@@ -1383,29 +1453,27 @@ class BaseWebGLPainter {
             gl.deleteTexture(this.currentBrushTexture);
             this.currentBrushTexture = null;
         }
+        if (this._softBrushTexture) {
+            gl.deleteTexture(this._softBrushTexture);
+            this._softBrushTexture = null;
+            this._softBrushTextureCanvas = null;
+        }
+        if (this._softBrushCanvasCache) this._softBrushCanvasCache.clear();
         this.lastBrushCanvas = null;
 
-        // 销毁 vertex buffers
-        if (this.buffers) {
-            for (const key in this.buffers) {
-                if (this.buffers[key]) gl.deleteBuffer(this.buffers[key]);
-            }
-            this.buffers = {};
-        }
-        if (this._blitBuffer) {
-            gl.deleteBuffer(this._blitBuffer);
-            this._blitBuffer = null;
-        }
-
-        // 销毁 shader programs
-        if (this.program) {
-            gl.deleteProgram(this.program);
-            this.program = null;
-        }
-        if (this._blitProgram) {
-            gl.deleteProgram(this._blitProgram);
-            this._blitProgram = null;
-        }
+        // shader programs / VBO / locations 全部模块级缓存，dispose 不释放（整个会话复用）。
+        // 只清引用，避免外部代码误用已废弃 painter 的 this.program 等字段。
+        this.buffers = {};
+        this._blitBuffer = null;
+        this.program = null;
+        this._blitProgram = null;
+        this._heatmapProgram = null;
+        this._heatDecayProgram = null;
+        this._heatDecayBuf = null;
+        this._wetSpreadProgram = null;
+        this._wetSpreadBuf = null;
+        this._wetColorProgram = null;
+        this._wetColorBuf = null;
     }
 
     /**
@@ -1510,6 +1578,24 @@ class BaseWebGLPainter {
 
 // 记录本脚本 URL，用于 Worker 等相对资源的绝对路径解析（避免子目录部署坏路径）
 BaseWebGLPainter._scriptURL = (document.currentScript && document.currentScript.src) || '';
+
+// ──────────────────────────────────────────────────────────────
+// 模块级 shader/buffer 缓存：一次编译整个会话复用。
+//   main：按子类构造器名分键（MB/KM 各一）
+//   其余辅助 program 源码与引擎无关，全局共用一份。
+// 缓存条目结构：{ program, locations, buffer? }。
+// dispose 不得 deleteProgram/deleteBuffer 这些缓存项，否则下次拿到
+// 失效的 WebGLProgram，drawArrays 会静默失败。
+// ──────────────────────────────────────────────────────────────
+BaseWebGLPainter._programCache = {
+    main: new Map(),
+    mainGeometry: null,
+    blit:      null,
+    heatmap:   null,
+    heatDecay: null,
+    wetSpread: null,
+    wetColor:  null,
+};
 
 window.BaseWebGLPainter = BaseWebGLPainter;
 console.log('BaseWebGLPainter 加载成功');

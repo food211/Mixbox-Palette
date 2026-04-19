@@ -10,6 +10,17 @@ class PaletteStorage {
         this.historyKey = historyKey;
         this.settingsKey = settingsKey;
         this.autoSaveTimer = null;
+
+        this.toolStateKeyPrefix = 'mb_tool_';
+        this._toolStateTimers = {};
+        this._toolStateDelay = 200;
+
+        // appSettings 内存缓存 + debounce：避免滑条/颜色变动时每次都走
+        // getItem+parse+merge+stringify+setItem 的同步 I/O 循环。
+        this._appSettingsCache = null;     // null 表示尚未读取过
+        this._appSettingsDirty = false;
+        this._appSettingsTimer = null;
+        this._appSettingsDelay = 300;
     }
 
     /**
@@ -101,22 +112,51 @@ class PaletteStorage {
      * 保存应用全局设置（颜色、混合强度等）
      * settings: { foregroundColor, backgroundColor, brushMixStrength,
      *             smudgeBrushSize, smudgeStrength }
+     *
+     * 改为内存缓存 + debounce 写入：滑条/颜色连续触发时只有最后一次真正落盘。
+     * 页面关闭前通过 flushAppSettings() 同步 flush；beforeunload 钩子已接好。
      */
     saveAppSettings(settings) {
+        // 首次访问时把磁盘内容灌进缓存
+        if (this._appSettingsCache === null) {
+            this._appSettingsCache = this._readAppSettingsFromDisk() || {};
+        }
+        Object.assign(this._appSettingsCache, settings);
+        this._appSettingsDirty = true;
+        if (this._appSettingsTimer) clearTimeout(this._appSettingsTimer);
+        this._appSettingsTimer = setTimeout(() => this.flushAppSettings(), this._appSettingsDelay);
+        return true;
+    }
+
+    /**
+     * 强制把缓存中的 appSettings 同步写入 localStorage。
+     * beforeunload / 切引擎 / resize 等关键节点调用。
+     */
+    flushAppSettings() {
+        if (this._appSettingsTimer) {
+            clearTimeout(this._appSettingsTimer);
+            this._appSettingsTimer = null;
+        }
+        if (!this._appSettingsDirty || !this._appSettingsCache) return;
         try {
-            const existing = this.loadAppSettings() || {};
-            localStorage.setItem(this.settingsKey, JSON.stringify({ ...existing, ...settings }));
-            return true;
+            localStorage.setItem(this.settingsKey, JSON.stringify(this._appSettingsCache));
+            this._appSettingsDirty = false;
         } catch (e) {
             console.error('应用设置保存失败:', e);
-            return false;
         }
     }
 
     /**
-     * 加载应用全局设置
+     * 加载应用全局设置。命中缓存时直接返回，避免重复 parse。
      */
     loadAppSettings() {
+        if (this._appSettingsCache !== null) return this._appSettingsCache;
+        const disk = this._readAppSettingsFromDisk();
+        this._appSettingsCache = disk || {};
+        return disk;
+    }
+
+    _readAppSettingsFromDisk() {
         try {
             const saved = localStorage.getItem(this.settingsKey);
             if (saved) return JSON.parse(saved);
@@ -189,6 +229,51 @@ class PaletteStorage {
     }
 
     /**
+     * 加载某个工具/笔型的 state（toolStates 重构后用）
+     * mode: 'brush' | 'watercolor' | 'smudge'
+     */
+    loadToolState(mode) {
+        try {
+            const raw = localStorage.getItem(this.toolStateKeyPrefix + mode);
+            if (raw) return JSON.parse(raw);
+        } catch (e) {
+            console.error('toolState 加载失败:', mode, e);
+        }
+        return null;
+    }
+
+    saveToolState(mode, state) {
+        // 先把待写入的快照存住，flushToolStates 时按这个写
+        if (!this._pendingToolStates) this._pendingToolStates = {};
+        this._pendingToolStates[mode] = JSON.parse(JSON.stringify(state));
+        if (this._toolStateTimers[mode]) clearTimeout(this._toolStateTimers[mode]);
+        this._toolStateTimers[mode] = setTimeout(() => {
+            this._writeToolState(mode);
+        }, this._toolStateDelay);
+    }
+
+    _writeToolState(mode) {
+        if (!this._pendingToolStates || !(mode in this._pendingToolStates)) return;
+        try {
+            localStorage.setItem(this.toolStateKeyPrefix + mode, JSON.stringify(this._pendingToolStates[mode]));
+        } catch (e) {
+            console.error('toolState 保存失败:', mode, e);
+        }
+        delete this._pendingToolStates[mode];
+        if (this._toolStateTimers[mode]) {
+            clearTimeout(this._toolStateTimers[mode]);
+            this._toolStateTimers[mode] = null;
+        }
+    }
+
+    flushToolStates() {
+        if (!this._pendingToolStates) return;
+        for (const mode of Object.keys(this._pendingToolStates)) {
+            this._writeToolState(mode);
+        }
+    }
+
+    /**
      * 清除
      */
     clear() {
@@ -205,6 +290,7 @@ class PaletteStorage {
         localStorage.removeItem(this.brushKey);
         localStorage.removeItem(this.historyKey);
         localStorage.removeItem(this.settingsKey);
+        ['brush', 'watercolor', 'smudge'].forEach(m => localStorage.removeItem(this.toolStateKeyPrefix + m));
         console.log('🗑️ 所有数据已清除');
     }
 }

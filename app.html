@@ -52,7 +52,7 @@
             <!-- 语言切换 - 左上角 -->
             <div class="lang-selector">
                 <button id="langBtn" class="lang-btn" data-i18n-title="switchLanguage" title="Switch Language (EN / ZH)">EN</button>
-                <button id="engineBtn" class="engine-btn" data-i18n-title="switchEngine" title="Switch Mixing Engine">MB</button>
+                <button id="engineBtn" class="engine-btn active" data-i18n-title="switchEngine" title="Switch Mixing Engine">KM</button>
             </div>
             <!-- 缩放控制 - 右上角 -->
             <div class="zoom-selector">
@@ -283,6 +283,12 @@
     window.ensureKMLoaded = async function() {
         await loadScript('js/km-painter.js');
     };
+
+    // 供 app.js 在切换到 MB 或启动时按需加载 Mixbox 引擎
+    window.ensureMBLoaded = async function() {
+        await loadScript('js/mixbox.js');
+        await loadScript('js/mixbox-painter.js');
+    };
     
     // 检测WebGL支持
     function isWebGLSupported() {
@@ -310,13 +316,12 @@
             }
 
             // 判断启动引擎：若用户上次用的是 KM，首帧就需要 KM
-            const savedEngine = localStorage.getItem('mixbox_engine') || 'mixbox';
+            const savedEngine = localStorage.getItem('mixbox_engine') || 'km';
 
             // Tier 0：无依赖的脚本全部并行下载
             const tier0 = Promise.all([
                 loadScript('js/params.js'),
                 loadScript('js/i18n.js'),
-                loadScript('js/mixbox.js'),
                 loadScript('js/base-painter.js'),
                 loadScript('js/brush-manager.js'),
                 loadScript('js/palette-storage.js'),
@@ -330,7 +335,6 @@
             const tier1 = Promise.all([
                 loadScript('js/heatmap.js'),
                 loadScript('js/wetpaper.js'),
-                loadScript('js/mixbox-painter.js'),
             ]);
 
             // updater / announcer 不依赖其他脚本，此时就发起下载（不 await，让请求尽早排队）
@@ -339,13 +343,17 @@
                 loadScript('js/announcer.js'),
             ]);
 
-            // 用户上次选 KM：立刻加载；否则 idle 时再预取（不阻塞首屏）
-            let kmPromise = null;
-            if (savedEngine === 'km') {
-                kmPromise = window.ensureKMLoaded();
-            } else {
+            // 启动引擎按需加载；非启动引擎 idle 时预取（不阻塞首屏）
+            let bootEnginePromise = null;
+            if (savedEngine === 'mixbox') {
+                bootEnginePromise = window.ensureMBLoaded();
                 (window.requestIdleCallback || ((cb) => setTimeout(cb, 2000)))(() => {
                     window.ensureKMLoaded().then(() => console.log('✅ KM 引擎已空闲预取'));
+                });
+            } else {
+                bootEnginePromise = window.ensureKMLoaded();
+                (window.requestIdleCallback || ((cb) => setTimeout(cb, 2000)))(() => {
+                    window.ensureMBLoaded().then(() => console.log('✅ Mixbox 引擎已空闲预取'));
                 });
             }
 
@@ -353,10 +361,8 @@
             await tier1;
             console.log('✅ 核心依赖已加载');
 
-            if (kmPromise) {
-                await kmPromise;
-                console.log('✅ KM 引擎已加载（启动引擎为 KM）');
-            }
+            await bootEnginePromise;
+            console.log(`✅ ${savedEngine === 'mixbox' ? 'Mixbox' : 'KM'} 引擎已加载（启动引擎）`);
 
             // app.js 依赖以上全部
             await loadScript('js/app.js');
@@ -383,7 +389,14 @@
                     versionLabel.addEventListener('click', () => Announcer.checkUpdate());
                 }
                 // 延迟启动公告组件（包揽更新检测 + 公告推送）
-                setTimeout(() => Announcer.init(), 3000);
+                // 用 requestIdleCallback 让公告初始化在浏览器空闲时执行，
+                // 避免抢占首屏资源；不支持的环境兜底到 setTimeout。
+                const startAnnouncer = () => Announcer.init();
+                if (typeof requestIdleCallback === 'function') {
+                    requestIdleCallback(startAnnouncer, { timeout: 3000 });
+                } else {
+                    setTimeout(startAnnouncer, 3000);
+                }
             });
 
         } catch (error) {

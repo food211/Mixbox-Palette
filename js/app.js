@@ -13,6 +13,28 @@ function track(name, params) {
     } catch (_) {}
 }
 
+// 调试快捷方式：控制台直接调用 help() / debugHeatmap() 等，无需前缀
+function _bindDebugShortcuts(painter) {
+    // 函数版（带括号、可传参）
+    window.debugHeatmap        = (on) => painter.debugHeatmap(on);
+    window.debugDepositHeatmap = (on) => painter.debugDepositHeatmap(on);
+    window.debugWetPaper       = (on) => painter.debugWetPaper(on);
+    window.debugWetMask        = (on) => painter.debugWetMask(on);
+    window.toggleWetMask       = (on) => painter.toggleWetMask(on);
+
+    // 不带括号的别名：定义成 getter，访问即触发 toggle（仅无参形态）
+    const defGetter = (name, fn) => Object.defineProperty(window, name, {
+        get: fn, configurable: true,
+    });
+    defGetter('help', () => painter.listDebugCommands());
+    defGetter('h',    () => painter.listDebugCommands());
+    defGetter('dh',   () => painter.debugHeatmap());
+    defGetter('ddh',  () => painter.debugDepositHeatmap());
+    defGetter('dwp',  () => painter.debugWetPaper());
+    defGetter('dwm',  () => painter.debugWetMask());
+    defGetter('twm',  () => painter.toggleWetMask());
+}
+
 function reportAnalyticsEnv() {
     try {
         if (typeof window.gtag !== 'function') return;
@@ -48,27 +70,65 @@ let colors = palettePresets[currentPalette].colors;
 let foregroundColor = '#000000';
 let backgroundColor = '#ffffff';
 let currentBrushColor = foregroundColor;
-let brushSize = 15;
-let brushSpacingRatio = 0.05;  // 笔刷工具间距系数
-let smudgeSpacingRatio = 0.05; // 涂抹工具间距系数
-let watercolorWetness = 50;    // 水彩湿度（1~100）
 let isDrawing = false;
 let isEyedropperMode = false;
-let currentBrush = { type: 'dry', image: null };
 
 // 矩形选取模式
 let isRectSelectMode = false;
 let isRectSelecting = false;
 let rectSelectStart = null;  // { x, y }
 
-// 工具模式
+// 工具状态模型（重构后单一数据源）
+// mode = 'brush' | 'watercolor' | 'smudge'，由 currentTool + 当前笔型推导
+const TOOL_STATE_DEFAULTS = {
+    brush:      { size: 15, mixStrength: 77, spacingRatio: 0.05, brushType: 'dry' },
+    watercolor: { size: 15, mixStrength: 77, wetness: 50 },
+    smudge:     { size: 15, strength: 50, spacingRatio: 0.05, brushType: 'dry' },
+};
+const toolStates = {
+    brush:      { ...TOOL_STATE_DEFAULTS.brush },
+    watercolor: { ...TOOL_STATE_DEFAULTS.watercolor },
+    smudge:     { ...TOOL_STATE_DEFAULTS.smudge },
+};
 let currentTool = 'brush';  // 'brush' 或 'smudge'
-let smudgeStrength = 50;  // 涂抹强度 (0-100)
 let pressureEnabled = false;  // 压感开关
-let smudgeBrushSize = 15;  // 涂抹工具的笔刷大小
-let smudgeBrushType = 'dry';  // 涂抹工具的笔刷类型
-let savedBrushSettings = null;  // 临时保存笔刷设置（切换到涂抹工具时使用）
 let smudgeSnapshotCache = null;
+
+// 当前笔刷类型（笔刷工具下决定走 brush 还是 watercolor state）
+let currentBrush = { type: 'dry', image: null };
+
+function getCurrentMode() {
+    if (currentTool === 'smudge') return 'smudge';
+    return currentBrush.type === 'watercolor' ? 'watercolor' : 'brush';
+}
+
+function getCurrentState() {
+    return toolStates[getCurrentMode()];
+}
+
+// 旧变量名 → toolStates 字段的兼容 shim：
+// 绘制管线代码量大且只读这些值，临时保留访问语义，避免一次性大改
+const _brushSizeAccessor = {
+    get brushSize() {
+        return currentTool === 'smudge'
+            ? toolStates.smudge.size
+            : (currentBrush.type === 'watercolor' ? toolStates.watercolor.size : toolStates.brush.size);
+    },
+    set brushSize(v) { getCurrentState().size = v; },
+    get smudgeBrushSize() { return toolStates.smudge.size; },
+    set smudgeBrushSize(v) { toolStates.smudge.size = v; },
+    get smudgeStrength() { return toolStates.smudge.strength; },
+    set smudgeStrength(v) { toolStates.smudge.strength = v; },
+    get smudgeBrushType() { return toolStates.smudge.brushType; },
+    set smudgeBrushType(v) { toolStates.smudge.brushType = v; },
+    get brushSpacingRatio() { return toolStates.brush.spacingRatio; },
+    set brushSpacingRatio(v) { toolStates.brush.spacingRatio = v; },
+    get smudgeSpacingRatio() { return toolStates.smudge.spacingRatio; },
+    set smudgeSpacingRatio(v) { toolStates.smudge.spacingRatio = v; },
+    get watercolorWetness() { return toolStates.watercolor.wetness; },
+    set watercolorWetness(v) { toolStates.watercolor.wetness = v; },
+};
+Object.defineProperties(globalThis, Object.getOwnPropertyDescriptors(_brushSizeAccessor));
 let _smudgeAngle = 0;  // 涂抹喷溅纹理旋转角，每步随机
 
 // 历史记录 - 由 painter 的 GPU 纹理池管理，此处不再持有数据
@@ -78,19 +138,34 @@ let currentStroke = null;  // { type: 'brush'|'smudge'|'clear', points: [], colo
 let currentStrokeBrushCanvas = null;  // 当前笔画的笔刷纹理（落笔时生成，整笔复用）
 
 // 混色引擎: 'mixbox' (默认) 或 'km'
-let currentEngine = 'mixbox';
+let currentEngine = 'km';
 
 /**
  * 根据引擎类型创建 Painter
  */
 function createPainter(engine, canvas) {
-    if (engine === 'km' && typeof KMWebGLPainter !== 'undefined' && isWebGLSupported()) {
-        console.log('使用 KM 渲染器');
-        return new KMWebGLPainter(canvas);
-    } else {
+    if (engine === 'km') {
+        if (typeof KMWebGLPainter !== 'undefined' && isWebGLSupported()) {
+            console.log('使用 KM 渲染器');
+            return new KMWebGLPainter(canvas);
+        }
+        // KM 不可用（脚本未加载或 WebGL 不支持）→ 退回 MB
+        if (typeof MixboxWebGLPainter !== 'undefined') {
+            console.warn('KM 不可用，回退到 Mixbox 渲染器');
+            return new MixboxWebGLPainter(canvas);
+        }
+        throw new Error('KM 引擎不可用，且 Mixbox 也未加载');
+    }
+    if (typeof MixboxWebGLPainter !== 'undefined') {
         console.log('使用 Mixbox 渲染器');
         return new MixboxWebGLPainter(canvas);
     }
+    // MB 还没加载完 → 临时退回 KM
+    if (typeof KMWebGLPainter !== 'undefined') {
+        console.warn('Mixbox 未加载，回退到 KM 渲染器');
+        return new KMWebGLPainter(canvas);
+    }
+    throw new Error('Mixbox 与 KM 引擎都不可用');
 }
 
 /**
@@ -107,9 +182,12 @@ async function switchEngine(engine) {
     // 旧 painter 的历史池随实例一起废弃
     let newPainter;
     try {
-        // 按需加载 KM 引擎（首屏可能没预取到）
+        // 按需加载目标引擎（首屏可能没预取到）
         if (engine === 'km' && typeof KMWebGLPainter === 'undefined' && typeof window.ensureKMLoaded === 'function') {
             await window.ensureKMLoaded();
+        }
+        if (engine === 'mixbox' && typeof MixboxWebGLPainter === 'undefined' && typeof window.ensureMBLoaded === 'function') {
+            await window.ensureMBLoaded();
         }
         newPainter = createPainter(engine, mixCanvas);
         await newPainter.init();
@@ -125,11 +203,12 @@ async function switchEngine(engine) {
     if (painter && typeof painter.dispose === 'function') painter.dispose();
     painter = newPainter;
     window._painter = painter;
+    _bindDebugShortcuts(painter);
     painter.setMixStrength(oldMixStrength);
-    painter.setWetness(watercolorWetness / 100);
+    painter.setWetness(toolStates.watercolor.wetness / 100);
     painter.setHeatmapDecayActive(currentTool === 'smudge');
     painter.startHeatmapFadeOut();
-    painter.setWetPaperActive(currentTool === 'brush' && currentBrush.type === 'watercolor');
+    painter.setWetPaperActive(getCurrentMode() === 'watercolor');
     currentEngine = engine;
     localStorage.setItem('mixbox_engine', engine);
 
@@ -144,6 +223,7 @@ async function switchEngine(engine) {
     if (engineBtn) {
         engineBtn.textContent = engine === 'km' ? 'KM' : 'MB';
         engineBtn.classList.toggle('active', engine === 'km');
+        engineBtn.classList.toggle('mb', engine === 'mixbox');
     }
     console.log('✅ 引擎已切换为:', engine);
 }
@@ -173,6 +253,54 @@ const brushSpacingSlider = document.getElementById('brushSpacing');
 const brushSpacingValue = document.getElementById('brushSpacingValue');
 
 /**
+ * 加载三个工具的 state；不存在时尝试从旧 key 一次性迁移，否则用默认值。
+ * TODO(2026-Q3 后删除)：迁移代码 mixbox_brush_settings / mixbox_app_settings → mb_tool_*
+ */
+function loadToolStatesFromStorage() {
+    const modes = ['brush', 'watercolor', 'smudge'];
+    let anyLoaded = false;
+    for (const m of modes) {
+        const saved = paletteStorage.loadToolState(m);
+        if (saved) {
+            Object.assign(toolStates[m], saved);
+            anyLoaded = true;
+        }
+    }
+    if (anyLoaded) {
+        console.log('✅ 已加载 toolStates');
+        return;
+    }
+    // 一次性迁移
+    const oldBrush = paletteStorage.loadBrushSettings();
+    const oldApp = paletteStorage.loadAppSettings();
+    if (oldBrush) {
+        if (oldBrush.brushType === 'watercolor') {
+            toolStates.watercolor.brushType = 'watercolor';
+            if (oldBrush.brushSize) toolStates.watercolor.size = oldBrush.brushSize;
+            if (oldBrush.mixStrength != null) toolStates.watercolor.mixStrength = oldBrush.mixStrength;
+            if (oldBrush.watercolorWetness != null) toolStates.watercolor.wetness = oldBrush.watercolorWetness;
+        } else {
+            if (oldBrush.brushType) toolStates.brush.brushType = oldBrush.brushType;
+            if (oldBrush.brushSize) toolStates.brush.size = oldBrush.brushSize;
+            if (oldBrush.mixStrength != null) toolStates.brush.mixStrength = oldBrush.mixStrength;
+            if (oldBrush.brushSpacing != null) toolStates.brush.spacingRatio = oldBrush.brushSpacing / 100;
+        }
+        // 即使当前是水彩用户，也尝试恢复 watercolor.wetness（旧字段可能两边都有）
+        if (oldBrush.watercolorWetness != null) toolStates.watercolor.wetness = oldBrush.watercolorWetness;
+    }
+    if (oldApp) {
+        if (oldApp.smudgeBrushSize != null) toolStates.smudge.size = oldApp.smudgeBrushSize;
+        if (oldApp.smudgeStrength != null) toolStates.smudge.strength = oldApp.smudgeStrength;
+        if (oldApp.smudgeBrushType) toolStates.smudge.brushType = oldApp.smudgeBrushType;
+        if (oldApp.smudgeSpacing != null) toolStates.smudge.spacingRatio = oldApp.smudgeSpacing / 100;
+    }
+    if (oldBrush || oldApp) {
+        console.log('🔄 已从旧存储迁移到 toolStates');
+        modes.forEach(m => paletteStorage.saveToolState(m, toolStates[m]));
+    }
+}
+
+/**
  * 初始化应用
  */
 async function initApp() {
@@ -186,6 +314,7 @@ async function initApp() {
     
     // 2. 初始化持久化存储
     paletteStorage = new PaletteStorage();
+    window.paletteStorage = paletteStorage;  // 暴露给调试脚本（perf-check 等）
     
     // 3. 加载保存的调色盘预设
     const savedPalette = paletteStorage.loadPalettePreset();
@@ -195,32 +324,11 @@ async function initApp() {
         console.log('✅ 已加载保存的调色盘预设:', palettePresets[currentPalette].name);
     }
     
-    // 4. 加载保存的笔刷设置
-    const savedBrushSettings = paletteStorage.loadBrushSettings();
-    if (savedBrushSettings) {
-        if (savedBrushSettings.brushType) {
-            currentBrush.type = savedBrushSettings.brushType;
-        }
-        if (savedBrushSettings.brushSize) {
-            brushSize = savedBrushSettings.brushSize;
-            if (brushSizeInput) brushSizeInput.value = brushSize;
-            if (brushSizeValue) brushSizeValue.textContent = brushSize;
-        }
-        if (savedBrushSettings.mixStrength != null) {
-            if (brushMixSlider) brushMixSlider.value = savedBrushSettings.mixStrength;
-            if (brushMixValue) brushMixValue.textContent = savedBrushSettings.mixStrength;
-        }
-        if (savedBrushSettings.brushSpacing != null) {
-            brushSpacingRatio = savedBrushSettings.brushSpacing / 100;
-        }
-        if (savedBrushSettings.watercolorWetness != null) {
-            watercolorWetness = savedBrushSettings.watercolorWetness;
-        }
-        syncAllRangeThumbs();
-        console.log('✅ 已加载保存的笔刷设置');
-    }
+    // 4. 加载工具状态（toolStates 重构后）
+    loadToolStatesFromStorage();
+    currentBrush.type = toolStates.brush.brushType;
 
-    // 4b. 加载保存的应用设置（颜色、涂抹工具参数等）
+    // 4b. 加载应用全局设置（颜色、压感）
     const savedAppSettings = paletteStorage.loadAppSettings();
     if (savedAppSettings) {
         if (savedAppSettings.foregroundColor) {
@@ -230,9 +338,6 @@ async function initApp() {
         if (savedAppSettings.backgroundColor) {
             backgroundColor = savedAppSettings.backgroundColor;
         }
-        if (savedAppSettings.smudgeBrushSize != null) smudgeBrushSize = savedAppSettings.smudgeBrushSize;
-        if (savedAppSettings.smudgeStrength != null) smudgeStrength = savedAppSettings.smudgeStrength;
-        if (savedAppSettings.smudgeBrushType) smudgeBrushType = savedAppSettings.smudgeBrushType;
         if (savedAppSettings.pressureEnabled != null) pressureEnabled = savedAppSettings.pressureEnabled;
         console.log('✅ 已加载保存的应用设置');
     }
@@ -240,10 +345,9 @@ async function initApp() {
     // 5. 初始化画布
     await initCanvas();
 
-    // 5b. 画布初始化完成后将混合强度应用到 painter（存档优先，否则用 slider 的 HTML 默认值）
+    // 5b. 画布初始化完成后把当前 state 应用到 painter
     if (painter) {
-        const sliderVal = savedBrushSettings?.mixStrength ?? parseInt(brushMixSlider?.value ?? 77);
-        painter.setMixStrength(mixSliderToStrength(sliderVal));
+        painter.setMixStrength(mixSliderToStrength(getCurrentState().mixStrength ?? getCurrentState().strength ?? 77));
     }
 
     // 6. 初始化UI
@@ -278,19 +382,7 @@ async function initApp() {
     }
 }
 
-/**
- * 保存笔刷工具设置（笔刷类型、笔刷大小、混合强度）
- */
-function saveBrushSettings() {
-    paletteStorage.saveBrushSettings({
-        brushType: currentBrush.type,
-        brushSize: brushSize,
-        mixStrength: parseInt(brushMixValue.textContent),
-        brushSpacing: Math.round(brushSpacingRatio * 100),
-        watercolorWetness,
-    });
-    paletteStorage.saveAppSettings({ smudgeBrushSize, smudgeStrength, smudgeBrushType });
-}
+// saveBrushSettings 已被 persistCurrentState() 取代
 
 /**
  * 初始化画布
@@ -305,12 +397,13 @@ async function initCanvas() {
     mixCanvas.height = Math.round(BASE_CANVAS_H * savedContainerW / BASE_CONTAINER);
 
     // 初始化混色引擎
-    const savedEngine = localStorage.getItem('mixbox_engine') || 'mixbox';
+    const savedEngine = localStorage.getItem('mixbox_engine') || 'km';
     console.log('🎨 初始化混色引擎...', savedEngine);
     try {
         painter = createPainter(savedEngine, mixCanvas);
         await painter.init();
         window._painter = painter;
+        _bindDebugShortcuts(painter);
         currentEngine = savedEngine;
 
         const savedDataURL = paletteStorage.load();
@@ -343,10 +436,11 @@ async function initCanvas() {
             img.src = savedDataURL;
         }
 
-        painter.setWetness(watercolorWetness / 100);
+        painter.setWetness(toolStates.watercolor.wetness / 100);
+        painter.setWetPaperActive(getCurrentMode() === 'watercolor');
         updateColorDisplay();
         updateBrushPreview();
-        updateSpacingSliderMode();
+        renderSliders();
 
         console.log('✅ 混色引擎初始化完成:', currentEngine);
     } catch (error) {
@@ -477,35 +571,62 @@ function updateColorPicker() {
 /**
  * 绑定事件
  */
-/**
- * 根据当前笔刷类型切换 spacing 滑条的语义：
- *   水彩笔 → 湿度模式（1~100，当前 watercolorWetness）
- *   其他笔 → 间距模式（原有行为）
- */
-function updateSpacingSliderMode() {
-    const label = document.querySelector('.label-spacing');
-    const isWatercolor = currentBrush.type === 'watercolor' && currentTool === 'brush';
+// ---------- sliderBindings：mode → 三个 slider 的语义配置 ----------
+// 每个 slider 描述：从 state 读出、写回 state、对应 i18n 标签
+const SLIDER_BINDINGS = {
+    brush: {
+        size:    { read: s => s.size,                     write: (s, v) => { s.size = v; }, label: null },
+        mix:     { read: s => s.mixStrength,              write: (s, v) => { s.mixStrength = v; }, label: { i18n: 'paintConcentration', titleI18n: 'paintConcentrationTitle' } },
+        spacing: { read: s => Math.round(s.spacingRatio * 100), write: (s, v) => { s.spacingRatio = v / 100; }, label: { i18n: 'brushSpacing', titleI18n: 'brushSpacingTitle' } },
+    },
+    watercolor: {
+        size:    { read: s => s.size,                     write: (s, v) => { s.size = v; }, label: null },
+        mix:     { read: s => s.mixStrength,              write: (s, v) => { s.mixStrength = v; }, label: { i18n: 'paintConcentration', titleI18n: 'paintConcentrationTitle' } },
+        spacing: { read: s => s.wetness,                  write: (s, v) => { s.wetness = v; }, label: { i18n: 'brushWetness', titleI18n: 'brushWetnessTitle' } },
+    },
+    smudge: {
+        size:    { read: s => s.size,                     write: (s, v) => { s.size = v; }, label: null },
+        mix:     { read: s => s.strength,                 write: (s, v) => { s.strength = v; }, label: { i18n: 'smudgeStrength', titleI18n: 'smudgeStrengthTitle' } },
+        spacing: { read: s => Math.round(s.spacingRatio * 100), write: (s, v) => { s.spacingRatio = v / 100; }, label: { i18n: 'brushSpacing', titleI18n: 'brushSpacingTitle' } },
+    },
+};
 
-    if (isWatercolor) {
-        if (label) {
-            label.dataset.i18n = 'brushWetness';
-            label.dataset.i18nTitle = 'brushWetnessTitle';
-            label.title = t('brushWetnessTitle');
-            label.textContent = t('brushWetness');
-        }
-        if (brushSpacingSlider) brushSpacingSlider.value = watercolorWetness;
-        if (brushSpacingValue) brushSpacingValue.textContent = watercolorWetness;
-    } else {
-        if (label) {
-            label.dataset.i18n = 'brushSpacing';
-            label.dataset.i18nTitle = 'brushSpacingTitle';
-            label.title = t('brushSpacingTitle');
-            label.textContent = t('brushSpacing');
-        }
-        if (brushSpacingSlider) brushSpacingSlider.value = Math.round(brushSpacingRatio * 100);
-        if (brushSpacingValue) brushSpacingValue.textContent = Math.round(brushSpacingRatio * 100);
-    }
+function _setSliderUI(input, valueEl, value) {
+    if (!input) return;
+    input.value = value;
+    if (valueEl) valueEl.textContent = value;
+}
+
+function _applyLabel(el, cfg) {
+    if (!el || !cfg) return;
+    el.dataset.i18n = cfg.i18n;
+    el.dataset.i18nTitle = cfg.titleI18n;
+    el.title = t(cfg.titleI18n);
+    el.textContent = t(cfg.i18n);
+}
+
+/**
+ * 把当前 mode 的 state 推到三个 slider DOM 上（单向：state → DOM）
+ * 这是工具/笔型切换、初始化、以及外部修改 state 后的唯一同步入口
+ */
+function renderSliders() {
+    const mode = getCurrentMode();
+    const state = toolStates[mode];
+    const binding = SLIDER_BINDINGS[mode];
+
+    _setSliderUI(brushSizeInput,     brushSizeValue,     binding.size.read(state));
+    _setSliderUI(brushMixSlider,     brushMixValue,      binding.mix.read(state));
+    _setSliderUI(brushSpacingSlider, brushSpacingValue,  binding.spacing.read(state));
+
+    _applyLabel(document.getElementById('mixLabel'),       binding.mix.label);
+    _applyLabel(document.querySelector('.label-spacing'),  binding.spacing.label);
+
     syncAllRangeThumbs();
+}
+
+function persistCurrentState() {
+    const mode = getCurrentMode();
+    paletteStorage.saveToolState(mode, toolStates[mode]);
 }
 
 /**
@@ -565,42 +686,35 @@ function initCustomRanges() {
 
 function bindEvents() {
 
-    // 笔刷大小控制
+    // 三个 slider 走统一通道：DOM 输入 → 写入当前 state → 持久化 → 通知 painter
     brushSizeInput.addEventListener('input', (e) => {
-        brushSize = parseInt(e.target.value);
-        brushSizeValue.textContent = brushSize;
-        saveBrushSettings(); // 保存笔刷设置
+        const value = parseInt(e.target.value);
+        const mode = getCurrentMode();
+        SLIDER_BINDINGS[mode].size.write(toolStates[mode], value);
+        brushSizeValue.textContent = value;
+        persistCurrentState();
     });
 
     brushMixSlider.addEventListener('input', (e) => {
         const value = parseInt(e.target.value);
+        const mode = getCurrentMode();
+        SLIDER_BINDINGS[mode].mix.write(toolStates[mode], value);
         brushMixValue.textContent = value;
-        if (currentTool === 'smudge') {
-            smudgeStrength = value;
-            paletteStorage.saveAppSettings({ smudgeBrushSize, smudgeStrength });
-        } else {
-            if (painter && painter.setMixStrength) {
-                painter.setMixStrength(mixSliderToStrength(value));
-            }
-            saveBrushSettings();
+        if (mode !== 'smudge' && painter?.setMixStrength) {
+            painter.setMixStrength(mixSliderToStrength(value));
         }
+        persistCurrentState();
     });
-    
+
     brushSpacingSlider.addEventListener('input', (e) => {
         const value = parseInt(e.target.value);
+        const mode = getCurrentMode();
+        SLIDER_BINDINGS[mode].spacing.write(toolStates[mode], value);
         brushSpacingValue.textContent = value;
-
-        if (currentTool === 'smudge') {
-            smudgeSpacingRatio = value / 100;
-            paletteStorage.saveAppSettings({ smudgeBrushSize, smudgeStrength, smudgeBrushType, smudgeSpacing: value });
-        } else if (currentBrush.type === 'watercolor') {
-            watercolorWetness = value;
-            if (painter) painter.setWetness(value / 100);
-            saveBrushSettings();
-        } else {
-            brushSpacingRatio = value / 100;
-            saveBrushSettings();
+        if (mode === 'watercolor' && painter?.setWetness) {
+            painter.setWetness(value / 100);
         }
+        persistCurrentState();
     });
 
     // 清空按钮
@@ -625,111 +739,39 @@ function bindEvents() {
     pressureBtn.addEventListener('click', () => {
         pressureEnabled = !pressureEnabled;
         pressureBtn.classList.toggle('active', pressureEnabled);
-        paletteStorage.saveAppSettings({ smudgeBrushSize, smudgeStrength, smudgeBrushType, pressureEnabled });
+        paletteStorage.saveAppSettings({ pressureEnabled });
     });
 
     const smudgeBtn = document.getElementById('smudgeBtn');
     smudgeBtn.addEventListener('click', () => {
         if (currentTool === 'brush') {
-            // 切换到涂抹工具：保存当前笔刷工具设置
-            saveBrushSettings();
-            
-            // 保存当前笔刷设置，但要区分水彩模式和普通模式
-            if (currentBrush.type === 'watercolor') {
-                // 水彩模式下，滑块值是湿度而非间距，需要使用正确的间距值
-                savedBrushSettings = {
-                    size: brushSize,
-                    mixStrength: parseInt(brushMixValue.textContent),
-                    brushType: currentBrush.type,
-                    brushSpacing: Math.round(brushSpacingRatio * 100), // 使用真实的间距值
-                    watercolorWetness: watercolorWetness // 保存湿度值
-                };
-            } else {
-                // 非水彩模式，滑块值就是间距
-                brushSpacingRatio = parseInt(brushSpacingSlider.value) / 100;
-                savedBrushSettings = {
-                    size: brushSize,
-                    mixStrength: parseInt(brushMixValue.textContent),
-                    brushType: currentBrush.type,
-                    brushSpacing: Math.round(brushSpacingRatio * 100),
-                };
-            }
-
             currentTool = 'smudge';
+            currentBrush = { type: toolStates.smudge.brushType, image: null };
             smudgeBtn.classList.add('active');
             updateStatus('smudge');
-            const mixLabelEl = document.getElementById('mixLabel');
-            mixLabelEl.textContent = t('smudgeStrength');
-            mixLabelEl.title = t('smudgeStrengthTitle');
-
-            // 读取保存的涂抹工具设置
-            const savedApp = paletteStorage.loadAppSettings();
-            if (savedApp && savedApp.smudgeBrushSize != null) smudgeBrushSize = savedApp.smudgeBrushSize;
-            if (savedApp && savedApp.smudgeStrength != null) smudgeStrength = savedApp.smudgeStrength;
-            if (savedApp && savedApp.smudgeBrushType) smudgeBrushType = savedApp.smudgeBrushType;
-            if (savedApp && savedApp.smudgeSpacing != null) smudgeSpacingRatio = savedApp.smudgeSpacing / 100;
-
-            // 切换到涂抹工具的笔刷
-            currentBrush = { type: smudgeBrushType, image: null };
-            updateBrushPreview();
-            brushSize = smudgeBrushSize;
-            brushSizeInput.value = smudgeBrushSize;
-            brushSizeValue.textContent = smudgeBrushSize;
-            brushMixSlider.value = smudgeStrength;
-            brushMixValue.textContent = smudgeStrength;
-            if (painter) painter.setMixStrength(mixSliderToStrength(smudgeStrength));
-            brushSpacingSlider.value = Math.round(smudgeSpacingRatio * 100);
-            brushSpacingValue.textContent = Math.round(smudgeSpacingRatio * 100);
-            updateSpacingSliderMode();
-            if (painter) painter.setHeatmapDecayActive(true);
-            if (painter) painter.setWetPaperActive(false);
-            console.log('✅ 切换到涂抹工具');
         } else {
-            // 切换回笔刷工具：保存涂抹工具设置
-            smudgeBrushSize = brushSize;
-            smudgeStrength = parseInt(brushMixValue.textContent);
-            smudgeBrushType = currentBrush.type;
-            smudgeSpacingRatio = parseInt(brushSpacingSlider.value) / 100;
-            paletteStorage.saveAppSettings({ smudgeBrushSize, smudgeStrength, smudgeBrushType, smudgeSpacing: Math.round(smudgeSpacingRatio * 100) });
-
-            if (painter) painter.setHeatmapDecayActive(false);
             currentTool = 'brush';
+            currentBrush = { type: toolStates.brush.brushType, image: null };
+            // 若用户上次是水彩，进入笔刷工具时也要恢复水彩笔型
+            if (toolStates.watercolor.brushType === 'watercolor' &&
+                toolStates.brush.brushType === 'watercolor') {
+                currentBrush.type = 'watercolor';
+            }
             smudgeBtn.classList.remove('active');
             updateStatus('draw');
-            const mixLabelEl2 = document.getElementById('mixLabel');
-            mixLabelEl2.textContent = t('paintConcentration');
-            mixLabelEl2.title = t('paintConcentrationTitle');
-
-            // 恢复笔刷工具设置
-            if (savedBrushSettings) {
-                currentBrush = { type: savedBrushSettings.brushType, image: null };
-                updateBrushPreview();
-                brushSize = savedBrushSettings.size;
-                brushSizeInput.value = savedBrushSettings.size;
-                brushSizeValue.textContent = savedBrushSettings.size;
-                brushMixSlider.value = savedBrushSettings.mixStrength;
-                brushMixValue.textContent = savedBrushSettings.mixStrength;
-                painter.setMixStrength(mixSliderToStrength(savedBrushSettings.mixStrength));
-                
-                // 根据笔刷类型设置正确的滑块值
-                if (savedBrushSettings.brushType === 'watercolor') {
-                    // 水彩模式下，恢复湿度值到滑块
-                    watercolorWetness = savedBrushSettings.watercolorWetness || watercolorWetness;
-                    brushSpacingSlider.value = watercolorWetness;
-                    brushSpacingValue.textContent = watercolorWetness;
-                } else {
-                    // 非水彩模式，恢复间距值到滑块
-                    if (savedBrushSettings.brushSpacing != null) {
-                        brushSpacingRatio = savedBrushSettings.brushSpacing / 100;
-                    }
-                    brushSpacingSlider.value = Math.round(brushSpacingRatio * 100);
-                    brushSpacingValue.textContent = Math.round(brushSpacingRatio * 100);
-                }
-            }
-            updateSpacingSliderMode();
-            if (painter) painter.setWetPaperActive(currentBrush.type === 'watercolor');
-            console.log('✅ 切换回笔刷工具');
         }
+        const mode = getCurrentMode();
+        if (painter) {
+            painter.setHeatmapDecayActive(mode === 'smudge');
+            painter.setWetPaperActive(mode === 'watercolor');
+            if (mode !== 'smudge') {
+                painter.setMixStrength(mixSliderToStrength(toolStates[mode].mixStrength));
+            }
+            if (mode === 'watercolor') painter.setWetness(toolStates.watercolor.wetness / 100);
+        }
+        updateBrushPreview();
+        renderSliders();
+        console.log(currentTool === 'smudge' ? '✅ 切换到涂抹工具' : '✅ 切换回笔刷工具');
     });
     
     // 吸管工具按钮
@@ -862,6 +904,7 @@ function bindEvents() {
     if (engineBtn) {
         engineBtn.textContent = currentEngine === 'km' ? 'KM' : 'MB';
         engineBtn.classList.toggle('active', currentEngine === 'km');
+        engineBtn.classList.toggle('mb', currentEngine === 'mixbox');
         engineBtn.addEventListener('click', () => {
             const nextEngine = currentEngine === 'mixbox' ? 'km' : 'mixbox';
             track('engine_switch', { from: currentEngine, to: nextEngine });
@@ -990,7 +1033,7 @@ function bindEvents() {
                 currentBrushColor = foregroundColor;
                 backgroundColor = tmpColor;
                 updateColorDisplay();
-                saveAppSettings();
+                paletteStorage.saveAppSettings({ foregroundColor, backgroundColor });
                 break;
         }
     });
@@ -1110,8 +1153,8 @@ function bindEvents() {
 
     mixCanvas.addEventListener('pointermove', (e) => {
         e.preventDefault();
+        const rect = mixCanvas.getBoundingClientRect();
         if (isDrawing && !isEyedropperMode) {
-            const rect = mixCanvas.getBoundingClientRect();
             const x = (e.clientX - rect.left) * (mixCanvas.width / rect.width);
             const y = (e.clientY - rect.top) * (mixCanvas.height / rect.height);
             const pressure = (pressureEnabled && e.pointerType === 'pen') ? (e.pressure > 0 ? e.pressure : 1.0) : 1.0;
@@ -1182,7 +1225,6 @@ function bindEvents() {
 
         // 笔刷光标跟随（无论是否在绘制）
         {
-            const rect = mixCanvas.getBoundingClientRect();
             const zoom = typeof getCurrentZoom === 'function' ? getCurrentZoom() : 1;
             updateBrushCursor((e.clientX - rect.left) / zoom, (e.clientY - rect.top) / zoom);
         }
@@ -1241,6 +1283,7 @@ function bindEvents() {
     const brushCursorCanvas = document.getElementById('brushCursor');
     const brushCursorCtx = brushCursorCanvas.getContext('2d');
     let _cursorCacheKey = null;  // 上次绘制时的 key，用于判断是否需要重绘
+    let _cursorAppliedSizeKey = null;  // 上次应用到 style 的 size key，避免每帧写 width/height
 
     function _rebuildCursorImage(canvasSize, cssDiameter) {
         const pad = 3; // 给描边留出空间，防止被裁切
@@ -1310,13 +1353,18 @@ function bindEvents() {
             _cursorCacheKey = cacheKey;
         }
 
-        brushCursorCanvas.style.width  = totalSize + 'px';
-        brushCursorCanvas.style.height = totalSize + 'px';
-        // pad 补偿：让笔刷形状中心对准鼠标
-        brushCursorCanvas.style.left = (cssX - canvasSize / 2 - pad) + 'px';
-        brushCursorCanvas.style.top  = (cssY - canvasSize / 2 - pad) + 'px';
-        brushCursorCanvas.style.display = 'block';
-        mixCanvas.style.cursor = 'none';
+        // size 变化时才写 width/height（rebuild 已保证此时重建）
+        if (cacheKey !== _cursorAppliedSizeKey) {
+            brushCursorCanvas.style.width  = totalSize + 'px';
+            brushCursorCanvas.style.height = totalSize + 'px';
+            _cursorAppliedSizeKey = cacheKey;
+        }
+        // 用 transform 代替 left/top，避免布局偏移触发 layout
+        const tx = cssX - canvasSize / 2 - pad;
+        const ty = cssY - canvasSize / 2 - pad;
+        brushCursorCanvas.style.transform = `translate(${tx}px, ${ty}px)`;
+        if (brushCursorCanvas.style.display !== 'block') brushCursorCanvas.style.display = 'block';
+        if (mixCanvas.style.cursor !== 'none') mixCanvas.style.cursor = 'none';
     }
 
     function hideBrushCursor() {
@@ -1387,13 +1435,36 @@ function initBrushSelector() {
         
         option.addEventListener('click', () => {
             currentBrush = { type: brush.type, image: null };
-            // 同步到对应工具的笔刷类型
-            if (currentTool === 'smudge') smudgeBrushType = brush.type;
+            // 把笔型记到对应工具的 state 上
+            if (currentTool === 'smudge') {
+                toolStates.smudge.brushType = brush.type;
+            } else {
+                // brush 工具下：水彩走 watercolor state，否则走 brush state
+                if (brush.type === 'watercolor') {
+                    toolStates.brush.brushType = 'watercolor';
+                    toolStates.watercolor.brushType = 'watercolor';
+                } else {
+                    toolStates.brush.brushType = brush.type;
+                }
+            }
             updateBrushPreview();
             brushModal.classList.remove('active');
-            saveBrushSettings(); // 保存笔刷设置
-            updateSpacingSliderMode();
-            if (painter) painter.setWetPaperActive(currentTool === 'brush' && brush.type === 'watercolor');
+            const mode = getCurrentMode();
+            if (painter) {
+                painter.setWetPaperActive(mode === 'watercolor');
+                if (mode !== 'smudge') painter.setMixStrength(mixSliderToStrength(toolStates[mode].mixStrength));
+                if (mode === 'watercolor') painter.setWetness(toolStates.watercolor.wetness / 100);
+            }
+            renderSliders();
+            // 笔型变化可能同时改了 brush + watercolor 两份 state，全部持久化
+            if (currentTool === 'smudge') {
+                paletteStorage.saveToolState('smudge', toolStates.smudge);
+            } else {
+                paletteStorage.saveToolState('brush', toolStates.brush);
+                if (brush.type === 'watercolor') {
+                    paletteStorage.saveToolState('watercolor', toolStates.watercolor);
+                }
+            }
             track('brush_select', { brush_type: brush.type, tool: currentTool });
         });
         
@@ -1573,6 +1644,7 @@ function beginStroke(type, color = null, startX = 0, startY = 0, pressure = 1.0)
             painter._wetHeatFrames = 0;
             painter._wetHeatCap = undefined;      // 重置方向分段上限
             painter._wetHeatBaseAngle = undefined;
+            painter._wetColorFreqAcc = 1.0;       // _applyWetColor 频率累加器：1.0 保证第一次必触发
             painter._wetPaperActive = true;
             painter._wetIsDrawing = true;
             painter._wetColor = color ? hexToRgb(color) : { r: 0, g: 0, b: 0 };
@@ -1722,6 +1794,8 @@ async function _doSave() {
  * 如果当前有 in-flight 保存，先等它跑完；等完后如果仍然脏，再跑一次。
  */
 async function flushCanvasSave() {
+    // 顺带把 appSettings 的 pending 写入也 flush 掉，避免切引擎/resize 期间丢配置
+    try { if (paletteStorage) { paletteStorage.flushAppSettings(); paletteStorage.flushToolStates(); } } catch (_) {}
     // 若有 in-flight 任务先等它结束，否则新笔画可能被跳过
     while (_saveInFlight) {
         await new Promise(r => setTimeout(r, 30));
@@ -1734,6 +1808,8 @@ window.flushCanvasSave = flushCanvasSave;
 // 页面关闭前补一次保存（beforeunload 必须同步走完，异步 promise 可能被打断；
 // 这里退回同步的 toDataURL，只在真正关闭时付这一次代价）
 window.addEventListener('beforeunload', () => {
+    // 应用设置可能有未 debounce 的 pending 写入，必须先 flush
+    try { if (paletteStorage) { paletteStorage.flushAppSettings(); paletteStorage.flushToolStates(); } } catch (_) {}
     if (!_canvasDirty || !painter) return;
     try {
         paletteStorage.save(painter.toDataURL('image/webp', 1.0));

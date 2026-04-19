@@ -31,12 +31,24 @@ function initResizeHandle() {
         handleRight.style.left = (rect.right - 3) + 'px';
     }
 
-    // 每帧同步 handle 位置（container 受 zoom/panel 影响会动）
-    function _rafLoop() {
-        _positionHandles();
-        requestAnimationFrame(_rafLoop);
+    // 改为事件驱动：container 尺寸/窗口变化时同步 handle 位置；
+    // 拖拽期间仍走 RAF 保证预览流畅。
+    _positionHandles();
+    if (typeof ResizeObserver !== 'undefined') {
+        new ResizeObserver(_positionHandles).observe(container);
     }
-    requestAnimationFrame(_rafLoop);
+    window.addEventListener('resize', _positionHandles);
+    window.addEventListener('scroll', _positionHandles, { passive: true });
+
+    let _dragRafId = 0;
+    function _dragRafLoop() {
+        if (!dragSide) { _dragRafId = 0; return; }
+        _positionHandles();
+        _dragRafId = requestAnimationFrame(_dragRafLoop);
+    }
+    function _startDragRaf() {
+        if (!_dragRafId) _dragRafId = requestAnimationFrame(_dragRafLoop);
+    }
 
     function _onPointerMove(e) {
         if (!dragSide) return;
@@ -99,6 +111,7 @@ function initResizeHandle() {
         container.classList.add('glow-dragging');
         document.addEventListener('pointermove', _onPointerMove);
         document.addEventListener('pointerup', _onPointerUp);
+        _startDragRaf();
     }
 
     handleLeft.addEventListener('pointerdown',  (e) => { e.preventDefault(); _startDrag('left',  e); });

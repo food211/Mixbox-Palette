@@ -1,5 +1,36 @@
 # 更新日志 / Changelog
 
+== V1.4.0 ==
+[ZH]
+### 新增
+- **默认引擎改为 KM** — 经过实际对比，KM 引擎在大多数颜料组合下混合结果更接近真实调色的观感，因此从本版开始新用户默认启用 KM 引擎；老用户设置保留不变，可随时手动切换
+- **水彩笔刷体验重做** — 全面调整水彩笔的颜料沉积、边缘晕染、咖啡圈强度与湿区扩散范围，笔触更细腻、颜色堆积更自然；浓度滑条的响应也更接近真实水彩（低浓度清透、高浓度浓重但不生硬）
+- **三工具独立记忆** — 笔刷、水彩、涂抹现在各自记住自己的大小、笔型、混色/浓度/强度，切换工具不会再互相干扰
+
+### 优化
+- **切换引擎不再卡顿** — 切 KM ↔ Mixbox 时的 shader 编译、色彩查找表、顶点缓存改为全局复用，一次会话内切换几乎无感
+- **绘制性能进一步优化** — 削减热路径上的重复计算与重绘，长时间绘制更轻
+- **光标显示更稳定** — 笔刷光标改用 GPU 合成层移动，不再触发整页布局重新计算，复杂画面下依然稳定跟随
+
+### 修复
+- **调色盘 RGB 校准** — Cotman、伦勃朗、温莎牛顿 Gouache 等调色盘的部分颜料 RGB 值经过二轮校准，修复了这些颜料在 KM 引擎下混合表现异常的问题（KM 的物理混合对颜料 RGB 的准确度要求比 Mixbox 更高）。感谢 Reddit 用户 **digitizerstylus** 提供的详细反馈
+- **修复笔刷间距被错误套用到涂抹工具** — 之前调整普通笔刷的笔触间距后，涂抹工具的行为也会被一起改变；本版重构了工具设置的存储方式，两者彻底独立
+
+[EN]
+### New
+- **KM is now the default engine** — After side-by-side comparison, KM produces color mixes closer to real-life pigment behavior across most palettes, so new users now start with KM by default. Existing users keep their current setting and can switch at any time
+- **Watercolor brush overhaul** — Reworked pigment deposition, edge bleed, coffee-ring intensity, and wet-area spread. Strokes feel finer, pigment buildup is more natural, and the strength slider now behaves more like real watercolor (translucent at low values, rich but never harsh at high values)
+- **Per-tool memory** — Brush, Watercolor, and Smudge now each remember their own size, brush type, and strength / mix settings. Switching tools no longer overwrites the other two
+
+### Improvement
+- **Engine switching no longer stutters** — Shader compilation, color LUT, and vertex buffers are reused across engines, making KM ↔ Mixbox switching nearly instant within a session
+- **Faster brush rendering** — Trimmed redundant work along the hot path; long sessions stay lighter
+- **Smoother cursor** — The brush preview cursor now moves via a GPU compositor layer instead of page-level positioning, so it no longer triggers layout recalculation on complex canvases
+
+### Fix
+- **Palette RGB recalibration** — Several pigments across Cotman, Rembrandt, and Winsor & Newton Gouache palettes received a second-pass RGB correction. This fixes mixing behavior that looked off under the KM engine (KM's physically-based mixing is more sensitive to pigment RGB accuracy than Mixbox). Thanks to Reddit user **digitizerstylus** for the detailed feedback
+- **Brush spacing no longer leaks into the Smudge tool** — Changing brush spacing used to silently affect the Smudge tool as well. The tool settings storage has been refactored so the two are fully independent now
+
 == V1.3.8 ==
 [ZH]
 ### 优化

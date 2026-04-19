@@ -36,9 +36,12 @@ function _createR8Texture(width, height) {
 function setupHeatmapTextures(w, h) {
     this.textures.smudgeHeatmap  = this._createR8Texture(w, h);
     this.textures.smudgeHeatTemp = this._createR8Texture(w, h);
-    // wetHeatmap 复用同一张纹理，不再单独分配
-    this.textures.wetHeatmap  = this.textures.smudgeHeatmap;
-    this.textures.wetHeatTemp = this.textures.smudgeHeatTemp;
+    // wetHeatmap 独立分配，与 smudgeHeatmap 完全隔离
+    this.textures.wetHeatmap  = this._createR8Texture(w, h);
+    this.textures.wetHeatTemp = this._createR8Texture(w, h);
+    // wetMaskHeatmap：水彩 _applyWetColor 的额外区域 mask（与 wetHeatmap 取交集才上色）
+    this.textures.wetMaskHeatmap  = this._createR8Texture(w, h);
+    this.textures.wetMaskHeatTemp = this._createR8Texture(w, h);
     // 沉积热度图：松开时清空，不衰减，专门驱动咖啡圈效果
     this.textures.depositHeatmap  = this._createR8Texture(w, h);
     this.textures.depositHeatTemp = this._createR8Texture(w, h);
@@ -59,9 +62,23 @@ function setupHeatmapFramebuffers() {
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.smudgeHeatTemp);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.textures.smudgeHeatTemp, 0);
 
-    // wetHeatmap FB 复用同一个
-    this.framebuffers.wetHeatmap  = this.framebuffers.smudgeHeatmap;
-    this.framebuffers.wetHeatTemp = this.framebuffers.smudgeHeatTemp;
+    // wetHeatmap FB 独立分配
+    this.framebuffers.wetHeatmap = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.wetHeatmap);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.textures.wetHeatmap, 0);
+
+    this.framebuffers.wetHeatTemp = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.wetHeatTemp);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.textures.wetHeatTemp, 0);
+
+    // wetMaskHeatmap FB
+    this.framebuffers.wetMaskHeatmap = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.wetMaskHeatmap);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.textures.wetMaskHeatmap, 0);
+
+    this.framebuffers.wetMaskHeatTemp = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.wetMaskHeatTemp);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.textures.wetMaskHeatTemp, 0);
 
     // 沉积热度图 FB
     this.framebuffers.depositHeatmap = gl.createFramebuffer();
@@ -78,6 +95,12 @@ function setupHeatmapFramebuffers() {
 // ─── 热度图更新 program ───────────────────────────────────────────────────────
 
 function _initHeatmapProgram() {
+    const cached = BaseWebGLPainter._programCache.heatmap;
+    if (cached) {
+        this._heatmapProgram = cached.program;
+        this._heatmapLocations = cached.locations;
+        return;
+    }
     const gl = this.gl;
 
     const vs = this.createShader(gl.VERTEX_SHADER, `
@@ -105,6 +128,7 @@ function _initHeatmapProgram() {
         uniform float u_useFalloff;
         uniform float u_heatStep;
         uniform float u_heatMax;
+        uniform float u_useMaxMode;  // 0 = 累加（min(cap, prev + step*alpha)）；1 = MAX（max(prev, alpha*cap)）
 
         void main() {
             vec4 brushSample = texture2D(u_brushTexture, v_texCoord);
@@ -123,7 +147,9 @@ function _initHeatmapProgram() {
             vec2 uv = v_canvasCoord / u_resolution;
             uv.y = 1.0 - uv.y;
             float prevHeat = texture2D(u_heatmapTexture, uv).r;
-            float newHeat = min(u_heatMax, prevHeat + aBrush * u_heatStep);
+            float addHeat = min(u_heatMax, prevHeat + aBrush * u_heatStep);
+            float maxHeat = max(prevHeat, aBrush * u_heatMax);
+            float newHeat = mix(addHeat, maxHeat, u_useMaxMode);
             gl_FragColor = vec4(newHeat, 0.0, 0.0, 1.0);
         }
     `);
@@ -140,6 +166,12 @@ function _initHeatmapProgram() {
         u_heatmapTexture:  gl.getUniformLocation(this._heatmapProgram, 'u_heatmapTexture'),
         u_heatStep:        gl.getUniformLocation(this._heatmapProgram, 'u_heatStep'),
         u_heatMax:         gl.getUniformLocation(this._heatmapProgram, 'u_heatMax'),
+        u_useMaxMode:      gl.getUniformLocation(this._heatmapProgram, 'u_useMaxMode'),
+    };
+
+    BaseWebGLPainter._programCache.heatmap = {
+        program: this._heatmapProgram,
+        locations: this._heatmapLocations,
     };
 }
 
@@ -184,6 +216,7 @@ function updateSmudgeHeatmap(x, y, size, brushCanvas, useFalloff, heatStep = HEA
     gl.uniform1f(this._heatmapLocations.u_useFalloff, +useFalloff);
     gl.uniform1f(this._heatmapLocations.u_heatStep, heatStep);
     gl.uniform1f(this._heatmapLocations.u_heatMax,  this._wetHeatCap ?? WET_HEAT_CAP_STEP);
+    gl.uniform1f(this._heatmapLocations.u_useMaxMode, 0.0);
 
     const positions = new Float32Array([
         x - halfSize, y - halfSize,
@@ -239,6 +272,7 @@ function updateDepositHeatmap(x, y, size, useFalloff, heatStep = DEPOSITE_HEAT_A
     gl.uniform1f(this._heatmapLocations.u_useFalloff, +useFalloff);
     gl.uniform1f(this._heatmapLocations.u_heatStep, heatStep);
     gl.uniform1f(this._heatmapLocations.u_heatMax,  this._wetHeatCap ?? WET_HEAT_CAP_STEP);
+    gl.uniform1f(this._heatmapLocations.u_useMaxMode, 0.0);
 
     const positions = new Float32Array([
         x - halfSize, y - halfSize,
@@ -282,7 +316,9 @@ function clearDepositHeatmap() {
  *   window._painter.debugHeatmap(true)   → 开启
  *   window._painter.debugHeatmap(false)  → 关闭
  */
-function debugHeatmap(enable = true) {
+function debugHeatmap(enable) {
+    // 无参 → toggle
+    if (enable === undefined) enable = !this._debugHeatmapEnabled;
     if (!enable) {
         this._debugHeatmapEnabled = false;
         console.log('[debugHeatmap] 关闭');
@@ -352,12 +388,14 @@ function debugHeatmap(enable = true) {
         this._debugHeatBuf = buf;
     }
 
-    // 互斥：关闭湿纸 debug
+    // 互斥：关闭其他 debug 模式
     this._debugWetPaperEnabled = false;
+    this._debugDepositHeatmapEnabled = false;
+    this._debugWetMaskHeatmapEnabled = false;
 
     this._debugHeatmapEnabled = true;
     this._flushDebugHeatmap();
-    console.log('[debugHeatmap] 开启 — 调用 window._painter.debugHeatmap(false) 关闭');
+    console.log('[debugHeatmap] 开启 — 再次调用切换关闭');
 }
 
 /**
@@ -404,6 +442,15 @@ function _flushDebugHeatmap(opacity = 1.0) {
  * 初始化热度衰减 shader：每帧把热度图乘以衰减系数写回
  */
 function _initHeatDecayProgram() {
+    const cached = BaseWebGLPainter._programCache.heatDecay;
+    if (cached) {
+        this._heatDecayProgram = cached.program;
+        this._heatDecayAPos  = cached.locations.a_pos;
+        this._heatDecayUTex  = cached.locations.u_heatmap;
+        this._heatDecayUStep = cached.locations.u_step;
+        this._heatDecayBuf   = cached.buffer;
+        return;
+    }
     const gl = this.gl;
 
     const vs = this.createShader(gl.VERTEX_SHADER, `
@@ -437,30 +484,40 @@ function _initHeatDecayProgram() {
         -1,-1,  1,-1,  -1,1,  1,1
     ]), gl.STATIC_DRAW);
     this._heatDecayBuf = buf;
+
+    BaseWebGLPainter._programCache.heatDecay = {
+        program: prog,
+        locations: {
+            a_pos:     this._heatDecayAPos,
+            u_heatmap: this._heatDecayUTex,
+            u_step:    this._heatDecayUStep,
+        },
+        buffer: buf,
+    };
 }
 
 /**
- * 对热度图执行一次衰减 pass（写回 smudgeHeatmap）
+ * 对指定热度图执行一次衰减 pass。
+ * targetTex/targetFB/tempTex 默认为 smudgeHeatmap 一组，水彩可传 wetHeatmap 一组。
  */
-function _decayHeatmap(decay = 0.02) {
+function _decayHeatmapGeneric(decay, fb, tex, tempTex) {
     const gl = this.gl;
     const cw = this.canvas.width;
     const ch = this.canvas.height;
 
     // 先拷贝当前热度图到 temp
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.smudgeHeatmap);
-    gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeHeatTemp);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.bindTexture(gl.TEXTURE_2D, tempTex);
     gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, cw, ch);
     gl.bindTexture(gl.TEXTURE_2D, null);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
-    // 用 decay shader 写回 smudgeHeatmap
     gl.useProgram(this._heatDecayProgram);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.smudgeHeatmap);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
     gl.viewport(0, 0, cw, ch);
 
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeHeatTemp);
+    gl.bindTexture(gl.TEXTURE_2D, tempTex);
     gl.uniform1i(this._heatDecayUTex, 0);
     gl.uniform1f(this._heatDecayUStep, decay);
 
@@ -473,13 +530,32 @@ function _decayHeatmap(decay = 0.02) {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 }
 
+function _decayHeatmap(decay = 0.02) {
+    this._decayHeatmapGeneric(
+        decay,
+        this.framebuffers.smudgeHeatmap,
+        this.textures.smudgeHeatmap,
+        this.textures.smudgeHeatTemp
+    );
+}
+
+function _decayWetHeatmap(decay = 0.02) {
+    this._decayHeatmapGeneric(
+        decay,
+        this.framebuffers.wetHeatmap,
+        this.textures.wetHeatmap,
+        this.textures.wetHeatTemp
+    );
+}
+
 /**
  * 在 mixCanvas 上直接用主 WebGL context 渲染沉积热度图叠加层（纯 GPU，零 readPixels）。
  * console 调用：
  *   window._painter.debugDepositHeatmap(true)   → 开启
  *   window._painter.debugDepositHeatmap(false)  → 关闭
  */
-function debugDepositHeatmap(enable = true) {
+function debugDepositHeatmap(enable) {
+    if (enable === undefined) enable = !this._debugDepositHeatmapEnabled;
     if (!enable) {
         this._debugDepositHeatmapEnabled = false;
         console.log('[debugDepositHeatmap] 关闭');
@@ -553,10 +629,11 @@ function debugDepositHeatmap(enable = true) {
     // 互斥：关闭其他 debug 模式
     this._debugHeatmapEnabled = false;
     this._debugWetPaperEnabled = false;
+    this._debugWetMaskHeatmapEnabled = false;
 
     this._debugDepositHeatmapEnabled = true;
     this._flushDebugDepositHeatmap();
-    console.log('[debugDepositHeatmap] 开启 — 调用 window._painter.debugDepositHeatmap(false) 关闭');
+    console.log('[debugDepositHeatmap] 开启 — 再次调用切换关闭');
 }
 
 function _flushDebugDepositHeatmap(opacity = 1.0) {
@@ -589,23 +666,57 @@ function startHeatmapFadeOut() {
     function tick() {
         if (painter._disposed) return;
         // 热度衰减（始终运行，让已有热度自然消退）
-        painter._decayHeatmap(HEAT_DECAY_STEP);
+        // 湿度滑条调制：湿度高→水多干得慢；湿度低→水少干得快
+        // w=0 时 MAX 倍（干得快）、w=1 时 MIN 倍（干得慢）
+        const w = painter._wetness ?? 0.5;
+        const decayScale = HEAT_DECAY_SCALE_MAX
+                         + (HEAT_DECAY_SCALE_MIN - HEAT_DECAY_SCALE_MAX) * w;
+        painter._decayHeatmap(HEAT_DECAY_STEP * decayScale);
 
-        // 水彩激活时：热度帧计数 > 0 才跑扩散和颜色 pass，避免全屏空跑
+        // 水彩激活时：热度帧计数 > 0 才跑扩散和颜色 pass
         if (painter._wetPaperActive && painter._wetHeatFrames > 0) {
             painter._wetHeatFrames--;
 
+            // wetHeatmap 独立衰减：用专属常量，与涂抹解耦
+            const wetDecayScale = WET_HEAT_DECAY_SCALE_MAX
+                                + (WET_HEAT_DECAY_SCALE_MIN - WET_HEAT_DECAY_SCALE_MAX) * w;
+            painter._decayWetHeatmap(WET_HEAT_DECAY_STEP * wetDecayScale);
+
+            // wetMaskHeatmap 独立衰减：与 wetHeatmap 解耦，可单独调寿命
+            const wetMaskDecayScale = WET_MASK_HEAT_DECAY_SCALE_MAX
+                                    + (WET_MASK_HEAT_DECAY_SCALE_MIN - WET_MASK_HEAT_DECAY_SCALE_MAX) * w;
+            painter._decayWetMaskHeatmap(WET_MASK_HEAT_DECAY_STEP * wetMaskDecayScale);
+
             painter._spreadWetHeatmap();
 
-            // 仅绘制期间把湿度图渲染为颜色写入 canvas
+            // 绘制期：叠加湿纸颜色效果（depositStr/diluteStr 由 _applyWetColor 内部按湿度调制）
+            // 浓度→写入间隔（帧数）线性插值，再换算成每帧累加步长 1/interval
             if (painter._wetIsDrawing && painter._wetColor) {
-                painter._applyWetColor(painter._wetColor);
+                const c = painter.baseMixStrength ?? 1.0;
+                const cNorm = Math.min(1.0, c / 0.85);
+                const interval = WET_HEAT_INTERVAL_LOW + (WET_HEAT_INTERVAL_HIGH - WET_HEAT_INTERVAL_LOW) * cNorm;
+                const p = 1 / Math.max(1, interval);
+                painter._wetColorFreqAcc = (painter._wetColorFreqAcc ?? 1.0) + p;
+                if (painter._wetColorFreqAcc >= 1.0) {
+                    painter._wetColorFreqAcc -= 1.0;
+                    painter._applyWetColor(painter._wetColor);
+                }
+            }
+
+            // depositHeatmap 扩散 + 画布颜色扩散：
+            // 不要求 _wetIsDrawing，松开鼠标后也继续（让颜料"流完"直到 _wetHeatFrames 归零）
+            if (painter._wetColor) {
+                painter._spreadDepositHeatmap();
+                painter._applyWetBleed();
                 painter.flush();
             }
         }
 
         // 任一 debug overlay 开启时刷新一次屏幕
-        if (painter._debugHeatmapEnabled || painter._debugWetPaperEnabled || painter._debugDepositHeatmapEnabled) painter.flush();
+        if (painter._debugHeatmapEnabled
+            || painter._debugWetPaperEnabled
+            || painter._debugDepositHeatmapEnabled
+            || painter._debugWetMaskHeatmapEnabled) painter.flush();
 
         painter._fadeRafId = requestAnimationFrame(tick);
     }
@@ -632,9 +743,30 @@ function stopHeatmapFadeOut() {
 }
 
 
+/**
+ * 列出所有 debug 命令，在控制台打印可直接复制的调用方式。
+ */
+function listDebugCommands() {
+    const cmds = [
+        ['debugHeatmap()         (dh) ', '切换 smudge/wet 热度图可视化（会衰减）'],
+        ['debugDepositHeatmap()  (ddh)', '切换 deposit 热度图可视化（不衰减，松开清空）'],
+        ['debugWetPaper()        (dwp)', '切换 wetHeatmap 可视化（与 debugHeatmap 同源）'],
+        ['debugWetMask()         (dwm)', '切换 wetMask × wetHeatmap 交集可视化（_applyWetColor 实际生效区）'],
+        ['toggleWetMask(t/f)     (twm)', '启用/关闭 _applyWetColor 取 mask 交集（默认启用）'],
+        ['help()                 (h)  ', '列出本清单'],
+    ];
+    console.log('%c[Painter Debug Commands]', 'color:#6af;font-weight:bold');
+    for (const [sig, desc] of cmds) {
+        console.log(`  ${sig.padEnd(28)} — ${desc}`);
+    }
+    console.log('无参调用即 toggle；也可传 true/false 显式开关。三者互斥。');
+}
+
 // ─── 挂载到 BaseWebGLPainter.prototype ───────────────────────────────────────
 
 Object.assign(BaseWebGLPainter.prototype, {
+    listDebugCommands,
+    _help: listDebugCommands,
     _createR8Texture,
     setupHeatmapTextures,
     setupHeatmapFramebuffers,
@@ -644,6 +776,8 @@ Object.assign(BaseWebGLPainter.prototype, {
     updateDepositHeatmap,
     clearDepositHeatmap,
     _decayHeatmap,
+    _decayHeatmapGeneric,
+    _decayWetHeatmap,
     debugHeatmap,
     debugDepositHeatmap,
     _flushHeatOverlay,

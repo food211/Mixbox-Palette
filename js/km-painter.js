@@ -297,26 +297,14 @@ class KMWebGLPainter extends BaseWebGLPainter {
 
             if (u_isWatercolor > 0.5) {
                 // 热区晕染：采样位置向外偏移，颜色往外渗
-                float bleedRadius = maskHot * u_brushRadius * u_wetBleedRadius;
-                vec2 bleedDir = normalize(v_canvasCoord - u_currentPosition + vec2(0.001));
-                vec2 bleedUV = (v_canvasCoord + bleedDir * bleedRadius) / u_resolution;
-                bleedUV.y = 1.0 - bleedUV.y;
-                bleedUV = clamp(bleedUV, 0.0, 1.0);
-                vec4 bleedSample = texture2D(u_canvasTexture, bleedUV);
-                canvasColor = mix(canvasColor, bleedSample, maskHot * u_wetBleedMix);
+                // 已移除 bleedSample 热区晕染（笔触侧向推色），由 _applyWetBleed 每帧扩散 pass 代劳
             }
 
             vec3 finalColor;
             if (u_isWatercolor > 0.5) {
-                // ── 冷区：稀释混色 + smudge 推色 ──
+                // ── 冷区：稀释混色（水彩不做 smudge 推色）──
                 float coldPaint = maskCold * u_baseMixStrength * u_wetColdMix;
-                vec3 coldResult = km_mix(canvasColor.rgb, activeColor, aBrush * coldPaint);
-                float smearReach = clamp(u_smearLen, 1.0, u_brushRadius) * u_wetSmearReach;
-                vec2 smearUV = (v_canvasCoord - u_smearDir * smearReach) / u_resolution;
-                smearUV.y = 1.0 - smearUV.y;
-                smearUV = clamp(smearUV, 0.0, 1.0);
-                vec3 smearRGB = texture2D(u_canvasTexture, smearUV).rgb;
-                vec3 coldOut = km_mix(coldResult, smearRGB, aBrush * u_wetSmudgeMix * maskCold);
+                vec3 coldOut = km_mix(canvasColor.rgb, activeColor, aBrush * coldPaint);
 
                 // ── 热区：稀释晕染 ──
                 float hotPaint = maskHot * u_baseMixStrength * u_wetBleedMix;
@@ -371,19 +359,32 @@ class KMWebGLPainter extends BaseWebGLPainter {
 
     async _loadLUT() {
         const LUT_URL = 'assets/km-lut.png';
-        try {
-            const u8 = await this._fetchBinary(LUT_URL);
-            this._buildLUTFromBytes(u8);
-            console.log('✅ KM LUT 加载完成（assets/km-lut.png）');
+
+        // LUT 纹理模块级单例：一旦上传过整个会话复用，切引擎不重建
+        if (KMWebGLPainter._lutTexture) {
+            this.textures.lut = KMWebGLPainter._lutTexture;
+            if (!this._externalTextures) this._externalTextures = new Set();
+            this._externalTextures.add(this.textures.lut);
             return;
-        } catch (err) {
-            console.warn('⚠️ KM LUT 首次加载失败，尝试绕过缓存重新拉取:', err);
         }
 
-        // 资源可能损坏（缓存/网络），绕过缓存重试一次
-        const u8 = await this._fetchBinary(LUT_URL, { cache: 'reload' });
-        this._buildLUTFromBytes(u8);
-        console.log('✅ KM LUT 加载完成（重新拉取后）');
+        let decoded = KMWebGLPainter._decodedLUTCache;
+        if (!decoded) {
+            try {
+                const u8 = await this._fetchBinary(LUT_URL);
+                decoded = this._decodePNG(u8);
+            } catch (err) {
+                console.warn('⚠️ KM LUT 首次加载失败，尝试绕过缓存重新拉取:', err);
+                const u8 = await this._fetchBinary(LUT_URL, { cache: 'reload' });
+                decoded = this._decodePNG(u8);
+            }
+            KMWebGLPainter._decodedLUTCache = decoded;
+        }
+        this._uploadLUTPixels(decoded.width, decoded.height, decoded.pixels);
+        KMWebGLPainter._lutTexture = this.textures.lut;
+        if (!this._externalTextures) this._externalTextures = new Set();
+        this._externalTextures.add(this.textures.lut);
+        console.log('✅ KM LUT 加载完成（assets/km-lut.png）');
     }
 
     async _fetchBinary(url, init) {
@@ -393,9 +394,7 @@ class KMWebGLPainter extends BaseWebGLPainter {
         return new Uint8Array(buf);
     }
 
-    _buildLUTFromBytes(u8) {
-        const { width, height, pixels } = this._decodePNG(u8);
-
+    _uploadLUTPixels(width, height, pixels) {
         const gl = this.gl;
         const tex = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, tex);
