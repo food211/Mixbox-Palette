@@ -183,6 +183,11 @@
     background-color: #4c4c4c;
 }
 
+.brush-preview-btn.smudge-active {
+    border: 1.5px solid #2196F3;
+    box-shadow: 0 0 10px rgba(33, 150, 243, 0.7);
+}
+
 .history-buttons {
     display: flex;
     gap: 4px;
