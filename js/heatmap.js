@@ -36,9 +36,9 @@ function _createR8Texture(width, height) {
 function setupHeatmapTextures(w, h) {
     this.textures.smudgeHeatmap  = this._createR8Texture(w, h);
     this.textures.smudgeHeatTemp = this._createR8Texture(w, h);
-    // wetHeatmap 复用同一张纹理，不再单独分配
-    this.textures.wetHeatmap  = this.textures.smudgeHeatmap;
-    this.textures.wetHeatTemp = this.textures.smudgeHeatTemp;
+    // wetHeatmap 独立分配，与 smudgeHeatmap 完全隔离
+    this.textures.wetHeatmap  = this._createR8Texture(w, h);
+    this.textures.wetHeatTemp = this._createR8Texture(w, h);
     // 沉积热度图：松开时清空，不衰减，专门驱动咖啡圈效果
     this.textures.depositHeatmap  = this._createR8Texture(w, h);
     this.textures.depositHeatTemp = this._createR8Texture(w, h);
@@ -59,9 +59,14 @@ function setupHeatmapFramebuffers() {
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.smudgeHeatTemp);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.textures.smudgeHeatTemp, 0);
 
-    // wetHeatmap FB 复用同一个
-    this.framebuffers.wetHeatmap  = this.framebuffers.smudgeHeatmap;
-    this.framebuffers.wetHeatTemp = this.framebuffers.smudgeHeatTemp;
+    // wetHeatmap FB 独立分配
+    this.framebuffers.wetHeatmap = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.wetHeatmap);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.textures.wetHeatmap, 0);
+
+    this.framebuffers.wetHeatTemp = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.wetHeatTemp);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.textures.wetHeatTemp, 0);
 
     // 沉积热度图 FB
     this.framebuffers.depositHeatmap = gl.createFramebuffer();
@@ -473,27 +478,27 @@ function _initHeatDecayProgram() {
 }
 
 /**
- * 对热度图执行一次衰减 pass（写回 smudgeHeatmap）
+ * 对指定热度图执行一次衰减 pass。
+ * targetTex/targetFB/tempTex 默认为 smudgeHeatmap 一组，水彩可传 wetHeatmap 一组。
  */
-function _decayHeatmap(decay = 0.02) {
+function _decayHeatmapGeneric(decay, fb, tex, tempTex) {
     const gl = this.gl;
     const cw = this.canvas.width;
     const ch = this.canvas.height;
 
     // 先拷贝当前热度图到 temp
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.smudgeHeatmap);
-    gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeHeatTemp);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.bindTexture(gl.TEXTURE_2D, tempTex);
     gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, cw, ch);
     gl.bindTexture(gl.TEXTURE_2D, null);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
-    // 用 decay shader 写回 smudgeHeatmap
     gl.useProgram(this._heatDecayProgram);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.smudgeHeatmap);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
     gl.viewport(0, 0, cw, ch);
 
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeHeatTemp);
+    gl.bindTexture(gl.TEXTURE_2D, tempTex);
     gl.uniform1i(this._heatDecayUTex, 0);
     gl.uniform1f(this._heatDecayUStep, decay);
 
@@ -504,6 +509,24 @@ function _decayHeatmap(decay = 0.02) {
 
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+}
+
+function _decayHeatmap(decay = 0.02) {
+    this._decayHeatmapGeneric(
+        decay,
+        this.framebuffers.smudgeHeatmap,
+        this.textures.smudgeHeatmap,
+        this.textures.smudgeHeatTemp
+    );
+}
+
+function _decayWetHeatmap(decay = 0.02) {
+    this._decayHeatmapGeneric(
+        decay,
+        this.framebuffers.wetHeatmap,
+        this.textures.wetHeatmap,
+        this.textures.wetHeatTemp
+    );
 }
 
 /**
@@ -634,11 +657,22 @@ function startHeatmapFadeOut() {
         if (painter._wetPaperActive && painter._wetHeatFrames > 0) {
             painter._wetHeatFrames--;
 
+            // wetHeatmap 独立衰减：复用同一条 _wetness 调制曲线
+            painter._decayWetHeatmap(HEAT_DECAY_STEP * decayScale);
+
             painter._spreadWetHeatmap();
 
             // 绘制期：叠加湿纸颜色效果（depositStr/diluteStr 由 _applyWetColor 内部按湿度调制）
+            // 浓度节流：c=0.01 → p≈0.15 约 7 帧一次；c=0.85 → p=0.5 严格每 2 帧一次
             if (painter._wetIsDrawing && painter._wetColor) {
-                painter._applyWetColor(painter._wetColor);
+                const c = painter.baseMixStrength ?? 1.0;
+                const cNorm = Math.min(1.0, c / 0.85);
+                const p = WET_HEAT_FREQ_MIN + (WET_HEAT_FREQ_MAX - WET_HEAT_FREQ_MIN) * cNorm;
+                painter._wetColorFreqAcc = (painter._wetColorFreqAcc ?? 1.0) + p;
+                if (painter._wetColorFreqAcc >= 1.0) {
+                    painter._wetColorFreqAcc -= 1.0;
+                    painter._applyWetColor(painter._wetColor);
+                }
             }
 
             // depositHeatmap 扩散 + 画布颜色扩散：
@@ -709,6 +743,8 @@ Object.assign(BaseWebGLPainter.prototype, {
     updateDepositHeatmap,
     clearDepositHeatmap,
     _decayHeatmap,
+    _decayHeatmapGeneric,
+    _decayWetHeatmap,
     debugHeatmap,
     debugDepositHeatmap,
     _flushHeatOverlay,

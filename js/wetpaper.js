@@ -164,18 +164,18 @@ function _spreadWetHeatmap() {
     const w = this._wetness ?? 0.5;
     const radius = WET_SPREAD_RADIUS_MIN + (WET_SPREAD_RADIUS_MAX - WET_SPREAD_RADIUS_MIN) * w;
 
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.smudgeHeatmap);
-    gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeHeatTemp);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.wetHeatmap);
+    gl.bindTexture(gl.TEXTURE_2D, this.textures.wetHeatTemp);
     gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, cw, ch);
     gl.bindTexture(gl.TEXTURE_2D, null);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
     gl.useProgram(this._wetSpreadProgram);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.smudgeHeatmap);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.wetHeatmap);
     gl.viewport(0, 0, cw, ch);
 
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeHeatTemp);
+    gl.bindTexture(gl.TEXTURE_2D, this.textures.wetHeatTemp);
     gl.uniform1i(this._wetSpreadLoc.u_heatmap, 0);
     gl.uniform2f(this._wetSpreadLoc.u_resolution, cw, ch);
     gl.uniform1f(this._wetSpreadLoc.u_radius,  radius);
@@ -302,14 +302,21 @@ function _spreadDepositHeatmap() {
  * 向 wetHeatmap 注热（复用 _heatmapProgram，目标为 wetHeatmap/wetHeatTemp）
  * 由 base-painter.js 水彩分支调用，替代写 smudgeHeatmap。
  */
-function updateWetHeatmap(x, y, size, brushCanvas, useFalloff, heatStep = HEAT_ACCUMULATE_STEP) {
-    // 注热时重置帧计数：按当前湿度下的实际衰减速率估算
-    // 湿度高时 decayScale 小（干得慢），实际衰减步长变小，需要更多帧
+/**
+ * 刷新 wetHeatmap 寿命计数器（按当前湿度下的实际衰减速率估算）。
+ * 与注热解耦：浓度节流跳过 updateWetHeatmap 时也应调此函数续命，
+ * 避免低浓度因注热稀疏被误判为"干得快"。
+ */
+function refreshWetHeatLifetime() {
     const w = this._wetness ?? 0.5;
     const decayScale = HEAT_DECAY_SCALE_MAX
                      + (HEAT_DECAY_SCALE_MIN - HEAT_DECAY_SCALE_MAX) * w;
     const effectiveDecay = HEAT_DECAY_STEP * decayScale;
     this._wetHeatFrames = Math.ceil(1.0 / effectiveDecay) + 60;
+}
+
+function updateWetHeatmap(x, y, size, brushCanvas, useFalloff, heatStep = HEAT_ACCUMULATE_STEP) {
+    this.refreshWetHeatLifetime();
 
     const gl = this.gl;
     const cw = this.canvas.width;
@@ -889,15 +896,15 @@ function _stopWetPaperRaf() {
 }
 
 /**
- * 清零热度图（落笔时 / 松开鼠标后调用）
- * wetHeatmap 已与 smudgeHeatmap 合并，直接清零同一张纹理。
+ * 清零 wetHeatmap（落笔时 / 松开鼠标后调用）
+ * 与 smudgeHeatmap 已分离，互不影响。
  */
 function clearWetHeatmap() {
     const gl = this.gl;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.smudgeHeatmap);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.wetHeatmap);
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.smudgeHeatTemp);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.wetHeatTemp);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 }
@@ -963,6 +970,7 @@ Object.assign(BaseWebGLPainter.prototype, {
     _startWetPaperRaf,
     _stopWetPaperRaf,
     clearWetHeatmap,
+    refreshWetHeatLifetime,
     debugWetPaper,
     _flushDebugWetPaper,
 });

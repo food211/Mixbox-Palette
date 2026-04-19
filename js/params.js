@@ -95,6 +95,10 @@ const WET_HEAT_DIR_THRESHOLD_DEG = 30;
 /** 每次方向突破后热度上限提升量 */
 const WET_HEAT_CAP_STEP = 0.25;
 
+/** 浓度→_applyWetColor 上色频率：MIN 是浓度=0 的下限，MAX 是浓度=1 的上限（0.5 = 每 2 帧一次） */
+const WET_HEAT_FREQ_MIN = 0.15;
+const WET_HEAT_FREQ_MAX = 0.5;
+
 // ─── 水彩主 shader 参数（base-painter.js / drawBrush）─────────────────────────
 
 /** 边缘堆积抛物线系数：heat*(1-heat)*N，N=4时heat=0.5峰值=1 */

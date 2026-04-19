@@ -1589,6 +1589,7 @@ function beginStroke(type, color = null, startX = 0, startY = 0, pressure = 1.0)
             painter._wetHeatFrames = 0;
             painter._wetHeatCap = undefined;      // 重置方向分段上限
             painter._wetHeatBaseAngle = undefined;
+            painter._wetColorFreqAcc = 1.0;       // _applyWetColor 频率累加器：1.0 保证第一次必触发
             painter._wetPaperActive = true;
             painter._wetIsDrawing = true;
             painter._wetColor = color ? hexToRgb(color) : { r: 0, g: 0, b: 0 };
