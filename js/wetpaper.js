@@ -60,24 +60,27 @@ function _initWetSpreadProgram() {
         precision highp float;
         uniform sampler2D u_heatmap;
         uniform vec2 u_resolution;
-        uniform float u_radius;    // 采样半径（像素）
-        uniform float u_strength;  // 扩散强度（0~1）
+        uniform float u_radius;    // 采样半径（像素，由湿度决定 → 控制扩散速度）
+        uniform float u_falloff;   // 外扩衰减系数（<1，让远处自然渐淡）
         varying vec2 v_uv;
 
         void main() {
             vec2 px = 1.0 / u_resolution;
             float center = texture2D(u_heatmap, v_uv).r;
 
-            // 4邻居平均
-            float n = texture2D(u_heatmap, v_uv + vec2( 0.0,  px.y * u_radius)).r;
-            float s = texture2D(u_heatmap, v_uv + vec2( 0.0, -px.y * u_radius)).r;
-            float e = texture2D(u_heatmap, v_uv + vec2( px.x * u_radius,  0.0)).r;
-            float w = texture2D(u_heatmap, v_uv + vec2(-px.x * u_radius,  0.0)).r;
-            float spread = (n + s + e + w) * 0.25;
+            float n  = texture2D(u_heatmap, v_uv + vec2( 0.0,  px.y * u_radius)).r;
+            float s  = texture2D(u_heatmap, v_uv + vec2( 0.0, -px.y * u_radius)).r;
+            float e  = texture2D(u_heatmap, v_uv + vec2( px.x * u_radius,  0.0)).r;
+            float w  = texture2D(u_heatmap, v_uv + vec2(-px.x * u_radius,  0.0)).r;
+            float ne = texture2D(u_heatmap, v_uv + vec2( px.x * u_radius * 0.707,  px.y * u_radius * 0.707)).r;
+            float nw = texture2D(u_heatmap, v_uv + vec2(-px.x * u_radius * 0.707,  px.y * u_radius * 0.707)).r;
+            float se = texture2D(u_heatmap, v_uv + vec2( px.x * u_radius * 0.707, -px.y * u_radius * 0.707)).r;
+            float sw = texture2D(u_heatmap, v_uv + vec2(-px.x * u_radius * 0.707, -px.y * u_radius * 0.707)).r;
 
-            // 只允许热度升高（从邻居扩散过来），不允许降低（衰减由 _decayHeatmap 负责）
-            float result = mix(center, max(center, spread), u_strength);
-            gl_FragColor = vec4(result, 0.0, 0.0, 1.0);
+            float maxN = max(max(max(n, s), max(e, w)),
+                             max(max(ne, nw), max(se, sw)));
+            float inherited = maxN * u_falloff;
+            gl_FragColor = vec4(max(center, inherited), 0.0, 0.0, 1.0);
         }
     `);
 
@@ -94,7 +97,7 @@ function _initWetSpreadProgram() {
         u_heatmap:    gl.getUniformLocation(prog, 'u_heatmap'),
         u_resolution: gl.getUniformLocation(prog, 'u_resolution'),
         u_radius:     gl.getUniformLocation(prog, 'u_radius'),
-        u_strength:   gl.getUniformLocation(prog, 'u_strength'),
+        u_falloff:    gl.getUniformLocation(prog, 'u_falloff'),
     };
 
     BaseWebGLPainter._programCache.wetSpread = {
@@ -146,19 +149,45 @@ function _spreadHeatmapGeneric(tex, fb, tempTex, radius, strength) {
 }
 
 /**
- * 对 smudgeHeatmap 执行一次扩散 pass，热度向外晕染。
- * 由 RAF tick 在水彩激活时调用，在衰减之前执行。
- * wetHeatmap 语义是"正在变湿/正在衰减"，用平均策略让边界自然柔化，
- * 不能用 depositSpread 的 max 策略（那会让湿度图永久向外爬）。
+ * 对 wetHeatmap 执行一次扩散 pass（二值化策略）。
+ * 扩散速度只由湿度滑条决定，与画面浓度无关：
+ *   - 邻居有没有热度（> threshold） → 本像素拉到 fillLevel
+ *   - fillLevel 和 radius 都随湿度线性调制
+ * 依赖每帧 _decayHeatmap 衰减核心，避免永久向外生长。
  */
 function _spreadWetHeatmap() {
-    this._spreadHeatmapGeneric(
-        this.textures.smudgeHeatmap,
-        this.framebuffers.smudgeHeatmap,
-        this.textures.smudgeHeatTemp,
-        WET_SPREAD_RADIUS,
-        WET_SPREAD_STRENGTH
-    );
+    if (!this._wetSpreadProgram) return;
+    const gl = this.gl;
+    const cw = this.canvas.width;
+    const ch = this.canvas.height;
+
+    const w = this._wetness ?? 0.5;
+    const radius = WET_SPREAD_RADIUS_MIN + (WET_SPREAD_RADIUS_MAX - WET_SPREAD_RADIUS_MIN) * w;
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.smudgeHeatmap);
+    gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeHeatTemp);
+    gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, cw, ch);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+    gl.useProgram(this._wetSpreadProgram);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.smudgeHeatmap);
+    gl.viewport(0, 0, cw, ch);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeHeatTemp);
+    gl.uniform1i(this._wetSpreadLoc.u_heatmap, 0);
+    gl.uniform2f(this._wetSpreadLoc.u_resolution, cw, ch);
+    gl.uniform1f(this._wetSpreadLoc.u_radius,  radius);
+    gl.uniform1f(this._wetSpreadLoc.u_falloff, WET_DEPOSIT_SPREAD_FALLOFF);
+
+    this._disableAllVertexAttribs();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this._wetSpreadBuf);
+    gl.enableVertexAttribArray(this._wetSpreadLoc.a_pos);
+    gl.vertexAttribPointer(this._wetSpreadLoc.a_pos, 2, gl.FLOAT, false, 0, 0);
+
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 }
 
 /**
@@ -253,7 +282,10 @@ function _spreadDepositHeatmap() {
     gl.bindTexture(gl.TEXTURE_2D, this.textures.depositHeatTemp);
     gl.uniform1i(this._depositSpreadLoc.u_heatmap, 0);
     gl.uniform2f(this._depositSpreadLoc.u_resolution, cw, ch);
-    gl.uniform1f(this._depositSpreadLoc.u_radius,  WET_DEPOSIT_SPREAD_RADIUS);
+    const w = this._wetness ?? 0.5;
+    const depositRadius = WET_DEPOSIT_SPREAD_RADIUS_MIN
+                        + (WET_DEPOSIT_SPREAD_RADIUS_MAX - WET_DEPOSIT_SPREAD_RADIUS_MIN) * w;
+    gl.uniform1f(this._depositSpreadLoc.u_radius,  depositRadius);
     gl.uniform1f(this._depositSpreadLoc.u_falloff, WET_DEPOSIT_SPREAD_FALLOFF);
 
     this._disableAllVertexAttribs();
@@ -408,7 +440,11 @@ function _initWetColorProgram() {
 
             // ── 效果1：梯度区颜料沉积（强度全权由 u_depositStr 控制）──
             float depositMask = smoothstep(u_depositGradMin, u_depositGradMax, grad);
-            float depositAmt  = depositMask * u_depositStr;
+            // 饱和保护：画布色与笔刷色越接近，沉积越弱。避免 wet 扩散让同一位置持续叠色
+            // colorDist=0 → roomLeft=0（完全饱和不沉积）；colorDist>0.1 → roomLeft=1（全速沉积）
+            float colorDist = length(canvas.rgb - u_color);
+            float roomLeft = smoothstep(0.0, 0.1, colorDist);
+            float depositAmt  = depositMask * u_depositStr * roomLeft;
             vec3 deposited = mix(canvas.rgb, u_color, depositAmt);
 
             // ── 效果2：高热区稀释（强度全权由 u_diluteStr 控制）──

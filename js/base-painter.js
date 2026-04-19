@@ -474,7 +474,7 @@ class BaseWebGLPainter {
                     this._wetHeatBaseAngle = curAngle;
                 }
             }
-            this.updateWetHeatmap(x, y, size, brushCanvas, useFalloff, HEAT_ACCUMULATE_STEP * this.baseMixStrength);
+            this.updateWetHeatmap(x, y, size, brushCanvas, useFalloff, HEAT_ACCUMULATE_STEP);
             this._wetSmearDir = smearDir;
             this._wetSmearLen = smearLen;
         }

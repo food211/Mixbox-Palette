@@ -365,12 +365,13 @@ function debugHeatmap(enable) {
         this._debugHeatBuf = buf;
     }
 
-    // 互斥：关闭湿纸 debug
+    // 互斥：关闭其他 debug 模式
     this._debugWetPaperEnabled = false;
+    this._debugDepositHeatmapEnabled = false;
 
     this._debugHeatmapEnabled = true;
     this._flushDebugHeatmap();
-    console.log('[debugHeatmap] 开启 — 调用 window._painter.debugHeatmap(false) 关闭');
+    console.log('[debugHeatmap] 开启 — 再次调用切换关闭');
 }
 
 /**
@@ -589,7 +590,7 @@ function debugDepositHeatmap(enable) {
 
     this._debugDepositHeatmapEnabled = true;
     this._flushDebugDepositHeatmap();
-    console.log('[debugDepositHeatmap] 开启 — 调用 window._painter.debugDepositHeatmap(false) 关闭');
+    console.log('[debugDepositHeatmap] 开启 — 再次调用切换关闭');
 }
 
 function _flushDebugDepositHeatmap(opacity = 1.0) {

@@ -38,9 +38,9 @@ const DEPOSITE_HEAT_ACCUMULATE_STEP = 0.12;
 const HEAT_DECAY_STEP = 0.02;
 
 /** 衰减速度随湿度调制：wet=0 时 MAX 倍（干得快）、wet=1 时 MIN 倍（干得慢） */
-/** 典型值：wet=0 ~1秒 干透、wet=0.5 ~2秒、wet=1 ~4秒 */
-const HEAT_DECAY_SCALE_MIN = 0.21;
-const HEAT_DECAY_SCALE_MAX = 0.84;
+/** 典型值：wet=0 ~0.5秒 干透、wet=0.5 ~1秒、wet=1 ~2秒 */
+const HEAT_DECAY_SCALE_MIN = 0.42;
+const HEAT_DECAY_SCALE_MAX = 1.68;
 
 // ─── 混色 ─────────────────────────────────────────────────────────────────────
 
@@ -138,11 +138,13 @@ const WET_DILUTE_STRENGTH = 0.3;
 /** 梯度采样半径（像素），越大边缘越宽 */
 const WET_GRADIENT_RADIUS = 3.0;
 
-/** 热度扩散采样半径（像素），越大晕染范围越宽 */
-const WET_SPREAD_RADIUS = 2.0;
+/** 热度扩散采样半径（像素），通用/遗留，仅 _spreadHeatmapGeneric 使用 */
+const WET_SPREAD_RADIUS = 1.5;
 
-/** 热度扩散强度（0~1），越大扩散越快 */
-const WET_SPREAD_STRENGTH = 0.15;
+/** wetHeatmap 扩散采样半径随湿度调制：wet=0 时 MIN、wet=1 时 MAX（单位像素） */
+/** 控制扩散速度：radius 越大单帧向外爬得越远；浓度由邻居继承（max+falloff） */
+const WET_SPREAD_RADIUS_MIN = 0.3;
+const WET_SPREAD_RADIUS_MAX = 1.0;
 
 /** 梯度沉积的 smoothstep 区间下限（梯度低于此值不沉积） */
 const WET_DEPOSIT_GRAD_MIN = 0.05;
@@ -184,11 +186,17 @@ const WET_CANVAS_BLEED_DILUTE = 0.6;
 /** 扩散噪声强度（0~1）：模拟纸张纤维不规则性，让边缘不规则 */
 const WET_CANVAS_BLEED_NOISE = 0.3;
 
-/** depositHeatmap 扩散半径（像素）：越大笔触覆盖区单帧扩张越远 */
+/** depositHeatmap 扩散半径（像素）：越大笔触覆盖区单帧扩张越远（遗留单值，保留兼容） */
 const WET_DEPOSIT_SPREAD_RADIUS = 1.0;
 
+/** depositHeatmap 扩散半径随湿度调制：wet=0 时 MIN、wet=1 时 MAX */
+/** 只需覆盖到梯度沉积能生效的区域即可，外圈热度过低是无效扩散（被 WET_DEPOSIT_GRAD_MIN 裁掉） */
+const WET_DEPOSIT_SPREAD_RADIUS_MIN = 0.25;
+const WET_DEPOSIT_SPREAD_RADIUS_MAX = 0.8;
+
 /** depositHeatmap 扩散衰减（0~1）：每次外扩时邻居热度保留的比例，<1 才能自然衰减 */
-const WET_DEPOSIT_SPREAD_FALLOFF = 0.98;
+/** 越小外圈衰减越快，能避免蓝色无效区一路爬出去 */
+const WET_DEPOSIT_SPREAD_FALLOFF = 0.95;
 
 /** 湿度 gate 下限：wetHeatmap 低于此值的像素停止扩散（表示已干、定型） */
 const WET_CANVAS_BLEED_WET_GATE_MIN = 0.02;
