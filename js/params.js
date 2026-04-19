@@ -190,13 +190,11 @@ const WET_CANVAS_BLEED_NOISE = 0.3;
 const WET_DEPOSIT_SPREAD_RADIUS = 1.0;
 
 /** depositHeatmap 扩散半径随湿度调制：wet=0 时 MIN、wet=1 时 MAX */
-/** 只需覆盖到梯度沉积能生效的区域即可，外圈热度过低是无效扩散（被 WET_DEPOSIT_GRAD_MIN 裁掉） */
-const WET_DEPOSIT_SPREAD_RADIUS_MIN = 0.25;
-const WET_DEPOSIT_SPREAD_RADIUS_MAX = 0.8;
+const WET_DEPOSIT_SPREAD_RADIUS_MIN = 0.3;
+const WET_DEPOSIT_SPREAD_RADIUS_MAX = 1.0;
 
 /** depositHeatmap 扩散衰减（0~1）：每次外扩时邻居热度保留的比例，<1 才能自然衰减 */
-/** 越小外圈衰减越快，能避免蓝色无效区一路爬出去 */
-const WET_DEPOSIT_SPREAD_FALLOFF = 0.95;
+const WET_DEPOSIT_SPREAD_FALLOFF = 0.98;
 
 /** 湿度 gate 下限：wetHeatmap 低于此值的像素停止扩散（表示已干、定型） */
 const WET_CANVAS_BLEED_WET_GATE_MIN = 0.02;

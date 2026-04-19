@@ -440,11 +440,7 @@ function _initWetColorProgram() {
 
             // ── 效果1：梯度区颜料沉积（强度全权由 u_depositStr 控制）──
             float depositMask = smoothstep(u_depositGradMin, u_depositGradMax, grad);
-            // 饱和保护：画布色与笔刷色越接近，沉积越弱。避免 wet 扩散让同一位置持续叠色
-            // colorDist=0 → roomLeft=0（完全饱和不沉积）；colorDist>0.1 → roomLeft=1（全速沉积）
-            float colorDist = length(canvas.rgb - u_color);
-            float roomLeft = smoothstep(0.0, 0.1, colorDist);
-            float depositAmt  = depositMask * u_depositStr * roomLeft;
+            float depositAmt  = depositMask * u_depositStr;
             vec3 deposited = mix(canvas.rgb, u_color, depositAmt);
 
             // ── 效果2：高热区稀释（强度全权由 u_diluteStr 控制）──
