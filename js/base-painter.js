@@ -53,6 +53,22 @@ class BaseWebGLPainter {
         this._lastRestoreDir = 0;          // +1 redo, -1 undo, 0 未知
         this._lastRestoreStep = -1;
         this._restoreSeq = 0;              // 异步 restore 令牌，防止乱序解压结果覆盖正确帧
+
+        // drawBrush 每帧复用的顶点位置缓冲，避免频繁分配引发 GC
+        this._quadPos = new Float32Array(8);
+
+        // 湿度相关 uniform 缓存：仅在 setWetness 时重算
+        this._wetCache = null;
+        this._recomputeWetCache(0.5);
+    }
+
+    _recomputeWetCache(w) {
+        this._wetCache = {
+            bleedMix:    WET_BLEED_MIX    * (WET_BLEED_SCALE_MIN  + (WET_BLEED_SCALE_MAX  - WET_BLEED_SCALE_MIN)  * w),
+            bleedRadius: WET_BLEED_RADIUS * (WET_BLEED_SCALE_MIN  + (WET_BLEED_SCALE_MAX  - WET_BLEED_SCALE_MIN)  * w),
+            coldMix:     WET_COLD_MIX     * (WET_COLD_SCALE_MAX   + (WET_COLD_SCALE_MIN   - WET_COLD_SCALE_MAX)   * w),
+            smudgeMix:   WET_SMUDGE_MIX   * (WET_SMUDGE_SCALE_MIN + (WET_SMUDGE_SCALE_MAX - WET_SMUDGE_SCALE_MIN) * w),
+        };
     }
 
     // ─────────────────────────────────────────────
@@ -342,6 +358,7 @@ class BaseWebGLPainter {
         this._wetness = w;
         // 映射到 [WET_HEAT_CAP_STEP, 1.0]，避免完全干燥时失去水彩感
         this._wetHeatCapBase = WET_HEAT_CAP_STEP + (1.0 - WET_HEAT_CAP_STEP) * w;
+        this._recomputeWetCache(w);
     }
 
     /**
@@ -472,25 +489,29 @@ class BaseWebGLPainter {
         gl.bindTexture(gl.TEXTURE_2D, this.textures.depositHeatmap);
         gl.uniform1i(this.locations.u_depositHeatmap, 6);
         // wet低→颜料浓（coldMix高）；wet高→晕染强、smudge强（bleedMix/bleedRadius/smudgeMix高）
-        const w = this._wetness ?? 0.5;
-        const wetBleedMix    = WET_BLEED_MIX    * (WET_BLEED_SCALE_MIN  + (WET_BLEED_SCALE_MAX  - WET_BLEED_SCALE_MIN)  * w);
-        const wetBleedRadius = WET_BLEED_RADIUS * (WET_BLEED_SCALE_MIN  + (WET_BLEED_SCALE_MAX  - WET_BLEED_SCALE_MIN)  * w);
-        const wetColdMix     = WET_COLD_MIX     * (WET_COLD_SCALE_MAX   + (WET_COLD_SCALE_MIN   - WET_COLD_SCALE_MAX)   * w);
-        const wetSmudgeMix   = WET_SMUDGE_MIX   * (WET_SMUDGE_SCALE_MIN + (WET_SMUDGE_SCALE_MAX - WET_SMUDGE_SCALE_MIN) * w);
-        gl.uniform1f(this.locations.u_isWatercolor,   isWatercolor ? 1.0 : 0.0);
-        gl.uniform1f(this.locations.u_wetSmudgeMix,   isWatercolor ? wetSmudgeMix     : 0.0);
-        gl.uniform1f(this.locations.u_wetDepositPeak, isWatercolor ? WET_DEPOSIT_PEAK  : 0.0);
-        gl.uniform1f(this.locations.u_wetBleedRadius, isWatercolor ? wetBleedRadius    : 0.0);
-        gl.uniform1f(this.locations.u_wetBleedMix,    isWatercolor ? wetBleedMix       : 0.0);
-        gl.uniform1f(this.locations.u_wetColdMix,     isWatercolor ? wetColdMix        : 0.0);
-        gl.uniform1f(this.locations.u_wetSmearReach,  isWatercolor ? WET_SMEAR_REACH   : 0.0);
+        gl.uniform1f(this.locations.u_isWatercolor, isWatercolor ? 1.0 : 0.0);
+        if (isWatercolor) {
+            const wc = this._wetCache;
+            gl.uniform1f(this.locations.u_wetSmudgeMix,   wc.smudgeMix);
+            gl.uniform1f(this.locations.u_wetDepositPeak, WET_DEPOSIT_PEAK);
+            gl.uniform1f(this.locations.u_wetBleedRadius, wc.bleedRadius);
+            gl.uniform1f(this.locations.u_wetBleedMix,    wc.bleedMix);
+            gl.uniform1f(this.locations.u_wetColdMix,     wc.coldMix);
+            gl.uniform1f(this.locations.u_wetSmearReach,  WET_SMEAR_REACH);
+        } else {
+            gl.uniform1f(this.locations.u_wetSmudgeMix,   0.0);
+            gl.uniform1f(this.locations.u_wetDepositPeak, 0.0);
+            gl.uniform1f(this.locations.u_wetBleedRadius, 0.0);
+            gl.uniform1f(this.locations.u_wetBleedMix,    0.0);
+            gl.uniform1f(this.locations.u_wetColdMix,     0.0);
+            gl.uniform1f(this.locations.u_wetSmearReach,  0.0);
+        }
 
-        const positions = new Float32Array([
-            x - halfSize, y - halfSize,
-            x + halfSize, y - halfSize,
-            x - halfSize, y + halfSize,
-            x + halfSize, y + halfSize,
-        ]);
+        const positions = this._quadPos;
+        positions[0] = x - halfSize; positions[1] = y - halfSize;
+        positions[2] = x + halfSize; positions[3] = y - halfSize;
+        positions[4] = x - halfSize; positions[5] = y + halfSize;
+        positions[6] = x + halfSize; positions[7] = y + halfSize;
         this._disableAllVertexAttribs();
         gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.position);
         gl.bufferData(gl.ARRAY_BUFFER, positions, gl.DYNAMIC_DRAW);

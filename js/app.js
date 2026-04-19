@@ -1110,8 +1110,8 @@ function bindEvents() {
 
     mixCanvas.addEventListener('pointermove', (e) => {
         e.preventDefault();
+        const rect = mixCanvas.getBoundingClientRect();
         if (isDrawing && !isEyedropperMode) {
-            const rect = mixCanvas.getBoundingClientRect();
             const x = (e.clientX - rect.left) * (mixCanvas.width / rect.width);
             const y = (e.clientY - rect.top) * (mixCanvas.height / rect.height);
             const pressure = (pressureEnabled && e.pointerType === 'pen') ? (e.pressure > 0 ? e.pressure : 1.0) : 1.0;
@@ -1182,7 +1182,6 @@ function bindEvents() {
 
         // 笔刷光标跟随（无论是否在绘制）
         {
-            const rect = mixCanvas.getBoundingClientRect();
             const zoom = typeof getCurrentZoom === 'function' ? getCurrentZoom() : 1;
             updateBrushCursor((e.clientX - rect.left) / zoom, (e.clientY - rect.top) / zoom);
         }
