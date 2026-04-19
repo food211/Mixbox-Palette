@@ -371,19 +371,26 @@ class KMWebGLPainter extends BaseWebGLPainter {
 
     async _loadLUT() {
         const LUT_URL = 'assets/km-lut.png';
-        try {
-            const u8 = await this._fetchBinary(LUT_URL);
-            this._buildLUTFromBytes(u8);
-            console.log('✅ KM LUT 加载完成（assets/km-lut.png）');
+
+        // 命中解码缓存：跳过 fetch + PNG 解码（每次约 30-100ms），直接上传纹理
+        const cached = KMWebGLPainter._decodedLUTCache;
+        if (cached) {
+            this._uploadLUTPixels(cached.width, cached.height, cached.pixels);
             return;
-        } catch (err) {
-            console.warn('⚠️ KM LUT 首次加载失败，尝试绕过缓存重新拉取:', err);
         }
 
-        // 资源可能损坏（缓存/网络），绕过缓存重试一次
-        const u8 = await this._fetchBinary(LUT_URL, { cache: 'reload' });
-        this._buildLUTFromBytes(u8);
-        console.log('✅ KM LUT 加载完成（重新拉取后）');
+        let decoded;
+        try {
+            const u8 = await this._fetchBinary(LUT_URL);
+            decoded = this._decodePNG(u8);
+        } catch (err) {
+            console.warn('⚠️ KM LUT 首次加载失败，尝试绕过缓存重新拉取:', err);
+            const u8 = await this._fetchBinary(LUT_URL, { cache: 'reload' });
+            decoded = this._decodePNG(u8);
+        }
+        KMWebGLPainter._decodedLUTCache = decoded;
+        this._uploadLUTPixels(decoded.width, decoded.height, decoded.pixels);
+        console.log('✅ KM LUT 加载完成（assets/km-lut.png）');
     }
 
     async _fetchBinary(url, init) {
@@ -393,9 +400,7 @@ class KMWebGLPainter extends BaseWebGLPainter {
         return new Uint8Array(buf);
     }
 
-    _buildLUTFromBytes(u8) {
-        const { width, height, pixels } = this._decodePNG(u8);
-
+    _uploadLUTPixels(width, height, pixels) {
         const gl = this.gl;
         const tex = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, tex);
