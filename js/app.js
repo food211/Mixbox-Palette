@@ -186,6 +186,7 @@ async function initApp() {
     
     // 2. 初始化持久化存储
     paletteStorage = new PaletteStorage();
+    window.paletteStorage = paletteStorage;  // 暴露给调试脚本（perf-check 等）
     
     // 3. 加载保存的调色盘预设
     const savedPalette = paletteStorage.loadPalettePreset();
@@ -1721,6 +1722,8 @@ async function _doSave() {
  * 如果当前有 in-flight 保存，先等它跑完；等完后如果仍然脏，再跑一次。
  */
 async function flushCanvasSave() {
+    // 顺带把 appSettings 的 pending 写入也 flush 掉，避免切引擎/resize 期间丢配置
+    try { if (paletteStorage) paletteStorage.flushAppSettings(); } catch (_) {}
     // 若有 in-flight 任务先等它结束，否则新笔画可能被跳过
     while (_saveInFlight) {
         await new Promise(r => setTimeout(r, 30));
@@ -1733,6 +1736,8 @@ window.flushCanvasSave = flushCanvasSave;
 // 页面关闭前补一次保存（beforeunload 必须同步走完，异步 promise 可能被打断；
 // 这里退回同步的 toDataURL，只在真正关闭时付这一次代价）
 window.addEventListener('beforeunload', () => {
+    // 应用设置可能有未 debounce 的 pending 写入，必须先 flush
+    try { if (paletteStorage) paletteStorage.flushAppSettings(); } catch (_) {}
     if (!_canvasDirty || !painter) return;
     try {
         paletteStorage.save(painter.toDataURL('image/webp', 1.0));

@@ -10,6 +10,13 @@ class PaletteStorage {
         this.historyKey = historyKey;
         this.settingsKey = settingsKey;
         this.autoSaveTimer = null;
+
+        // appSettings 内存缓存 + debounce：避免滑条/颜色变动时每次都走
+        // getItem+parse+merge+stringify+setItem 的同步 I/O 循环。
+        this._appSettingsCache = null;     // null 表示尚未读取过
+        this._appSettingsDirty = false;
+        this._appSettingsTimer = null;
+        this._appSettingsDelay = 300;
     }
 
     /**
@@ -101,22 +108,51 @@ class PaletteStorage {
      * 保存应用全局设置（颜色、混合强度等）
      * settings: { foregroundColor, backgroundColor, brushMixStrength,
      *             smudgeBrushSize, smudgeStrength }
+     *
+     * 改为内存缓存 + debounce 写入：滑条/颜色连续触发时只有最后一次真正落盘。
+     * 页面关闭前通过 flushAppSettings() 同步 flush；beforeunload 钩子已接好。
      */
     saveAppSettings(settings) {
+        // 首次访问时把磁盘内容灌进缓存
+        if (this._appSettingsCache === null) {
+            this._appSettingsCache = this._readAppSettingsFromDisk() || {};
+        }
+        Object.assign(this._appSettingsCache, settings);
+        this._appSettingsDirty = true;
+        if (this._appSettingsTimer) clearTimeout(this._appSettingsTimer);
+        this._appSettingsTimer = setTimeout(() => this.flushAppSettings(), this._appSettingsDelay);
+        return true;
+    }
+
+    /**
+     * 强制把缓存中的 appSettings 同步写入 localStorage。
+     * beforeunload / 切引擎 / resize 等关键节点调用。
+     */
+    flushAppSettings() {
+        if (this._appSettingsTimer) {
+            clearTimeout(this._appSettingsTimer);
+            this._appSettingsTimer = null;
+        }
+        if (!this._appSettingsDirty || !this._appSettingsCache) return;
         try {
-            const existing = this.loadAppSettings() || {};
-            localStorage.setItem(this.settingsKey, JSON.stringify({ ...existing, ...settings }));
-            return true;
+            localStorage.setItem(this.settingsKey, JSON.stringify(this._appSettingsCache));
+            this._appSettingsDirty = false;
         } catch (e) {
             console.error('应用设置保存失败:', e);
-            return false;
         }
     }
 
     /**
-     * 加载应用全局设置
+     * 加载应用全局设置。命中缓存时直接返回，避免重复 parse。
      */
     loadAppSettings() {
+        if (this._appSettingsCache !== null) return this._appSettingsCache;
+        const disk = this._readAppSettingsFromDisk();
+        this._appSettingsCache = disk || {};
+        return disk;
+    }
+
+    _readAppSettingsFromDisk() {
         try {
             const saved = localStorage.getItem(this.settingsKey);
             if (saved) return JSON.parse(saved);
