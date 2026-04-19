@@ -383,7 +383,14 @@
                     versionLabel.addEventListener('click', () => Announcer.checkUpdate());
                 }
                 // 延迟启动公告组件（包揽更新检测 + 公告推送）
-                setTimeout(() => Announcer.init(), 3000);
+                // 用 requestIdleCallback 让公告初始化在浏览器空闲时执行，
+                // 避免抢占首屏资源；不支持的环境兜底到 setTimeout。
+                const startAnnouncer = () => Announcer.init();
+                if (typeof requestIdleCallback === 'function') {
+                    requestIdleCallback(startAnnouncer, { timeout: 3000 });
+                } else {
+                    setTimeout(startAnnouncer, 3000);
+                }
             });
 
         } catch (error) {
