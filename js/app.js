@@ -13,6 +13,14 @@ function track(name, params) {
     } catch (_) {}
 }
 
+// 调试快捷方式：控制台直接调用 help() / debugHeatmap() 等，无需前缀
+function _bindDebugShortcuts(painter) {
+    window.help               = () => painter.listDebugCommands();
+    window.debugHeatmap        = (on) => painter.debugHeatmap(on);
+    window.debugDepositHeatmap = (on) => painter.debugDepositHeatmap(on);
+    window.debugWetPaper       = (on) => painter.debugWetPaper(on);
+}
+
 function reportAnalyticsEnv() {
     try {
         if (typeof window.gtag !== 'function') return;
@@ -125,6 +133,7 @@ async function switchEngine(engine) {
     if (painter && typeof painter.dispose === 'function') painter.dispose();
     painter = newPainter;
     window._painter = painter;
+    _bindDebugShortcuts(painter);
     painter.setMixStrength(oldMixStrength);
     painter.setWetness(watercolorWetness / 100);
     painter.setHeatmapDecayActive(currentTool === 'smudge');
@@ -312,6 +321,7 @@ async function initCanvas() {
         painter = createPainter(savedEngine, mixCanvas);
         await painter.init();
         window._painter = painter;
+        _bindDebugShortcuts(painter);
         currentEngine = savedEngine;
 
         const savedDataURL = paletteStorage.load();

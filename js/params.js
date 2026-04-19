@@ -37,6 +37,11 @@ const DEPOSITE_HEAT_ACCUMULATE_STEP = 0.12;
 /** RAF 每帧衰减的热度量（0~1）。影响水彩上色范围和涂抹热度消退速度 */
 const HEAT_DECAY_STEP = 0.02;
 
+/** 衰减速度随湿度调制：wet=0 时 MAX 倍（干得快）、wet=1 时 MIN 倍（干得慢） */
+/** 典型值：wet=0 ~1秒 干透、wet=0.5 ~2秒、wet=1 ~4秒 */
+const HEAT_DECAY_SCALE_MIN = 0.21;
+const HEAT_DECAY_SCALE_MAX = 0.84;
+
 // ─── 混色 ─────────────────────────────────────────────────────────────────────
 
 /** 混色强度默认值（0~1），对应 UI 滑块初始位置 */
@@ -155,5 +160,37 @@ const WET_DEPOSIT_SCALE_MIN = 0.2;
 /** diluteStr 随湿度的调制范围：wet=0 时为 MIN 倍，wet=1 时为 MAX 倍 */
 const WET_DILUTE_SCALE_MIN = 0.2;
 const WET_DILUTE_SCALE_MAX = 1.8;
+
+// ─── 水彩扩散 pass（wetpaper.js / _applyWetBleed）─────────────────────────────
+// 每帧把画布颜色从 depositHeatmap 高浓度区向低浓度区微量扩散。
+// 先画的像素经过更多帧扩散 → 渗得远；后画的 → 只渗一点点（时间演化天然实现）
+
+/** 扩散采样半径（像素）。越大单帧扩散距离越远 */
+const WET_CANVAS_BLEED_RADIUS = 3.0;
+
+/** 扩散强度（0~1）：每帧邻居色混入当前像素的比例（会乘以邻居浓度差总和）*/
+const WET_CANVAS_BLEED_STRENGTH = 0.7;
+
+/** 扩散随湿度调制范围：wet=0 时 MIN 倍，wet=1 时 MAX 倍 */
+const WET_CANVAS_BLEED_SCALE_MIN = 0.25;
+const WET_CANVAS_BLEED_SCALE_MAX = 2.5;
+
+/** depositRaw 低于此值时不扩散（避免空白区域被影响） */
+const WET_CANVAS_BLEED_DEPOSIT_MIN = 0.02;
+
+/** 扩散后稀释强度：本像素 deposit 越低（越靠边缘）越向纸色靠近。0=不稀释 */
+const WET_CANVAS_BLEED_DILUTE = 0.6;
+
+/** 扩散噪声强度（0~1）：模拟纸张纤维不规则性，让边缘不规则 */
+const WET_CANVAS_BLEED_NOISE = 0.3;
+
+/** depositHeatmap 扩散半径（像素）：越大笔触覆盖区单帧扩张越远 */
+const WET_DEPOSIT_SPREAD_RADIUS = 1.0;
+
+/** depositHeatmap 扩散衰减（0~1）：每次外扩时邻居热度保留的比例，<1 才能自然衰减 */
+const WET_DEPOSIT_SPREAD_FALLOFF = 0.98;
+
+/** 湿度 gate 下限：wetHeatmap 低于此值的像素停止扩散（表示已干、定型） */
+const WET_CANVAS_BLEED_WET_GATE_MIN = 0.02;
 
 console.log('params.js 加载成功');

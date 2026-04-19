@@ -26,6 +26,8 @@
 function _initWetPaperProgram() {
     this._initWetColorProgram();
     this._initWetSpreadProgram();
+    this._initWetBleedProgram();
+    this._initDepositSpreadProgram();
 }
 
 function _stepWetPaper() {
@@ -103,37 +105,161 @@ function _initWetSpreadProgram() {
 }
 
 /**
- * 对 smudgeHeatmap 执行一次扩散 pass，热度向外晕染。
- * 由 RAF tick 在水彩激活时调用，在衰减之前执行。
+ * 对指定热度图执行一次扩散 pass（通用）
+ * @param {WebGLTexture} tex 目标纹理
+ * @param {WebGLFramebuffer} fb 目标 FB
+ * @param {WebGLTexture} tempTex 临时只读纹理
+ * @param {number} radius 扩散采样半径
+ * @param {number} strength 扩散强度
  */
-function _spreadWetHeatmap() {
+function _spreadHeatmapGeneric(tex, fb, tempTex, radius, strength) {
     if (!this._wetSpreadProgram) return;
     const gl = this.gl;
     const cw = this.canvas.width;
     const ch = this.canvas.height;
 
-    // 拷当前 smudgeHeatmap → smudgeHeatTemp 作为只读输入
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.smudgeHeatmap);
-    gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeHeatTemp);
+    // 拷目标 → temp 作为只读输入
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.bindTexture(gl.TEXTURE_2D, tempTex);
     gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, cw, ch);
     gl.bindTexture(gl.TEXTURE_2D, null);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
     gl.useProgram(this._wetSpreadProgram);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.smudgeHeatmap);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
     gl.viewport(0, 0, cw, ch);
 
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, this.textures.smudgeHeatTemp);
+    gl.bindTexture(gl.TEXTURE_2D, tempTex);
     gl.uniform1i(this._wetSpreadLoc.u_heatmap, 0);
     gl.uniform2f(this._wetSpreadLoc.u_resolution, cw, ch);
-    gl.uniform1f(this._wetSpreadLoc.u_radius,   WET_SPREAD_RADIUS);
-    gl.uniform1f(this._wetSpreadLoc.u_strength, WET_SPREAD_STRENGTH);
+    gl.uniform1f(this._wetSpreadLoc.u_radius,   radius);
+    gl.uniform1f(this._wetSpreadLoc.u_strength, strength);
 
     this._disableAllVertexAttribs();
     gl.bindBuffer(gl.ARRAY_BUFFER, this._wetSpreadBuf);
     gl.enableVertexAttribArray(this._wetSpreadLoc.a_pos);
     gl.vertexAttribPointer(this._wetSpreadLoc.a_pos, 2, gl.FLOAT, false, 0, 0);
+
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+}
+
+/**
+ * 对 smudgeHeatmap 执行一次扩散 pass，热度向外晕染。
+ * 由 RAF tick 在水彩激活时调用，在衰减之前执行。
+ * wetHeatmap 语义是"正在变湿/正在衰减"，用平均策略让边界自然柔化，
+ * 不能用 depositSpread 的 max 策略（那会让湿度图永久向外爬）。
+ */
+function _spreadWetHeatmap() {
+    this._spreadHeatmapGeneric(
+        this.textures.smudgeHeatmap,
+        this.framebuffers.smudgeHeatmap,
+        this.textures.smudgeHeatTemp,
+        WET_SPREAD_RADIUS,
+        WET_SPREAD_STRENGTH
+    );
+}
+
+/**
+ * 对 depositHeatmap 执行一次扩散 pass，让笔触覆盖区逐渐向外浸润。
+ * 用专门的 shader：邻居最大值向外传播（max 策略），让边界以像素级稳定向外爬。
+ */
+function _initDepositSpreadProgram() {
+    const cached = BaseWebGLPainter._programCache.depositSpread;
+    if (cached) {
+        this._depositSpreadProgram = cached.program;
+        this._depositSpreadLoc     = cached.locations;
+        this._depositSpreadBuf     = cached.buffer;
+        return;
+    }
+    const gl = this.gl;
+    const vs = this.createShader(gl.VERTEX_SHADER, `
+        attribute vec2 a_pos;
+        varying vec2 v_uv;
+        void main() {
+            v_uv = vec2(a_pos.x * 0.5 + 0.5, a_pos.y * 0.5 + 0.5);
+            gl_Position = vec4(a_pos, 0.0, 1.0);
+        }
+    `);
+    // max 策略：取邻居最大值，再乘以一个小于 1 的 falloff，让外围自然衰减
+    // 这样能稳定向外爬边界，但距离中心越远热度越低
+    const fs = this.createShader(gl.FRAGMENT_SHADER, `
+        precision highp float;
+        uniform sampler2D u_heatmap;
+        uniform vec2 u_resolution;
+        uniform float u_radius;
+        uniform float u_falloff;   // 0~1，每次传播衰减系数
+        varying vec2 v_uv;
+        void main() {
+            vec2 px = 1.0 / u_resolution;
+            float center = texture2D(u_heatmap, v_uv).r;
+            float n = texture2D(u_heatmap, v_uv + vec2( 0.0,  px.y * u_radius)).r;
+            float s = texture2D(u_heatmap, v_uv + vec2( 0.0, -px.y * u_radius)).r;
+            float e = texture2D(u_heatmap, v_uv + vec2( px.x * u_radius,  0.0)).r;
+            float w = texture2D(u_heatmap, v_uv + vec2(-px.x * u_radius,  0.0)).r;
+            float ne = texture2D(u_heatmap, v_uv + vec2( px.x * u_radius * 0.707,  px.y * u_radius * 0.707)).r;
+            float nw = texture2D(u_heatmap, v_uv + vec2(-px.x * u_radius * 0.707,  px.y * u_radius * 0.707)).r;
+            float se = texture2D(u_heatmap, v_uv + vec2( px.x * u_radius * 0.707, -px.y * u_radius * 0.707)).r;
+            float sw = texture2D(u_heatmap, v_uv + vec2(-px.x * u_radius * 0.707, -px.y * u_radius * 0.707)).r;
+            float maxN = max(max(max(n, s), max(e, w)), max(max(ne, nw), max(se, sw)));
+            // 从邻居继承最大值，但乘以 falloff 让外围渐淡
+            float inherited = maxN * u_falloff;
+            // 自己的值和继承值取大：保留核心、同时允许外围生长
+            gl_FragColor = vec4(max(center, inherited), 0.0, 0.0, 1.0);
+        }
+    `);
+    const prog = this.createProgram(vs, fs);
+    this._depositSpreadProgram = prog;
+
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+    this._depositSpreadBuf = buf;
+
+    this._depositSpreadLoc = {
+        a_pos:        gl.getAttribLocation(prog,  'a_pos'),
+        u_heatmap:    gl.getUniformLocation(prog, 'u_heatmap'),
+        u_resolution: gl.getUniformLocation(prog, 'u_resolution'),
+        u_radius:     gl.getUniformLocation(prog, 'u_radius'),
+        u_falloff:    gl.getUniformLocation(prog, 'u_falloff'),
+    };
+    BaseWebGLPainter._programCache.depositSpread = {
+        program: prog,
+        locations: this._depositSpreadLoc,
+        buffer: this._depositSpreadBuf,
+    };
+}
+
+function _spreadDepositHeatmap() {
+    if (!this._depositSpreadProgram) this._initDepositSpreadProgram();
+
+    const gl = this.gl;
+    const cw = this.canvas.width;
+    const ch = this.canvas.height;
+
+    // 拷 depositHeatmap → depositHeatTemp
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.depositHeatmap);
+    gl.bindTexture(gl.TEXTURE_2D, this.textures.depositHeatTemp);
+    gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, cw, ch);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+    gl.useProgram(this._depositSpreadProgram);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.depositHeatmap);
+    gl.viewport(0, 0, cw, ch);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.textures.depositHeatTemp);
+    gl.uniform1i(this._depositSpreadLoc.u_heatmap, 0);
+    gl.uniform2f(this._depositSpreadLoc.u_resolution, cw, ch);
+    gl.uniform1f(this._depositSpreadLoc.u_radius,  WET_DEPOSIT_SPREAD_RADIUS);
+    gl.uniform1f(this._depositSpreadLoc.u_falloff, WET_DEPOSIT_SPREAD_FALLOFF);
+
+    this._disableAllVertexAttribs();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this._depositSpreadBuf);
+    gl.enableVertexAttribArray(this._depositSpreadLoc.a_pos);
+    gl.vertexAttribPointer(this._depositSpreadLoc.a_pos, 2, gl.FLOAT, false, 0, 0);
 
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -145,8 +271,13 @@ function _spreadWetHeatmap() {
  * 由 base-painter.js 水彩分支调用，替代写 smudgeHeatmap。
  */
 function updateWetHeatmap(x, y, size, brushCanvas, useFalloff, heatStep = HEAT_ACCUMULATE_STEP) {
-    // 注热时重置帧计数：1/HEAT_DECAY_STEP 帧后热度归零，多留余量给扩散消退
-    this._wetHeatFrames = Math.ceil(1.0 / HEAT_DECAY_STEP) + 60;
+    // 注热时重置帧计数：按当前湿度下的实际衰减速率估算
+    // 湿度高时 decayScale 小（干得慢），实际衰减步长变小，需要更多帧
+    const w = this._wetness ?? 0.5;
+    const decayScale = HEAT_DECAY_SCALE_MAX
+                     + (HEAT_DECAY_SCALE_MIN - HEAT_DECAY_SCALE_MAX) * w;
+    const effectiveDecay = HEAT_DECAY_STEP * decayScale;
+    this._wetHeatFrames = Math.ceil(1.0 / effectiveDecay) + 60;
 
     const gl = this.gl;
     const cw = this.canvas.width;
@@ -463,6 +594,221 @@ function _applyDepositColorPass(color, depositStr) {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 }
 
+// ─── 画布颜色扩散 pass ────────────────────────────────────────────────────────
+// 每帧 RAF 跑一次：在 depositHeatmap 覆盖区域，把颜色从高浓度区向低浓度区微量扩散。
+// 先画的像素经过更多帧 → 渗得远；后画的 → 只渗一点（时间演化天然实现）。
+
+function _initWetBleedProgram() {
+    const cached = BaseWebGLPainter._programCache.wetBleed;
+    if (cached) {
+        this._wetBleedProgram = cached.program;
+        this._wetBleedLoc     = cached.locations;
+        this._wetBleedBuf     = cached.buffer;
+        return;
+    }
+    const gl = this.gl;
+
+    const vs = this.createShader(gl.VERTEX_SHADER, `
+        attribute vec2 a_pos;
+        varying vec2 v_uv;
+        void main() {
+            v_uv = vec2(a_pos.x * 0.5 + 0.5, a_pos.y * 0.5 + 0.5);
+            gl_Position = vec4(a_pos, 0.0, 1.0);
+        }
+    `);
+
+    // 8 方向采样，比较邻居 depositRaw：邻居浓度高于自己则吸取其颜色。
+    // 结果是颜色从高浓度区缓慢向低浓度区扩散，形状由 depositHeatmap 决定。
+    const fs = this.createShader(gl.FRAGMENT_SHADER, `
+        precision highp float;
+        uniform sampler2D u_canvas;
+        uniform sampler2D u_deposit;
+        uniform sampler2D u_wetHeatmap;  // 会衰减的湿度图：控制"还湿着"才扩散
+        uniform vec2 u_resolution;
+        uniform float u_radius;          // 采样步长（像素）
+        uniform float u_strength;        // 扩散强度
+        uniform float u_depositMin;      // deposit 低于此值不扩散
+        uniform float u_noiseAmount;     // 噪声扰动量（0~1）
+        uniform float u_wetGateMin;      // wetness 低于此值完全停止扩散（已干）
+        varying vec2 v_uv;
+
+        // 像素级 hash 噪声：同一像素恒定值，不同像素随机
+        float hash(vec2 p) {
+            return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+        }
+
+        void main() {
+            vec2 px = 1.0 / u_resolution;
+            float myDeposit = texture2D(u_deposit, v_uv).r;
+            vec4 myColor = texture2D(u_canvas, v_uv);
+
+            if (myDeposit < u_depositMin) {
+                gl_FragColor = myColor;
+                return;
+            }
+
+            // 湿度 gate：综合 wetHeatmap（会衰减）和 myDeposit（扩张区域）
+            // wetHeatmap 控制"时间维度"——笔触结束后一段时间整体停止扩散
+            // myDeposit 控制"空间维度"——未触及的区域不扩散
+            float wetness = texture2D(u_wetHeatmap, v_uv).r;
+            if (wetness < u_wetGateMin) {
+                gl_FragColor = myColor;
+                return;
+            }
+            // wetGate 综合两者：wetHeatmap 决定全局活跃度、myDeposit 决定局部活跃度
+            // myDeposit 高 = 颜料多 = 湿得久；myDeposit 低 = 外围 = 只要全局还湿就继续扩
+            float wetGate = smoothstep(u_wetGateMin, 0.2, wetness);
+
+            // 像素级纸纤维噪声：扰动半径和吸色强度
+            // 低频噪声（hash 分像素坐标）模拟纤维聚集，让相邻像素有相关性
+            vec2 pixelCoord = floor(v_uv * u_resolution);
+            float noise1 = hash(pixelCoord);
+            float noise2 = hash(pixelCoord + vec2(3.7, 1.3));
+            // 低频纤维聚集（每 ~3 像素一组）
+            vec2 clusterCoord = floor(v_uv * u_resolution / 3.0);
+            float clusterNoise = hash(clusterCoord);
+
+            // 半径扰动：以本像素为单位，让邻居采样距离不规则
+            float radiusJitter = mix(1.0 - u_noiseAmount, 1.0 + u_noiseAmount, noise1);
+            float effectiveRadius = u_radius * radiusJitter;
+
+            // 吸水能力扰动：纤维粗的地方吸水快（扩散强）、细的地方慢
+            float absorbJitter = mix(1.0 - u_noiseAmount, 1.0 + u_noiseAmount, clusterNoise);
+
+            // 8 方向邻居，每个方向各自还叠一个方向扰动
+            vec2 dirs[8];
+            dirs[0] = vec2( 1.0,  0.0);
+            dirs[1] = vec2(-1.0,  0.0);
+            dirs[2] = vec2( 0.0,  1.0);
+            dirs[3] = vec2( 0.0, -1.0);
+            dirs[4] = vec2( 0.707,  0.707);
+            dirs[5] = vec2(-0.707,  0.707);
+            dirs[6] = vec2( 0.707, -0.707);
+            dirs[7] = vec2(-0.707, -0.707);
+
+            vec3 weightedColor = vec3(0.0);
+            float totalWeight = 0.0;
+
+            for (int i = 0; i < 8; i++) {
+                // 每个方向再加独立的小随机偏移，让采样点散开
+                float di = float(i);
+                vec2 perDirJitter = vec2(
+                    hash(pixelCoord + vec2(di * 1.7, 0.5)) - 0.5,
+                    hash(pixelCoord + vec2(0.3, di * 2.1)) - 0.5
+                ) * u_noiseAmount * effectiveRadius;
+                vec2 sampleUV = v_uv + (dirs[i] * effectiveRadius + perDirJitter) * px;
+
+                float nDeposit = texture2D(u_deposit, sampleUV).r;
+                float dh = nDeposit - myDeposit;
+                if (dh > 0.0) {
+                    vec3 nColor = texture2D(u_canvas, sampleUV).rgb;
+                    weightedColor += nColor * dh;
+                    totalWeight += dh;
+                }
+            }
+
+            if (totalWeight < 0.001) {
+                gl_FragColor = myColor;
+                return;
+            }
+
+            vec3 avgNeighbor = weightedColor / totalWeight;
+            // 浓区抗扩散：myDeposit 越高扩散越弱（内部颜料稳定不被推动）
+            // 外围 myDeposit 低 → resist≈1 全速扩散；核心高浓度 → resist≈0 基本不变
+            float resist = 1.0 - smoothstep(0.3, 0.8, myDeposit);
+            float mixAmt = u_strength * totalWeight * absorbJitter * wetGate * resist;
+            vec3 outRGB = mix(myColor.rgb, avgNeighbor, mixAmt);
+
+            gl_FragColor = vec4(outRGB, myColor.a);
+        }
+    `);
+
+    const prog = this.createProgram(vs, fs);
+    this._wetBleedProgram = prog;
+
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+        -1,-1,  1,-1,  -1,1,  1,1
+    ]), gl.STATIC_DRAW);
+    this._wetBleedBuf = buf;
+
+    this._wetBleedLoc = {
+        a_pos:         gl.getAttribLocation(prog,  'a_pos'),
+        u_canvas:      gl.getUniformLocation(prog, 'u_canvas'),
+        u_deposit:     gl.getUniformLocation(prog, 'u_deposit'),
+        u_wetHeatmap:  gl.getUniformLocation(prog, 'u_wetHeatmap'),
+        u_resolution:  gl.getUniformLocation(prog, 'u_resolution'),
+        u_radius:      gl.getUniformLocation(prog, 'u_radius'),
+        u_strength:    gl.getUniformLocation(prog, 'u_strength'),
+        u_depositMin:  gl.getUniformLocation(prog, 'u_depositMin'),
+        u_noiseAmount: gl.getUniformLocation(prog, 'u_noiseAmount'),
+        u_wetGateMin:  gl.getUniformLocation(prog, 'u_wetGateMin'),
+    };
+
+    BaseWebGLPainter._programCache.wetBleed = {
+        program: prog,
+        locations: this._wetBleedLoc,
+        buffer: this._wetBleedBuf,
+    };
+}
+
+/**
+ * 画布颜色扩散：每帧把画布在 depositHeatmap 覆盖区内做一次微量扩散。
+ * 先画的像素经过更多帧扩散 → 渗得远；后画的 → 只渗一点。
+ */
+function _applyWetBleed() {
+    if (!this._wetBleedProgram) return;
+
+    const gl = this.gl;
+    const cw = this.canvas.width;
+    const ch = this.canvas.height;
+
+    // 当前 canvas → temp（只读输入）
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this._copyReadFB);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.textures.canvas, 0);
+    gl.bindTexture(gl.TEXTURE_2D, this.textures.temp);
+    gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, cw, ch);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+    gl.useProgram(this._wetBleedProgram);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
+    gl.viewport(0, 0, cw, ch);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.textures.temp);
+    gl.uniform1i(this._wetBleedLoc.u_canvas, 0);
+
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.textures.depositHeatmap);
+    gl.uniform1i(this._wetBleedLoc.u_deposit, 1);
+
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, this.textures.wetHeatmap);
+    gl.uniform1i(this._wetBleedLoc.u_wetHeatmap, 2);
+
+    const w = this._wetness ?? 0.5;
+    const scale = WET_CANVAS_BLEED_SCALE_MIN
+                + (WET_CANVAS_BLEED_SCALE_MAX - WET_CANVAS_BLEED_SCALE_MIN) * w;
+    const strength = WET_CANVAS_BLEED_STRENGTH * scale;
+
+    gl.uniform2f(this._wetBleedLoc.u_resolution,  cw, ch);
+    gl.uniform1f(this._wetBleedLoc.u_radius,      WET_CANVAS_BLEED_RADIUS);
+    gl.uniform1f(this._wetBleedLoc.u_strength,    strength);
+    gl.uniform1f(this._wetBleedLoc.u_depositMin,  WET_CANVAS_BLEED_DEPOSIT_MIN);
+    gl.uniform1f(this._wetBleedLoc.u_noiseAmount, WET_CANVAS_BLEED_NOISE);
+    gl.uniform1f(this._wetBleedLoc.u_wetGateMin,  WET_CANVAS_BLEED_WET_GATE_MIN);
+
+    this._disableAllVertexAttribs();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this._wetBleedBuf);
+    gl.enableVertexAttribArray(this._wetBleedLoc.a_pos);
+    gl.vertexAttribPointer(this._wetBleedLoc.a_pos, 2, gl.FLOAT, false, 0, 0);
+
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+}
+
 // ─── RAF 启停 ─────────────────────────────────────────────────────────────────
 
 /**
@@ -531,26 +877,30 @@ function clearWetHeatmap() {
  *   window._painter.debugWetPaper(true)   → 开启
  *   window._painter.debugWetPaper(false)  → 关闭
  */
-function debugWetPaper(enable = true) {
+function debugWetPaper(enable) {
+    if (enable === undefined) enable = !this._debugWetPaperEnabled;
     if (!enable) {
         this._debugWetPaperEnabled = false;
         console.log('[debugWetPaper] 关闭');
         return;
     }
 
-    // 确保 _debugHeatProgram 已初始化（借用其 program/buffer），
-    // 直接调内部初始化逻辑，不触发 debugHeatmap 的互斥逻辑
+    // 确保 _debugHeatProgram 已初始化（借用其 program/buffer）
+    // 静默初始化：调 debugHeatmap(true) 会打印日志，用临时的 noop console.log 屏蔽
     if (!this._debugHeatProgram) {
-        // 临时允许 debugHeatmap 跑完初始化，再把两个 flag 都清掉
-        this.debugHeatmap(true);
-        this._debugHeatmapEnabled = false;
-        this._debugWetPaperEnabled = false; // debugHeatmap 内互斥会清掉，这里再加回来前先确保干净
+        const origLog = console.log;
+        console.log = () => {};
+        try {
+            this.debugHeatmap(true);
+        } finally {
+            console.log = origLog;
+        }
     }
     this._debugHeatmapEnabled = false;
 
     this._debugWetPaperEnabled = true;
     this._flushDebugWetPaper();
-    console.log('[debugWetPaper] 开启 — 调用 window._painter.debugWetPaper(false) 关闭');
+    console.log('[debugWetPaper] 开启 — 再次调用切换关闭');
 }
 
 function _flushDebugWetPaper(opacity = 1.0) {
@@ -564,7 +914,10 @@ Object.assign(BaseWebGLPainter.prototype, {
     _initWetPaperProgram,
     _stepWetPaper,
     _initWetSpreadProgram,
+    _spreadHeatmapGeneric,
     _spreadWetHeatmap,
+    _initDepositSpreadProgram,
+    _spreadDepositHeatmap,
     _drawWetSmudgePass,
     updateWetHeatmap,
     _initWetColorProgram,
@@ -572,6 +925,8 @@ Object.assign(BaseWebGLPainter.prototype, {
     _applyWetColor,
     _applyDepositColor,
     _applyDepositColorPass,
+    _initWetBleedProgram,
+    _applyWetBleed,
     setWetPaperActive,
     _startWetPaperRaf,
     _stopWetPaperRaf,

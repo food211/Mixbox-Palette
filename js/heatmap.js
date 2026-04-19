@@ -293,7 +293,9 @@ function clearDepositHeatmap() {
  *   window._painter.debugHeatmap(true)   → 开启
  *   window._painter.debugHeatmap(false)  → 关闭
  */
-function debugHeatmap(enable = true) {
+function debugHeatmap(enable) {
+    // 无参 → toggle
+    if (enable === undefined) enable = !this._debugHeatmapEnabled;
     if (!enable) {
         this._debugHeatmapEnabled = false;
         console.log('[debugHeatmap] 关闭');
@@ -509,7 +511,8 @@ function _decayHeatmap(decay = 0.02) {
  *   window._painter.debugDepositHeatmap(true)   → 开启
  *   window._painter.debugDepositHeatmap(false)  → 关闭
  */
-function debugDepositHeatmap(enable = true) {
+function debugDepositHeatmap(enable) {
+    if (enable === undefined) enable = !this._debugDepositHeatmapEnabled;
     if (!enable) {
         this._debugDepositHeatmapEnabled = false;
         console.log('[debugDepositHeatmap] 关闭');
@@ -619,17 +622,29 @@ function startHeatmapFadeOut() {
     function tick() {
         if (painter._disposed) return;
         // 热度衰减（始终运行，让已有热度自然消退）
-        painter._decayHeatmap(HEAT_DECAY_STEP);
+        // 湿度滑条调制：湿度高→水多干得慢；湿度低→水少干得快
+        // w=0 时 MAX 倍（干得快）、w=1 时 MIN 倍（干得慢）
+        const w = painter._wetness ?? 0.5;
+        const decayScale = HEAT_DECAY_SCALE_MAX
+                         + (HEAT_DECAY_SCALE_MIN - HEAT_DECAY_SCALE_MAX) * w;
+        painter._decayHeatmap(HEAT_DECAY_STEP * decayScale);
 
-        // 水彩激活时：热度帧计数 > 0 才跑扩散和颜色 pass，避免全屏空跑
+        // 水彩激活时：热度帧计数 > 0 才跑扩散和颜色 pass
         if (painter._wetPaperActive && painter._wetHeatFrames > 0) {
             painter._wetHeatFrames--;
 
             painter._spreadWetHeatmap();
 
-            // 仅绘制期间把湿度图渲染为颜色写入 canvas
+            // 绘制期：叠加湿纸颜色效果（depositStr/diluteStr 由 _applyWetColor 内部按湿度调制）
             if (painter._wetIsDrawing && painter._wetColor) {
                 painter._applyWetColor(painter._wetColor);
+            }
+
+            // depositHeatmap 扩散 + 画布颜色扩散：
+            // 不要求 _wetIsDrawing，松开鼠标后也继续（让颜料"流完"直到 _wetHeatFrames 归零）
+            if (painter._wetColor) {
+                painter._spreadDepositHeatmap();
+                painter._applyWetBleed();
                 painter.flush();
             }
         }
@@ -662,9 +677,28 @@ function stopHeatmapFadeOut() {
 }
 
 
+/**
+ * 列出所有 debug 命令，在控制台打印可直接复制的调用方式。
+ */
+function listDebugCommands() {
+    const cmds = [
+        ['debugHeatmap()',         '切换 smudge/wet 热度图可视化（会衰减）'],
+        ['debugDepositHeatmap()',  '切换 deposit 热度图可视化（不衰减，松开清空）'],
+        ['debugWetPaper()',        '切换 wetHeatmap 可视化（与 debugHeatmap 同源）'],
+        ['help()',                 '列出本清单'],
+    ];
+    console.log('%c[Painter Debug Commands]', 'color:#6af;font-weight:bold');
+    for (const [sig, desc] of cmds) {
+        console.log(`  ${sig.padEnd(28)} — ${desc}`);
+    }
+    console.log('无参调用即 toggle；也可传 true/false 显式开关。三者互斥。');
+}
+
 // ─── 挂载到 BaseWebGLPainter.prototype ───────────────────────────────────────
 
 Object.assign(BaseWebGLPainter.prototype, {
+    listDebugCommands,
+    _help: listDebugCommands,
     _createR8Texture,
     setupHeatmapTextures,
     setupHeatmapFramebuffers,
