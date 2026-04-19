@@ -1241,6 +1241,7 @@ function bindEvents() {
     const brushCursorCanvas = document.getElementById('brushCursor');
     const brushCursorCtx = brushCursorCanvas.getContext('2d');
     let _cursorCacheKey = null;  // 上次绘制时的 key，用于判断是否需要重绘
+    let _cursorAppliedSizeKey = null;  // 上次应用到 style 的 size key，避免每帧写 width/height
 
     function _rebuildCursorImage(canvasSize, cssDiameter) {
         const pad = 3; // 给描边留出空间，防止被裁切
@@ -1310,13 +1311,18 @@ function bindEvents() {
             _cursorCacheKey = cacheKey;
         }
 
-        brushCursorCanvas.style.width  = totalSize + 'px';
-        brushCursorCanvas.style.height = totalSize + 'px';
-        // pad 补偿：让笔刷形状中心对准鼠标
-        brushCursorCanvas.style.left = (cssX - canvasSize / 2 - pad) + 'px';
-        brushCursorCanvas.style.top  = (cssY - canvasSize / 2 - pad) + 'px';
-        brushCursorCanvas.style.display = 'block';
-        mixCanvas.style.cursor = 'none';
+        // size 变化时才写 width/height（rebuild 已保证此时重建）
+        if (cacheKey !== _cursorAppliedSizeKey) {
+            brushCursorCanvas.style.width  = totalSize + 'px';
+            brushCursorCanvas.style.height = totalSize + 'px';
+            _cursorAppliedSizeKey = cacheKey;
+        }
+        // 用 transform 代替 left/top，避免布局偏移触发 layout
+        const tx = cssX - canvasSize / 2 - pad;
+        const ty = cssY - canvasSize / 2 - pad;
+        brushCursorCanvas.style.transform = `translate(${tx}px, ${ty}px)`;
+        if (brushCursorCanvas.style.display !== 'block') brushCursorCanvas.style.display = 'block';
+        if (mixCanvas.style.cursor !== 'none') mixCanvas.style.cursor = 'none';
     }
 
     function hideBrushCursor() {
