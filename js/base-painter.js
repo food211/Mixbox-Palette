@@ -1379,8 +1379,16 @@ class BaseWebGLPainter {
         if (this._decompressCache) this._decompressCache.clear();
 
         // 释放队列里的 frame gpuSlot 已在 _scheduleAsyncRelease 同步阶段回收过，
-        // 这里只需要清空队列（剩下的 cpuPixels/cpuBlob 随 frame 对象一起被 GC）
-        if (this._releaseQueue) this._releaseQueue.length = 0;
+        // 这里主动解除 cpuPixels/cpuBlob 引用，避免等 asyncRelease 的 idle tick
+        // 醒来才释放（dispose 时那条 idle chain 的 handle 没存，无法显式 cancel）
+        if (this._releaseQueue) {
+            for (const f of this._releaseQueue) {
+                f.cpuPixels = null;
+                f.cpuReady  = false;
+                f.cpuBlob   = null;
+            }
+            this._releaseQueue.length = 0;
+        }
 
         // 销毁历史帧
         if (this._history) {
