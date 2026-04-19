@@ -27,12 +27,12 @@ The plugin offers two physical color mixing engines, switchable via the **MB/KM*
 - **Mixbox (MB)** - Default engine. Uses the [Mixbox](https://scrtwpns.com/mixbox/) LUT-based algorithm for high-quality pigment mixing. Licensed under CC BY-NC 4.0.
 - **KM** - Self-implemented engine. Uses a 32³ LUT to map RGB to 38-wavelength reflectance spectra (derived from [spectral.js](https://github.com/rvanwijnen/spectral.js), MIT), then applies Kubelka-Munk mixing in spectral space and converts back to RGB. GPL v3 licensed.
 
-Both engines produce realistic subtractive color mixing (e.g., yellow + blue = green), but they have **different feel** you can choose from:
+Both engines produce realistic subtractive color mixing (e.g., yellow + blue = green), but they take different design approaches:
 
-- **MB covers faster.** At the same concentration slider, each stroke replaces the canvas color more aggressively. Great when you want to lay down color quickly, or when you need a narrow blend band between two colors.
-- **KM blends more gradually.** Each stroke moves the pixel toward the new color less per pass, producing wider, softer transition bands when layering — closer to how real watercolor and oil paint build up over wet layers.
+- **MB** uses a hand-tuned LUT built from a small set of anchor pigments. Within that anchor set the results are very pleasing and often more "expressive" — for example, deep red diluted with white can drift toward a vivid pink or magenta, which feels lively and saturated. The trade-off is that colors outside the anchor set are interpolated, so composite hues (browns, ochres, deep reds, oranges) can shift hue when diluted. **MB also covers faster** — each stroke replaces the canvas color more aggressively at the same concentration.
+- **KM** computes results from a 38-wavelength physical model with no anchor approximation, so every input color is treated as its own pigment. Hue stays stable when diluted: deep red diluted stays a desaturated red rather than shifting to pink/magenta. Browns and ochres in light washes stay browns and ochres. **KM also blends more gradually** — wider, softer transition bands when layering, closer to how real watercolor and oil paint build up over wet layers.
 
-This is a property of the underlying physical models (latent-space interpolation vs. spectral Kubelka-Munk), not a tuning issue. At 0% and 100% concentration both engines converge; the difference is most visible in the 25–75% range with repeated strokes. Pick whichever matches the medium you're simulating. You can switch between them at any time — the canvas is automatically repainted using your stroke history.
+Neither is "more correct" — they emphasize different things. Pick MB when you want expressive, lively mixing within the anchor set's sweet spot; pick KM when you want predictable hue and faithful color preservation, especially for composite colors and watercolor-style light washes. At 0% and 100% concentration both engines converge; differences are most visible in the 25–75% range with repeated strokes and on composite colors. You can switch between them at any time — the canvas is automatically repainted using your stroke history.
 
 To compare both engines side by side, try the [KM Tuner](https://food211.github.io/Mixbox-Palette/km-tuner.html) tool included in this repository.
 
@@ -156,10 +156,10 @@ Adobe Photoshop UXP 调色板插件，内置双混色引擎，模拟真实颜料
 - **双混色引擎** - 左上角 MB/KM 按钮可随时切换：
   - **Mixbox (MB)** - 默认引擎，基于 [Mixbox](https://scrtwpns.com/mixbox/) LUT 算法（CC BY-NC 4.0）
   - **KM** - 自研引擎。使用 32³ LUT 将 RGB 映射到 38 波长反射率光谱（光谱数据来自 [spectral.js](https://github.com/rvanwijnen/spectral.js)，MIT 许可），在光谱空间中应用 Kubelka-Munk 公式混色后转回 RGB（GPL v3）
-  - **两者手感不同，可按需选择**：
-    - **MB 上色快**：同样的浓度滑块下，每一笔覆盖旧色更直接。适合快速铺色，或需要两色之间过渡带较窄的场景
-    - **KM 混色更渐进**：每一笔向目标色推进得更少，叠笔时过渡带更宽、更柔和，更接近真实水彩/油画湿叠的累积感
-  - 这是两种物理模型（潜在空间线性插值 vs. 光谱 Kubelka-Munk）本身的差异，不是 bug。浓度 0% 和 100% 时两引擎重合，差异在 25–75% 叠笔时最明显。选能贴合你想模拟的媒介即可。切换引擎后画布自动用笔画历史重绘
+  - **两者各有取舍，按需选择**：
+    - **MB**：基于一组人工挑选的锚点颜料拟合的 LUT。锚点覆盖范围内表现讨人喜欢、色彩"出彩"——例如深红+白能推到鲜亮的粉红/品红，富有表现力。代价是锚点之外的颜色靠插值，复合色（棕、土黄、深红、橙红等）稀释时容易偏色。MB 同时**上色更快**——同浓度下每笔覆盖旧色更直接
+    - **KM**：基于 38 波长物理模型计算，每个输入颜色都被当成独立的颜料对待，不依赖锚点近似。**色相在稀释时更稳定**：深红稀释仍是低饱和的红、不会推到粉紫；棕色、土色薄涂仍是棕、土。KM 同时**混色更渐进**——叠笔时过渡带更宽、更柔和，更接近真实水彩/油画湿叠
+  - **没有谁更"对"，是不同取向**：想要"出彩、有表现力"选 MB（在它的锚点甜点区里很惊艳）；想要"色相稳定、还原忠实"选 KM（尤其复合色和水彩薄涂场景）。浓度 0% 和 100% 时两引擎重合，差异在 25–75% 叠笔和复合色上最明显。切换引擎后画布自动用笔画历史重绘
   - 可使用 [KM Tuner](https://food211.github.io/Mixbox-Palette/km-tuner.html) 对比两引擎的混色效果
 - **可调节颜料浓度** (1-100)，低浓度区域平滑曲线映射，调节更细腻
 - **6 种笔刷预设** - 圆形、柔和、水彩、飞溅、平头、干笔；画笔和涂抹工具各自记忆上次使用的笔刷

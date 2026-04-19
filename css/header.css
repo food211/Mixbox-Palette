@@ -199,6 +199,11 @@
     opacity: 0.9;
 }
 
+.engine-btn.mb {
+    background-color: #4CAF50;
+    opacity: 0.9;
+}
+
 /* 缩放选择器样式 */
 .zoom-selector {
     position: absolute;

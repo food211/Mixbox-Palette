@@ -15,10 +15,24 @@ function track(name, params) {
 
 // 调试快捷方式：控制台直接调用 help() / debugHeatmap() 等，无需前缀
 function _bindDebugShortcuts(painter) {
-    window.help               = () => painter.listDebugCommands();
+    // 函数版（带括号、可传参）
     window.debugHeatmap        = (on) => painter.debugHeatmap(on);
     window.debugDepositHeatmap = (on) => painter.debugDepositHeatmap(on);
     window.debugWetPaper       = (on) => painter.debugWetPaper(on);
+    window.debugWetMask        = (on) => painter.debugWetMask(on);
+    window.toggleWetMask       = (on) => painter.toggleWetMask(on);
+
+    // 不带括号的别名：定义成 getter，访问即触发 toggle（仅无参形态）
+    const defGetter = (name, fn) => Object.defineProperty(window, name, {
+        get: fn, configurable: true,
+    });
+    defGetter('help', () => painter.listDebugCommands());
+    defGetter('h',    () => painter.listDebugCommands());
+    defGetter('dh',   () => painter.debugHeatmap());
+    defGetter('ddh',  () => painter.debugDepositHeatmap());
+    defGetter('dwp',  () => painter.debugWetPaper());
+    defGetter('dwm',  () => painter.debugWetMask());
+    defGetter('twm',  () => painter.toggleWetMask());
 }
 
 function reportAnalyticsEnv() {
@@ -86,19 +100,34 @@ let currentStroke = null;  // { type: 'brush'|'smudge'|'clear', points: [], colo
 let currentStrokeBrushCanvas = null;  // 当前笔画的笔刷纹理（落笔时生成，整笔复用）
 
 // 混色引擎: 'mixbox' (默认) 或 'km'
-let currentEngine = 'mixbox';
+let currentEngine = 'km';
 
 /**
  * 根据引擎类型创建 Painter
  */
 function createPainter(engine, canvas) {
-    if (engine === 'km' && typeof KMWebGLPainter !== 'undefined' && isWebGLSupported()) {
-        console.log('使用 KM 渲染器');
-        return new KMWebGLPainter(canvas);
-    } else {
+    if (engine === 'km') {
+        if (typeof KMWebGLPainter !== 'undefined' && isWebGLSupported()) {
+            console.log('使用 KM 渲染器');
+            return new KMWebGLPainter(canvas);
+        }
+        // KM 不可用（脚本未加载或 WebGL 不支持）→ 退回 MB
+        if (typeof MixboxWebGLPainter !== 'undefined') {
+            console.warn('KM 不可用，回退到 Mixbox 渲染器');
+            return new MixboxWebGLPainter(canvas);
+        }
+        throw new Error('KM 引擎不可用，且 Mixbox 也未加载');
+    }
+    if (typeof MixboxWebGLPainter !== 'undefined') {
         console.log('使用 Mixbox 渲染器');
         return new MixboxWebGLPainter(canvas);
     }
+    // MB 还没加载完 → 临时退回 KM
+    if (typeof KMWebGLPainter !== 'undefined') {
+        console.warn('Mixbox 未加载，回退到 KM 渲染器');
+        return new KMWebGLPainter(canvas);
+    }
+    throw new Error('Mixbox 与 KM 引擎都不可用');
 }
 
 /**
@@ -115,9 +144,12 @@ async function switchEngine(engine) {
     // 旧 painter 的历史池随实例一起废弃
     let newPainter;
     try {
-        // 按需加载 KM 引擎（首屏可能没预取到）
+        // 按需加载目标引擎（首屏可能没预取到）
         if (engine === 'km' && typeof KMWebGLPainter === 'undefined' && typeof window.ensureKMLoaded === 'function') {
             await window.ensureKMLoaded();
+        }
+        if (engine === 'mixbox' && typeof MixboxWebGLPainter === 'undefined' && typeof window.ensureMBLoaded === 'function') {
+            await window.ensureMBLoaded();
         }
         newPainter = createPainter(engine, mixCanvas);
         await newPainter.init();
@@ -153,6 +185,7 @@ async function switchEngine(engine) {
     if (engineBtn) {
         engineBtn.textContent = engine === 'km' ? 'KM' : 'MB';
         engineBtn.classList.toggle('active', engine === 'km');
+        engineBtn.classList.toggle('mb', engine === 'mixbox');
     }
     console.log('✅ 引擎已切换为:', engine);
 }
@@ -315,7 +348,7 @@ async function initCanvas() {
     mixCanvas.height = Math.round(BASE_CANVAS_H * savedContainerW / BASE_CONTAINER);
 
     // 初始化混色引擎
-    const savedEngine = localStorage.getItem('mixbox_engine') || 'mixbox';
+    const savedEngine = localStorage.getItem('mixbox_engine') || 'km';
     console.log('🎨 初始化混色引擎...', savedEngine);
     try {
         painter = createPainter(savedEngine, mixCanvas);
@@ -873,6 +906,7 @@ function bindEvents() {
     if (engineBtn) {
         engineBtn.textContent = currentEngine === 'km' ? 'KM' : 'MB';
         engineBtn.classList.toggle('active', currentEngine === 'km');
+        engineBtn.classList.toggle('mb', currentEngine === 'mixbox');
         engineBtn.addEventListener('click', () => {
             const nextEngine = currentEngine === 'mixbox' ? 'km' : 'mixbox';
             track('engine_switch', { from: currentEngine, to: nextEngine });
