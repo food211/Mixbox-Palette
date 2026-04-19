@@ -109,9 +109,10 @@ const WET_HEAT_DIR_THRESHOLD_DEG = 30;
 /** 每次方向突破后热度上限提升量 */
 const WET_HEAT_CAP_STEP = 0.25;
 
-/** 浓度→_applyWetColor 上色频率：MIN 是浓度=0 的下限，MAX 是浓度=1 的上限（0.5 = 每 2 帧一次） */
-const WET_HEAT_FREQ_MIN = 0.15;
-const WET_HEAT_FREQ_MAX = 0.5;
+/** 浓度→_applyWetColor 写入间隔（帧数）：浓度=0 时每 N_LOW 帧一次，浓度=100 时每 N_HIGH 帧一次。
+ *  数值越大写入越稀。例：N_LOW=7 表示低浓度每 7 帧注一次热，N_HIGH=2 表示高浓度每 2 帧一次。 */
+const WET_HEAT_INTERVAL_LOW  = 10;   // 浓度 0% 时的写入间隔（帧）
+const WET_HEAT_INTERVAL_HIGH = 1;   // 浓度 100% 时的写入间隔（帧）
 
 // ─── 水彩主 shader 参数（base-painter.js / drawBrush）─────────────────────────
 
@@ -128,14 +129,14 @@ const WET_BLEED_MIX     = 0.4;
 const WET_COLD_MIX      = 0.25;
 
 /** smudge 采样距离系数（相对 smearLen/brushRadius） */
-const WET_SMEAR_REACH   = 0.8;
+const WET_SMEAR_REACH   = 0.5;
 
 /** 水彩 smudge 推色强度 */
-const WET_SMUDGE_MIX    = 0.38;
+const WET_SMUDGE_MIX    = 0.1;
 
 /** smudgeMix 随湿度的调制范围：wet=0 时为 MIN 倍，wet=1 时为 MAX 倍 */
-const WET_SMUDGE_SCALE_MIN = 0.3;
-const WET_SMUDGE_SCALE_MAX = 2.0;
+const WET_SMUDGE_SCALE_MIN = 0.01;
+const WET_SMUDGE_SCALE_MAX = 1.0;
 
 /** bleedMix/bleedRadius 随湿度的调制范围：wet=0 时为 MIN 倍，wet=1 时为 MAX 倍 */
 const WET_BLEED_SCALE_MIN = 0.3;
@@ -148,10 +149,10 @@ const WET_COLD_SCALE_MIN = 0.2;
 // ─── 水彩 RAF 效果参数（wetpaper.js / _applyWetColor）────────────────────────
 
 /** 梯度区颜料沉积的最大混色强度（0~1） */
-const WET_DEPOSIT_STRENGTH = 0.5;
+const WET_DEPOSIT_STRENGTH = 0.1;
 
 /** 高热区稀释已有颜色的最大强度（0~1） */
-const WET_DILUTE_STRENGTH = 0.3;
+const WET_DILUTE_STRENGTH = 0.5;
 
 /** 梯度采样半径（像素），越大边缘越宽 */
 const WET_GRADIENT_RADIUS = 3.0;
@@ -212,7 +213,10 @@ const WET_DEPOSIT_SPREAD_RADIUS_MIN = 0.3;
 const WET_DEPOSIT_SPREAD_RADIUS_MAX = 1.0;
 
 /** depositHeatmap 扩散衰减（0~1）：每次外扩时邻居热度保留的比例，<1 才能自然衰减 */
-const WET_DEPOSIT_SPREAD_FALLOFF = 0.98;
+const WET_DEPOSIT_SPREAD_FALLOFF = 0.92;
+
+/** wetHeatmap 扩散衰减（0~1）：独立于 deposit，控制湿区边界外扩的衰减速度 */
+const WET_SPREAD_FALLOFF = 0.98;
 
 /** 湿度 gate 下限：wetHeatmap 低于此值的像素停止扩散（表示已干、定型） */
 const WET_CANVAS_BLEED_WET_GATE_MIN = 0.02;

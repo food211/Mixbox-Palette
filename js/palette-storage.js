@@ -11,6 +11,10 @@ class PaletteStorage {
         this.settingsKey = settingsKey;
         this.autoSaveTimer = null;
 
+        this.toolStateKeyPrefix = 'mb_tool_';
+        this._toolStateTimers = {};
+        this._toolStateDelay = 200;
+
         // appSettings 内存缓存 + debounce：避免滑条/颜色变动时每次都走
         // getItem+parse+merge+stringify+setItem 的同步 I/O 循环。
         this._appSettingsCache = null;     // null 表示尚未读取过
@@ -225,6 +229,51 @@ class PaletteStorage {
     }
 
     /**
+     * 加载某个工具/笔型的 state（toolStates 重构后用）
+     * mode: 'brush' | 'watercolor' | 'smudge'
+     */
+    loadToolState(mode) {
+        try {
+            const raw = localStorage.getItem(this.toolStateKeyPrefix + mode);
+            if (raw) return JSON.parse(raw);
+        } catch (e) {
+            console.error('toolState 加载失败:', mode, e);
+        }
+        return null;
+    }
+
+    saveToolState(mode, state) {
+        // 先把待写入的快照存住，flushToolStates 时按这个写
+        if (!this._pendingToolStates) this._pendingToolStates = {};
+        this._pendingToolStates[mode] = JSON.parse(JSON.stringify(state));
+        if (this._toolStateTimers[mode]) clearTimeout(this._toolStateTimers[mode]);
+        this._toolStateTimers[mode] = setTimeout(() => {
+            this._writeToolState(mode);
+        }, this._toolStateDelay);
+    }
+
+    _writeToolState(mode) {
+        if (!this._pendingToolStates || !(mode in this._pendingToolStates)) return;
+        try {
+            localStorage.setItem(this.toolStateKeyPrefix + mode, JSON.stringify(this._pendingToolStates[mode]));
+        } catch (e) {
+            console.error('toolState 保存失败:', mode, e);
+        }
+        delete this._pendingToolStates[mode];
+        if (this._toolStateTimers[mode]) {
+            clearTimeout(this._toolStateTimers[mode]);
+            this._toolStateTimers[mode] = null;
+        }
+    }
+
+    flushToolStates() {
+        if (!this._pendingToolStates) return;
+        for (const mode of Object.keys(this._pendingToolStates)) {
+            this._writeToolState(mode);
+        }
+    }
+
+    /**
      * 清除
      */
     clear() {
@@ -241,6 +290,7 @@ class PaletteStorage {
         localStorage.removeItem(this.brushKey);
         localStorage.removeItem(this.historyKey);
         localStorage.removeItem(this.settingsKey);
+        ['brush', 'watercolor', 'smudge'].forEach(m => localStorage.removeItem(this.toolStateKeyPrefix + m));
         console.log('🗑️ 所有数据已清除');
     }
 }

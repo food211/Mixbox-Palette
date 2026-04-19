@@ -191,7 +191,9 @@ class MixboxWebGLPainter extends BaseWebGLPainter {
                 smearUV.y = 1.0 - smearUV.y;
                 smearUV = clamp(smearUV, 0.0, 1.0);
                 vec3 smearRGB = texture2D(u_canvasTexture, smearUV).rgb;
-                vec3 coldOut = mixbox_lerp(coldResult, smearRGB, aBrush * u_wetSmudgeMix * maskCold);
+                // 浓度越高，smear 越弱：100% 时 smear 趋近 0，颜色不被画布拉淡
+                float smearGate = 1.0 - clamp(u_baseMixStrength, 0.0, 1.0);
+                vec3 coldOut = mixbox_lerp(coldResult, smearRGB, aBrush * u_wetSmudgeMix * maskCold * smearGate);
 
                 // ── 热区：稀释晕染 ──
                 float hotPaint = maskHot * u_baseMixStrength * u_wetBleedMix;

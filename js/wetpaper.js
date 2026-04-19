@@ -179,7 +179,7 @@ function _spreadWetHeatmap() {
     gl.uniform1i(this._wetSpreadLoc.u_heatmap, 0);
     gl.uniform2f(this._wetSpreadLoc.u_resolution, cw, ch);
     gl.uniform1f(this._wetSpreadLoc.u_radius,  radius);
-    gl.uniform1f(this._wetSpreadLoc.u_falloff, WET_DEPOSIT_SPREAD_FALLOFF);
+    gl.uniform1f(this._wetSpreadLoc.u_falloff, WET_SPREAD_FALLOFF);
 
     this._disableAllVertexAttribs();
     gl.bindBuffer(gl.ARRAY_BUFFER, this._wetSpreadBuf);

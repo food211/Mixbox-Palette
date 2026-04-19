@@ -690,11 +690,12 @@ function startHeatmapFadeOut() {
             painter._spreadWetHeatmap();
 
             // 绘制期：叠加湿纸颜色效果（depositStr/diluteStr 由 _applyWetColor 内部按湿度调制）
-            // 浓度节流：c=0.01 → p≈0.15 约 7 帧一次；c=0.85 → p=0.5 严格每 2 帧一次
+            // 浓度→写入间隔（帧数）线性插值，再换算成每帧累加步长 1/interval
             if (painter._wetIsDrawing && painter._wetColor) {
                 const c = painter.baseMixStrength ?? 1.0;
                 const cNorm = Math.min(1.0, c / 0.85);
-                const p = WET_HEAT_FREQ_MIN + (WET_HEAT_FREQ_MAX - WET_HEAT_FREQ_MIN) * cNorm;
+                const interval = WET_HEAT_INTERVAL_LOW + (WET_HEAT_INTERVAL_HIGH - WET_HEAT_INTERVAL_LOW) * cNorm;
+                const p = 1 / Math.max(1, interval);
                 painter._wetColorFreqAcc = (painter._wetColorFreqAcc ?? 1.0) + p;
                 if (painter._wetColorFreqAcc >= 1.0) {
                     painter._wetColorFreqAcc -= 1.0;
