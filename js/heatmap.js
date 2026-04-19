@@ -78,6 +78,12 @@ function setupHeatmapFramebuffers() {
 // ─── 热度图更新 program ───────────────────────────────────────────────────────
 
 function _initHeatmapProgram() {
+    const cached = BaseWebGLPainter._programCache.heatmap;
+    if (cached) {
+        this._heatmapProgram = cached.program;
+        this._heatmapLocations = cached.locations;
+        return;
+    }
     const gl = this.gl;
 
     const vs = this.createShader(gl.VERTEX_SHADER, `
@@ -140,6 +146,11 @@ function _initHeatmapProgram() {
         u_heatmapTexture:  gl.getUniformLocation(this._heatmapProgram, 'u_heatmapTexture'),
         u_heatStep:        gl.getUniformLocation(this._heatmapProgram, 'u_heatStep'),
         u_heatMax:         gl.getUniformLocation(this._heatmapProgram, 'u_heatMax'),
+    };
+
+    BaseWebGLPainter._programCache.heatmap = {
+        program: this._heatmapProgram,
+        locations: this._heatmapLocations,
     };
 }
 
@@ -404,6 +415,15 @@ function _flushDebugHeatmap(opacity = 1.0) {
  * 初始化热度衰减 shader：每帧把热度图乘以衰减系数写回
  */
 function _initHeatDecayProgram() {
+    const cached = BaseWebGLPainter._programCache.heatDecay;
+    if (cached) {
+        this._heatDecayProgram = cached.program;
+        this._heatDecayAPos  = cached.locations.a_pos;
+        this._heatDecayUTex  = cached.locations.u_heatmap;
+        this._heatDecayUStep = cached.locations.u_step;
+        this._heatDecayBuf   = cached.buffer;
+        return;
+    }
     const gl = this.gl;
 
     const vs = this.createShader(gl.VERTEX_SHADER, `
@@ -437,6 +457,16 @@ function _initHeatDecayProgram() {
         -1,-1,  1,-1,  -1,1,  1,1
     ]), gl.STATIC_DRAW);
     this._heatDecayBuf = buf;
+
+    BaseWebGLPainter._programCache.heatDecay = {
+        program: prog,
+        locations: {
+            a_pos:     this._heatDecayAPos,
+            u_heatmap: this._heatDecayUTex,
+            u_step:    this._heatDecayUStep,
+        },
+        buffer: buf,
+    };
 }
 
 /**

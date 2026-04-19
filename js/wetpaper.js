@@ -36,6 +36,13 @@ function _stepWetPaper() {
  * 初始化热度扩散 shader：对 smudgeHeatmap 做各向同性扩散，热度向外晕染。
  */
 function _initWetSpreadProgram() {
+    const cached = BaseWebGLPainter._programCache.wetSpread;
+    if (cached) {
+        this._wetSpreadProgram = cached.program;
+        this._wetSpreadLoc     = cached.locations;
+        this._wetSpreadBuf     = cached.buffer;
+        return;
+    }
     const gl = this.gl;
 
     const vs = this.createShader(gl.VERTEX_SHADER, `
@@ -86,6 +93,12 @@ function _initWetSpreadProgram() {
         u_resolution: gl.getUniformLocation(prog, 'u_resolution'),
         u_radius:     gl.getUniformLocation(prog, 'u_radius'),
         u_strength:   gl.getUniformLocation(prog, 'u_strength'),
+    };
+
+    BaseWebGLPainter._programCache.wetSpread = {
+        program: prog,
+        locations: this._wetSpreadLoc,
+        buffer: this._wetSpreadBuf,
     };
 }
 
@@ -215,6 +228,13 @@ function updateWetHeatmap(x, y, size, brushCanvas, useFalloff, heatStep = HEAT_A
  * 结果写回 canvas 纹理（通过 swapTextures）
  */
 function _initWetColorProgram() {
+    const cached = BaseWebGLPainter._programCache.wetColor;
+    if (cached) {
+        this._wetColorProgram = cached.program;
+        this._wetColorLoc     = cached.locations;
+        this._wetColorBuf     = cached.buffer;
+        return;
+    }
     const gl = this.gl;
 
     const vs = this.createShader(gl.VERTEX_SHADER, `
@@ -296,6 +316,12 @@ function _initWetColorProgram() {
         u_depositGradMin:    gl.getUniformLocation(prog, 'u_depositGradMin'),
         u_depositGradMax:    gl.getUniformLocation(prog, 'u_depositGradMax'),
         u_diluteGradSuppress:gl.getUniformLocation(prog, 'u_diluteGradSuppress'),
+    };
+
+    BaseWebGLPainter._programCache.wetColor = {
+        program: prog,
+        locations: this._wetColorLoc,
+        buffer: this._wetColorBuf,
     };
 }
 
