@@ -297,28 +297,14 @@ class KMWebGLPainter extends BaseWebGLPainter {
 
             if (u_isWatercolor > 0.5) {
                 // 热区晕染：采样位置向外偏移，颜色往外渗
-                float bleedRadius = maskHot * u_brushRadius * u_wetBleedRadius;
-                vec2 bleedDir = normalize(v_canvasCoord - u_currentPosition + vec2(0.001));
-                vec2 bleedUV = (v_canvasCoord + bleedDir * bleedRadius) / u_resolution;
-                bleedUV.y = 1.0 - bleedUV.y;
-                bleedUV = clamp(bleedUV, 0.0, 1.0);
-                vec4 bleedSample = texture2D(u_canvasTexture, bleedUV);
-                canvasColor = mix(canvasColor, bleedSample, maskHot * u_wetBleedMix);
+                // 已移除 bleedSample 热区晕染（笔触侧向推色），由 _applyWetBleed 每帧扩散 pass 代劳
             }
 
             vec3 finalColor;
             if (u_isWatercolor > 0.5) {
-                // ── 冷区：稀释混色 + smudge 推色 ──
+                // ── 冷区：稀释混色（水彩不做 smudge 推色）──
                 float coldPaint = maskCold * u_baseMixStrength * u_wetColdMix;
-                vec3 coldResult = km_mix(canvasColor.rgb, activeColor, aBrush * coldPaint);
-                float smearReach = clamp(u_smearLen, 1.0, u_brushRadius) * u_wetSmearReach;
-                vec2 smearUV = (v_canvasCoord - u_smearDir * smearReach) / u_resolution;
-                smearUV.y = 1.0 - smearUV.y;
-                smearUV = clamp(smearUV, 0.0, 1.0);
-                vec3 smearRGB = texture2D(u_canvasTexture, smearUV).rgb;
-                // 浓度越高，smear 越弱：100% 时 smear 趋近 0，颜色不被画布拉淡
-                float smearGate = 1.0 - clamp(u_baseMixStrength, 0.0, 1.0);
-                vec3 coldOut = km_mix(coldResult, smearRGB, aBrush * u_wetSmudgeMix * maskCold * smearGate);
+                vec3 coldOut = km_mix(canvasColor.rgb, activeColor, aBrush * coldPaint);
 
                 // ── 热区：稀释晕染 ──
                 float hotPaint = maskHot * u_baseMixStrength * u_wetBleedMix;
