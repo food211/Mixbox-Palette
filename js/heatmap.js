@@ -39,6 +39,9 @@ function setupHeatmapTextures(w, h) {
     // wetHeatmap 独立分配，与 smudgeHeatmap 完全隔离
     this.textures.wetHeatmap  = this._createR8Texture(w, h);
     this.textures.wetHeatTemp = this._createR8Texture(w, h);
+    // wetMaskHeatmap：水彩 _applyWetColor 的额外区域 mask（与 wetHeatmap 取交集才上色）
+    this.textures.wetMaskHeatmap  = this._createR8Texture(w, h);
+    this.textures.wetMaskHeatTemp = this._createR8Texture(w, h);
     // 沉积热度图：松开时清空，不衰减，专门驱动咖啡圈效果
     this.textures.depositHeatmap  = this._createR8Texture(w, h);
     this.textures.depositHeatTemp = this._createR8Texture(w, h);
@@ -67,6 +70,15 @@ function setupHeatmapFramebuffers() {
     this.framebuffers.wetHeatTemp = gl.createFramebuffer();
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.wetHeatTemp);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.textures.wetHeatTemp, 0);
+
+    // wetMaskHeatmap FB
+    this.framebuffers.wetMaskHeatmap = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.wetMaskHeatmap);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.textures.wetMaskHeatmap, 0);
+
+    this.framebuffers.wetMaskHeatTemp = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.wetMaskHeatTemp);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.textures.wetMaskHeatTemp, 0);
 
     // 沉积热度图 FB
     this.framebuffers.depositHeatmap = gl.createFramebuffer();
@@ -116,6 +128,7 @@ function _initHeatmapProgram() {
         uniform float u_useFalloff;
         uniform float u_heatStep;
         uniform float u_heatMax;
+        uniform float u_useMaxMode;  // 0 = 累加（min(cap, prev + step*alpha)）；1 = MAX（max(prev, alpha*cap)）
 
         void main() {
             vec4 brushSample = texture2D(u_brushTexture, v_texCoord);
@@ -134,7 +147,9 @@ function _initHeatmapProgram() {
             vec2 uv = v_canvasCoord / u_resolution;
             uv.y = 1.0 - uv.y;
             float prevHeat = texture2D(u_heatmapTexture, uv).r;
-            float newHeat = min(u_heatMax, prevHeat + aBrush * u_heatStep);
+            float addHeat = min(u_heatMax, prevHeat + aBrush * u_heatStep);
+            float maxHeat = max(prevHeat, aBrush * u_heatMax);
+            float newHeat = mix(addHeat, maxHeat, u_useMaxMode);
             gl_FragColor = vec4(newHeat, 0.0, 0.0, 1.0);
         }
     `);
@@ -151,6 +166,7 @@ function _initHeatmapProgram() {
         u_heatmapTexture:  gl.getUniformLocation(this._heatmapProgram, 'u_heatmapTexture'),
         u_heatStep:        gl.getUniformLocation(this._heatmapProgram, 'u_heatStep'),
         u_heatMax:         gl.getUniformLocation(this._heatmapProgram, 'u_heatMax'),
+        u_useMaxMode:      gl.getUniformLocation(this._heatmapProgram, 'u_useMaxMode'),
     };
 
     BaseWebGLPainter._programCache.heatmap = {
@@ -200,6 +216,7 @@ function updateSmudgeHeatmap(x, y, size, brushCanvas, useFalloff, heatStep = HEA
     gl.uniform1f(this._heatmapLocations.u_useFalloff, +useFalloff);
     gl.uniform1f(this._heatmapLocations.u_heatStep, heatStep);
     gl.uniform1f(this._heatmapLocations.u_heatMax,  this._wetHeatCap ?? WET_HEAT_CAP_STEP);
+    gl.uniform1f(this._heatmapLocations.u_useMaxMode, 0.0);
 
     const positions = new Float32Array([
         x - halfSize, y - halfSize,
@@ -255,6 +272,7 @@ function updateDepositHeatmap(x, y, size, useFalloff, heatStep = DEPOSITE_HEAT_A
     gl.uniform1f(this._heatmapLocations.u_useFalloff, +useFalloff);
     gl.uniform1f(this._heatmapLocations.u_heatStep, heatStep);
     gl.uniform1f(this._heatmapLocations.u_heatMax,  this._wetHeatCap ?? WET_HEAT_CAP_STEP);
+    gl.uniform1f(this._heatmapLocations.u_useMaxMode, 0.0);
 
     const positions = new Float32Array([
         x - halfSize, y - halfSize,
@@ -373,6 +391,7 @@ function debugHeatmap(enable) {
     // 互斥：关闭其他 debug 模式
     this._debugWetPaperEnabled = false;
     this._debugDepositHeatmapEnabled = false;
+    this._debugWetMaskHeatmapEnabled = false;
 
     this._debugHeatmapEnabled = true;
     this._flushDebugHeatmap();
@@ -610,6 +629,7 @@ function debugDepositHeatmap(enable) {
     // 互斥：关闭其他 debug 模式
     this._debugHeatmapEnabled = false;
     this._debugWetPaperEnabled = false;
+    this._debugWetMaskHeatmapEnabled = false;
 
     this._debugDepositHeatmapEnabled = true;
     this._flushDebugDepositHeatmap();
@@ -657,8 +677,15 @@ function startHeatmapFadeOut() {
         if (painter._wetPaperActive && painter._wetHeatFrames > 0) {
             painter._wetHeatFrames--;
 
-            // wetHeatmap 独立衰减：复用同一条 _wetness 调制曲线
-            painter._decayWetHeatmap(HEAT_DECAY_STEP * decayScale);
+            // wetHeatmap 独立衰减：用专属常量，与涂抹解耦
+            const wetDecayScale = WET_HEAT_DECAY_SCALE_MAX
+                                + (WET_HEAT_DECAY_SCALE_MIN - WET_HEAT_DECAY_SCALE_MAX) * w;
+            painter._decayWetHeatmap(WET_HEAT_DECAY_STEP * wetDecayScale);
+
+            // wetMaskHeatmap 独立衰减：与 wetHeatmap 解耦，可单独调寿命
+            const wetMaskDecayScale = WET_MASK_HEAT_DECAY_SCALE_MAX
+                                    + (WET_MASK_HEAT_DECAY_SCALE_MIN - WET_MASK_HEAT_DECAY_SCALE_MAX) * w;
+            painter._decayWetMaskHeatmap(WET_MASK_HEAT_DECAY_STEP * wetMaskDecayScale);
 
             painter._spreadWetHeatmap();
 
@@ -685,7 +712,10 @@ function startHeatmapFadeOut() {
         }
 
         // 任一 debug overlay 开启时刷新一次屏幕
-        if (painter._debugHeatmapEnabled || painter._debugWetPaperEnabled || painter._debugDepositHeatmapEnabled) painter.flush();
+        if (painter._debugHeatmapEnabled
+            || painter._debugWetPaperEnabled
+            || painter._debugDepositHeatmapEnabled
+            || painter._debugWetMaskHeatmapEnabled) painter.flush();
 
         painter._fadeRafId = requestAnimationFrame(tick);
     }
@@ -717,10 +747,12 @@ function stopHeatmapFadeOut() {
  */
 function listDebugCommands() {
     const cmds = [
-        ['debugHeatmap()',         '切换 smudge/wet 热度图可视化（会衰减）'],
-        ['debugDepositHeatmap()',  '切换 deposit 热度图可视化（不衰减，松开清空）'],
-        ['debugWetPaper()',        '切换 wetHeatmap 可视化（与 debugHeatmap 同源）'],
-        ['help()',                 '列出本清单'],
+        ['debugHeatmap()         (dh) ', '切换 smudge/wet 热度图可视化（会衰减）'],
+        ['debugDepositHeatmap()  (ddh)', '切换 deposit 热度图可视化（不衰减，松开清空）'],
+        ['debugWetPaper()        (dwp)', '切换 wetHeatmap 可视化（与 debugHeatmap 同源）'],
+        ['debugWetMask()         (dwm)', '切换 wetMask × wetHeatmap 交集可视化（_applyWetColor 实际生效区）'],
+        ['toggleWetMask(t/f)     (twm)', '启用/关闭 _applyWetColor 取 mask 交集（默认启用）'],
+        ['help()                 (h)  ', '列出本清单'],
     ];
     console.log('%c[Painter Debug Commands]', 'color:#6af;font-weight:bold');
     for (const [sig, desc] of cmds) {

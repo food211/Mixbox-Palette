@@ -309,10 +309,51 @@ function _spreadDepositHeatmap() {
  */
 function refreshWetHeatLifetime() {
     const w = this._wetness ?? 0.5;
-    const decayScale = HEAT_DECAY_SCALE_MAX
-                     + (HEAT_DECAY_SCALE_MIN - HEAT_DECAY_SCALE_MAX) * w;
-    const effectiveDecay = HEAT_DECAY_STEP * decayScale;
+    const decayScale = WET_HEAT_DECAY_SCALE_MAX
+                     + (WET_HEAT_DECAY_SCALE_MIN - WET_HEAT_DECAY_SCALE_MAX) * w;
+    const effectiveDecay = WET_HEAT_DECAY_STEP * decayScale;
     this._wetHeatFrames = Math.ceil(1.0 / effectiveDecay) + 60;
+}
+
+/**
+ * 生成/缓存固定柔边圆笔的 canvas（径向渐变，与 brush-manager 的 'soft' 类型一致）。
+ * wetMaskHeatmap 专用：不论用户实际选了什么笔刷，mask 注入恒用柔边形状，
+ * 让水彩"上色区域"边界自然柔和。
+ */
+function _getOrCreateSoftBrushCanvas(size) {
+    if (!this._softBrushCanvasCache) this._softBrushCanvasCache = new Map();
+    const key = size | 0;
+    const cached = this._softBrushCanvasCache.get(key);
+    if (cached) return cached;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = size * 2;
+    canvas.height = size * 2;
+    const ctx = canvas.getContext('2d');
+    const cx = size, cy = size;
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, size);
+    grad.addColorStop(0,   'rgba(255,255,255,1)');
+    grad.addColorStop(0.7, 'rgba(255,255,255,0.5)');
+    grad.addColorStop(1,   'rgba(255,255,255,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size * 2, size * 2);
+
+    this._softBrushCanvasCache.set(key, canvas);
+    return canvas;
+}
+
+/**
+ * 取/建 wetMask 专属柔边笔 GPU 纹理；canvas 变化时重建。
+ */
+function _getOrCreateSoftBrushTexture(size) {
+    const canvas = this._getOrCreateSoftBrushCanvas(size);
+    if (this._softBrushTexture && this._softBrushTextureCanvas === canvas) {
+        return this._softBrushTexture;
+    }
+    if (this._softBrushTexture) this.gl.deleteTexture(this._softBrushTexture);
+    this._softBrushTexture = this.createBrushTextureFromCanvas(canvas);
+    this._softBrushTextureCanvas = canvas;
+    return this._softBrushTexture;
 }
 
 function updateWetHeatmap(x, y, size, brushCanvas, useFalloff, heatStep = HEAT_ACCUMULATE_STEP) {
@@ -341,6 +382,12 @@ function updateWetHeatmap(x, y, size, brushCanvas, useFalloff, heatStep = HEAT_A
     gl.bindTexture(gl.TEXTURE_2D, this.textures.depositHeatTemp);
     gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, cw, ch);
     gl.bindTexture(gl.TEXTURE_2D, null);
+
+    // ── copy 3：wetMaskHeatmap → wetMaskHeatTemp ──
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.wetMaskHeatmap);
+    gl.bindTexture(gl.TEXTURE_2D, this.textures.wetMaskHeatTemp);
+    gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, cw, ch);
+    gl.bindTexture(gl.TEXTURE_2D, null);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
     // 共用 program 绑定、position buffer、uniforms
@@ -357,6 +404,7 @@ function updateWetHeatmap(x, y, size, brushCanvas, useFalloff, heatStep = HEAT_A
     gl.uniform1f(this._heatmapLocations.u_useFalloff, +useFalloff);
     gl.uniform1f(this._heatmapLocations.u_heatStep, heatStep);
     gl.uniform1f(this._heatmapLocations.u_heatMax, heatMax);
+    gl.uniform1f(this._heatmapLocations.u_useMaxMode, 0.0); // 默认累加模式（draw1/2 用）
 
     const positions = new Float32Array([
         x - halfSize, y - halfSize,
@@ -385,6 +433,44 @@ function updateWetHeatmap(x, y, size, brushCanvas, useFalloff, heatStep = HEAT_A
     gl.bindTexture(gl.TEXTURE_2D, this.textures.depositHeatTemp);
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.depositHeatmap);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+    // ── draw 3：wetMaskHeatmap ──
+    // 固定柔边圆笔，且笔刷尺寸放大到 2×（让 mask 覆盖区比 wetHeatmap 更外扩）
+    const maskSize = size * 2;
+    const maskHalf = maskSize / 2;
+    const softBrushTex = this._getOrCreateSoftBrushTexture(maskSize);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, softBrushTex);
+    gl.uniform1i(this._heatmapLocations.u_brushTexture, 0);
+
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.textures.wetMaskHeatTemp);
+    gl.uniform1i(this._heatmapLocations.u_heatmapTexture, 1);
+
+    // 重写 quad（2×）和半径，配 mask 专属步长
+    const maskQuad = new Float32Array([
+        x - maskHalf, y - maskHalf,
+        x + maskHalf, y - maskHalf,
+        x - maskHalf, y + maskHalf,
+        x + maskHalf, y + maskHalf,
+    ]);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.position);
+    gl.bufferData(gl.ARRAY_BUFFER, maskQuad, gl.DYNAMIC_DRAW);
+    gl.uniform1f(this._heatmapLocations.u_brushRadius, maskHalf);
+    gl.uniform1f(this._heatmapLocations.u_heatStep, WET_MASK_HEAT_ACCUMULATE_STEP);
+    // MAX 模式：每像素热度直接锁定为 brushAlpha × heatMax，不随叠加次数累积
+    // 半径方向的形状永远等于 brush alpha 形状
+    gl.uniform1f(this._heatmapLocations.u_useMaxMode, 1.0);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.wetMaskHeatmap);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+    // 临时诊断：draw3 后立即读 mask 中心像素
+    if (this._wetMaskProbe) {
+        const px = new Uint8Array(4);
+        gl.readPixels(x | 0, ch - (y | 0), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+        console.log(`[mask-probe] @(${x|0},${y|0}) R=${px[0]}`);
+    }
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 }
@@ -421,6 +507,8 @@ function _initWetColorProgram() {
 
         uniform sampler2D u_canvas;       // 当前画布
         uniform sampler2D u_wetHeatmap;   // 湿度图
+        uniform sampler2D u_wetMask;      // 区域 mask：与 wetHeatmap 取交集才上色
+        uniform float u_wetMaskEnabled;   // 0=关闭 mask（行为退回老版），1=启用
         uniform vec2 u_resolution;
         uniform vec3 u_color;             // 笔刷颜色
         uniform float u_gradRadius;       // 梯度采样半径（像素）
@@ -435,6 +523,10 @@ function _initWetColorProgram() {
         void main() {
             vec2 px = 1.0 / u_resolution;
             float heat = texture2D(u_wetHeatmap, v_uv).r;
+            float mask = (u_wetMaskEnabled > 0.5) ? texture2D(u_wetMask, v_uv).r : 1.0;
+
+            // 区域 mask 为 0 直接丢弃（两图取交集）；mask 关闭时恒为 1
+            if (mask < 0.001) discard;
 
             // ── 梯度计算（4邻居，WebGL1 无 dFdx）──
             float r  = texture2D(u_wetHeatmap, v_uv + vec2( px.x * u_gradRadius, 0.0)).r;
@@ -447,12 +539,12 @@ function _initWetColorProgram() {
 
             // ── 效果1：梯度区颜料沉积（强度全权由 u_depositStr 控制）──
             float depositMask = smoothstep(u_depositGradMin, u_depositGradMax, grad);
-            float depositAmt  = depositMask * u_depositStr;
+            float depositAmt  = depositMask * u_depositStr * mask;
             vec3 deposited = mix(canvas.rgb, u_color, depositAmt);
 
             // ── 效果2：高热区稀释（强度全权由 u_diluteStr 控制）──
             float diluteMask = heat * (1.0 - smoothstep(0.1, u_diluteGradSuppress, grad));
-            float diluteAmt  = diluteMask * u_diluteStr;
+            float diluteAmt  = diluteMask * u_diluteStr * mask;
             vec3 diluteTarget = mix(canvas.rgb, u_color, 0.5);
             vec3 outRGB = mix(deposited, diluteTarget, diluteAmt);
 
@@ -478,6 +570,8 @@ function _initWetColorProgram() {
         a_pos:        gl.getAttribLocation(prog,  'a_pos'),
         u_canvas:     gl.getUniformLocation(prog, 'u_canvas'),
         u_wetHeatmap: gl.getUniformLocation(prog, 'u_wetHeatmap'),
+        u_wetMask:        gl.getUniformLocation(prog, 'u_wetMask'),
+        u_wetMaskEnabled: gl.getUniformLocation(prog, 'u_wetMaskEnabled'),
         u_resolution: gl.getUniformLocation(prog, 'u_resolution'),
         u_color:      gl.getUniformLocation(prog, 'u_color'),
         u_gradRadius: gl.getUniformLocation(prog, 'u_gradRadius'),
@@ -529,6 +623,10 @@ function _applyWetColor(color) {
     gl.bindTexture(gl.TEXTURE_2D, this.textures.wetHeatmap);
     gl.uniform1i(this._wetColorLoc.u_wetHeatmap, 1);
 
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, this.textures.wetMaskHeatmap);
+    gl.uniform1i(this._wetColorLoc.u_wetMask, 2);
+
     // wet低→沉积强、稀释弱；wet高→沉积弱、稀释强
     const w = this._wetness ?? 0.5;
     const depositStr = WET_DEPOSIT_STRENGTH * (WET_DEPOSIT_SCALE_MAX + (WET_DEPOSIT_SCALE_MIN - WET_DEPOSIT_SCALE_MAX) * w);
@@ -542,6 +640,8 @@ function _applyWetColor(color) {
     gl.uniform1f(this._wetColorLoc.u_depositGradMin,     WET_DEPOSIT_GRAD_MIN);
     gl.uniform1f(this._wetColorLoc.u_depositGradMax,     WET_DEPOSIT_GRAD_MAX);
     gl.uniform1f(this._wetColorLoc.u_diluteGradSuppress, WET_DILUTE_GRAD_SUPPRESS);
+    // 默认启用 mask；用 painter.debugWetMask(false) 可关闭
+    gl.uniform1f(this._wetColorLoc.u_wetMaskEnabled, (this._wetMaskEnabled !== false) ? 1.0 : 0.0);
 
     this._disableAllVertexAttribs();
     gl.bindBuffer(gl.ARRAY_BUFFER, this._wetColorBuf);
@@ -623,6 +723,8 @@ function _applyDepositColorPass(color, depositStr) {
     gl.uniform1f(this._wetColorLoc.u_depositGradMin,     WET_DEPOSIT_GRAD_MIN);
     gl.uniform1f(this._wetColorLoc.u_depositGradMax,     WET_DEPOSIT_GRAD_MAX);
     gl.uniform1f(this._wetColorLoc.u_diluteGradSuppress, WET_DILUTE_GRAD_SUPPRESS);
+    // 抬笔咖啡环 pass 强制不走 mask（它的设计基于 depositHeatmap 梯度本身）
+    gl.uniform1f(this._wetColorLoc.u_wetMaskEnabled, 0.0);
 
     this._disableAllVertexAttribs();
     gl.bindBuffer(gl.ARRAY_BUFFER, this._wetColorBuf);
@@ -896,15 +998,19 @@ function _stopWetPaperRaf() {
 }
 
 /**
- * 清零 wetHeatmap（落笔时 / 松开鼠标后调用）
- * 与 smudgeHeatmap 已分离，互不影响。
+ * 清零 wetHeatmap + wetMaskHeatmap（落笔时 / 松开鼠标后调用）
+ * 两张图都是水彩独立资源，与 smudgeHeatmap 分离，互不影响。
  */
 function clearWetHeatmap() {
     const gl = this.gl;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.wetHeatmap);
     gl.clearColor(0, 0, 0, 1);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.wetHeatmap);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.wetHeatTemp);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.wetMaskHeatmap);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.wetMaskHeatTemp);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 }
@@ -936,6 +1042,8 @@ function debugWetPaper(enable) {
         }
     }
     this._debugHeatmapEnabled = false;
+    this._debugDepositHeatmapEnabled = false;
+    this._debugWetMaskHeatmapEnabled = false;
 
     this._debugWetPaperEnabled = true;
     this._flushDebugWetPaper();
@@ -945,6 +1053,196 @@ function debugWetPaper(enable) {
 function _flushDebugWetPaper(opacity = 1.0) {
     if (!this._debugWetPaperEnabled) return;
     this._flushHeatOverlay(this.textures.wetHeatmap, opacity);
+}
+
+/**
+ * 切换 wetMaskHeatmap 在 _applyWetColor 中的启用状态。
+ *   painter.toggleWetMask()       → 切换
+ *   painter.toggleWetMask(true)   → 启用 mask（默认行为）
+ *   painter.toggleWetMask(false)  → 关闭 mask（_applyWetColor 行为退回老版）
+ */
+function toggleWetMask(enable) {
+    if (enable === undefined) enable = (this._wetMaskEnabled === false);
+    this._wetMaskEnabled = !!enable;
+    console.log(`[toggleWetMask] ${this._wetMaskEnabled ? '启用' : '关闭'}`);
+}
+
+/**
+ * 可视化 wetMask × wetHeatmap 的交集（即 _applyWetColor 实际生效区域）。
+ * 与 debugHeatmap / debugWetPaper / debugDepositHeatmap 互斥。
+ *   painter.debugWetMask()        → 切换
+ *   painter.debugWetMask(true)    → 开启
+ *   painter.debugWetMask(false)   → 关闭
+ */
+function debugWetMask(enable) {
+    if (enable === undefined) enable = (this._debugWetMaskHeatmapEnabled !== true);
+    if (!enable) {
+        this._debugWetMaskHeatmapEnabled = false;
+        console.log('[debugWetMask] 关闭');
+        return;
+    }
+    // 借用 _debugHeatProgram；未初始化则借 debugHeatmap(true) 静默启动
+    if (!this._debugHeatProgram) {
+        const origLog = console.log;
+        console.log = () => {};
+        try { this.debugHeatmap(true); } finally { console.log = origLog; }
+    }
+    // 互斥
+    this._debugHeatmapEnabled = false;
+    this._debugWetPaperEnabled = false;
+    this._debugDepositHeatmapEnabled = false;
+
+    this._debugWetMaskHeatmapEnabled = true;
+    this._flushDebugWetMaskHeatmap();
+    console.log('[debugWetMask] 开启 — 再次调用切换关闭');
+}
+
+/**
+ * 初始化"交集 overlay" shader：采样 wetMaskHeatmap 与 wetHeatmap，按 min 显示
+ * 表示 _applyWetColor 真实生效的区域（两图取交集）。
+ */
+function _initWetMaskIntersectProgram() {
+    if (this._wetMaskIntersectProgram) return;
+    const cached = BaseWebGLPainter._programCache.wetMaskIntersect;
+    if (cached) {
+        this._wetMaskIntersectProgram = cached.program;
+        this._wetMaskIntersectLoc     = cached.locations;
+        this._wetMaskIntersectBuf     = cached.buffer;
+        return;
+    }
+    const gl = this.gl;
+
+    const vs = this.createShader(gl.VERTEX_SHADER, `
+        attribute vec2 a_pos;
+        varying vec2 v_uv;
+        void main() {
+            v_uv = vec2(a_pos.x * 0.5 + 0.5, a_pos.y * 0.5 + 0.5);
+            gl_Position = vec4(a_pos, 0.0, 1.0);
+        }
+    `);
+    const fs = this.createShader(gl.FRAGMENT_SHADER, `
+        precision mediump float;
+        uniform sampler2D u_mask;
+        uniform sampler2D u_wet;
+        uniform float u_opacity;
+        varying vec2 v_uv;
+
+        vec3 heatColor(float t) {
+            vec3 c0 = vec3(0.0, 0.0, 1.0);
+            vec3 c1 = vec3(0.0, 1.0, 1.0);
+            vec3 c2 = vec3(0.0, 1.0, 0.0);
+            vec3 c3 = vec3(1.0, 1.0, 0.0);
+            vec3 c4 = vec3(1.0, 0.0, 0.0);
+            vec3 c5 = vec3(1.0, 1.0, 1.0);
+            if (t < 0.2) return mix(c0, c1, t / 0.2);
+            if (t < 0.4) return mix(c1, c2, (t - 0.2) / 0.2);
+            if (t < 0.6) return mix(c2, c3, (t - 0.4) / 0.2);
+            if (t < 0.8) return mix(c3, c4, (t - 0.6) / 0.2);
+            return mix(c4, c5, (t - 0.8) / 0.2);
+        }
+
+        void main() {
+            float m = texture2D(u_mask, v_uv).r;
+            float w = texture2D(u_wet,  v_uv).r;
+            float t = min(m, w);   // 交集 = 两边都有热度的区域
+            if (t < 0.01) discard;
+            float alpha = pow(t, 0.5) * 0.75 * u_opacity;
+            gl_FragColor = vec4(heatColor(t), alpha);
+        }
+    `);
+
+    const prog = this.createProgram(vs, fs);
+    this._wetMaskIntersectProgram = prog;
+    this._wetMaskIntersectLoc = {
+        a_pos:     gl.getAttribLocation(prog,  'a_pos'),
+        u_mask:    gl.getUniformLocation(prog, 'u_mask'),
+        u_wet:     gl.getUniformLocation(prog, 'u_wet'),
+        u_opacity: gl.getUniformLocation(prog, 'u_opacity'),
+    };
+
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+    this._wetMaskIntersectBuf = buf;
+
+    BaseWebGLPainter._programCache.wetMaskIntersect = {
+        program: prog,
+        locations: this._wetMaskIntersectLoc,
+        buffer: buf,
+    };
+}
+
+function _flushDebugWetMaskHeatmap(opacity = 1.0) {
+    if (!this._debugWetMaskHeatmapEnabled) return;
+    const maskTex = this.textures && this.textures.wetMaskHeatmap;
+    const wetTex  = this.textures && this.textures.wetHeatmap;
+    if (!maskTex || !wetTex) return;
+
+    this._initWetMaskIntersectProgram();
+    if (!this._wetMaskIntersectProgram) return;
+
+    const gl = this.gl;
+    const cw = this.canvas.width;
+    const ch = this.canvas.height;
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, cw, ch);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+    gl.useProgram(this._wetMaskIntersectProgram);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, maskTex);
+    gl.uniform1i(this._wetMaskIntersectLoc.u_mask, 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, wetTex);
+    gl.uniform1i(this._wetMaskIntersectLoc.u_wet, 1);
+    gl.uniform1f(this._wetMaskIntersectLoc.u_opacity, opacity);
+
+    this._disableAllVertexAttribs();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this._wetMaskIntersectBuf);
+    gl.enableVertexAttribArray(this._wetMaskIntersectLoc.a_pos);
+    gl.vertexAttribPointer(this._wetMaskIntersectLoc.a_pos, 2, gl.FLOAT, false, 0, 0);
+
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    gl.disable(gl.BLEND);
+}
+
+/**
+ * 诊断：在画布中心 8 个采样点读 wetMaskHeatmap.r，打印到 console。
+ * console 调用：painter.dumpWetMask()
+ */
+function dumpWetMask() {
+    const gl = this.gl;
+    const cw = this.canvas.width;
+    const ch = this.canvas.height;
+    if (!this.framebuffers || !this.framebuffers.wetMaskHeatmap) {
+        console.warn('[dumpWetMask] wetMaskHeatmap FB 不存在 — 刷新页面');
+        return;
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.wetMaskHeatmap);
+    const px = new Uint8Array(4);
+    const samples = [];
+    for (let i = 0; i < 9; i++) {
+        const x = Math.floor((i % 3 + 1) / 4 * cw);
+        const y = Math.floor((Math.floor(i / 3) + 1) / 4 * ch);
+        gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+        samples.push(`(${x},${y})=${px[0]}`);
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    console.log('[dumpWetMask] R-channel:', samples.join('  '));
+}
+
+/**
+ * wetMaskHeatmap 独立衰减（与 wetHeatmap 解耦）
+ */
+function _decayWetMaskHeatmap(decay = 0.04) {
+    this._decayHeatmapGeneric(
+        decay,
+        this.framebuffers.wetMaskHeatmap,
+        this.textures.wetMaskHeatmap,
+        this.textures.wetMaskHeatTemp
+    );
 }
 
 // ─── 挂载 ─────────────────────────────────────────────────────────────────────
@@ -973,6 +1271,14 @@ Object.assign(BaseWebGLPainter.prototype, {
     refreshWetHeatLifetime,
     debugWetPaper,
     _flushDebugWetPaper,
+    toggleWetMask,
+    debugWetMask,
+    _flushDebugWetMaskHeatmap,
+    _initWetMaskIntersectProgram,
+    dumpWetMask,
+    _decayWetMaskHeatmap,
+    _getOrCreateSoftBrushCanvas,
+    _getOrCreateSoftBrushTexture,
 });
 
 console.log('wetpaper.js 加载成功');

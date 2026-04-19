@@ -34,13 +34,27 @@ const HEAT_ACCUMULATE_STEP = 0.03;
 /** 水彩 depositHeatmap 每次 drawcall 叠加的热度量，控制咖啡环触发速度 */
 const DEPOSITE_HEAT_ACCUMULATE_STEP = 0.12;
 
-/** RAF 每帧衰减的热度量（0~1）。影响水彩上色范围和涂抹热度消退速度 */
+/** RAF 每帧衰减的热度量（0~1）。仅作用于 smudgeHeatmap（涂抹工具热度消退） */
 const HEAT_DECAY_STEP = 0.02;
 
 /** 衰减速度随湿度调制：wet=0 时 MAX 倍（干得快）、wet=1 时 MIN 倍（干得慢） */
 /** 典型值：wet=0 ~0.5秒 干透、wet=0.5 ~1秒、wet=1 ~2秒 */
 const HEAT_DECAY_SCALE_MIN = 0.42;
 const HEAT_DECAY_SCALE_MAX = 1.68;
+
+/** 水彩 wetHeatmap 专属衰减参数（与涂抹完全解耦，可独立调节湿润持续时间） */
+const WET_HEAT_DECAY_STEP = 0.02;
+const WET_HEAT_DECAY_SCALE_MIN = 0.42;
+const WET_HEAT_DECAY_SCALE_MAX = 1.68;
+
+/** 水彩 wetMaskHeatmap 专属注入步长（每次 drawcall 叠加量，与 wetHeatmap 解耦） */
+const WET_MASK_HEAT_ACCUMULATE_STEP = 0.05;
+
+/** 水彩 wetMaskHeatmap 专属衰减参数（独立于 wetHeatmap，控制 mask 区域的有效寿命） */
+/** 注：衰减须 < 注入才能积累；STEP=0.1 配 ACCUMULATE=0.06 → 单次净增长有限，需多次叠加 */
+const WET_MASK_HEAT_DECAY_STEP = 0.1;
+const WET_MASK_HEAT_DECAY_SCALE_MIN = 0.5;
+const WET_MASK_HEAT_DECAY_SCALE_MAX = 2.0;
 
 // ─── 混色 ─────────────────────────────────────────────────────────────────────
 

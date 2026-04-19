@@ -610,6 +610,7 @@ class BaseWebGLPainter {
         if (this._debugHeatmapEnabled)  this._flushDebugHeatmap(this._debugHeatOpacity ?? 1.0);
         if (this._debugWetPaperEnabled) this._flushDebugWetPaper(this._debugHeatOpacity ?? 1.0);
         if (this._debugDepositHeatmapEnabled) this._flushDebugDepositHeatmap(this._debugHeatOpacity ?? 1.0);
+        if (this._debugWetMaskHeatmapEnabled) this._flushDebugWetMaskHeatmap(this._debugHeatOpacity ?? 1.0);
     }
 
     /**
@@ -1452,6 +1453,12 @@ class BaseWebGLPainter {
             gl.deleteTexture(this.currentBrushTexture);
             this.currentBrushTexture = null;
         }
+        if (this._softBrushTexture) {
+            gl.deleteTexture(this._softBrushTexture);
+            this._softBrushTexture = null;
+            this._softBrushTextureCanvas = null;
+        }
+        if (this._softBrushCanvasCache) this._softBrushCanvasCache.clear();
         this.lastBrushCanvas = null;
 
         // shader programs / VBO / locations 全部模块级缓存，dispose 不释放（整个会话复用）。
