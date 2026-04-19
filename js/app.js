@@ -744,10 +744,12 @@ function bindEvents() {
 
     const smudgeBtn = document.getElementById('smudgeBtn');
     smudgeBtn.addEventListener('click', () => {
+        const brushPreviewBtn = document.getElementById('brushPreviewBtn');
         if (currentTool === 'brush') {
             currentTool = 'smudge';
             currentBrush = { type: toolStates.smudge.brushType, image: null };
             smudgeBtn.classList.add('active');
+            if (brushPreviewBtn) brushPreviewBtn.classList.add('smudge-active');
             updateStatus('smudge');
         } else {
             currentTool = 'brush';
@@ -758,6 +760,7 @@ function bindEvents() {
                 currentBrush.type = 'watercolor';
             }
             smudgeBtn.classList.remove('active');
+            if (brushPreviewBtn) brushPreviewBtn.classList.remove('smudge-active');
             updateStatus('draw');
         }
         const mode = getCurrentMode();
