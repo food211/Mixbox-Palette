@@ -1,5 +1,24 @@
 # 更新日志 / Changelog
 
+== V1.4.1 ==
+[ZH]
+### 新增
+- **日语界面支持** — 新增日文 UI，语言按钮点击可在英语 / 中文 / 日语间循环切换；首次打开会自动跟随系统语言。界面中的颜料名仍保留英文，方便日本水彩圈对照专业术语
+- **操作说明新增一条** — 使用水彩笔时推荐切换到 KM 引擎，混色结果会更自然
+
+### 优化
+- **语言选择现在会被记住** — 切换语言后刷新或重开插件，会停留在你上次选的语言，不会被重置
+- **底部信息区微调** — 当前模式上移至操作说明之前，展开说明时状态也能一眼看到；整体留白稍收紧
+
+[EN]
+### New
+- **Japanese UI** — Japanese interface added. The language button now cycles through English / 中文 / 日本語, and first-time users follow their system language automatically. Pigment names stay in English so Japanese watercolorists can cross-reference professional terminology easily
+- **New instruction tip** — When using the watercolor brush, switching to the KM engine produces more natural blending
+
+### Improvement
+- **Language selection persists** — Your chosen language now sticks across refreshes and plugin reopens, no longer silently resetting
+- **Info panel tweaks** — The current mode line moved above Instructions so the status stays visible even when the guide is expanded; overall padding tightened a bit
+
 == V1.4.0 ==
 [ZH]
 ### 新增

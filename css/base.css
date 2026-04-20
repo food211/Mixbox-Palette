@@ -87,3 +87,10 @@ h1 {
     overflow: hidden;
     white-space: nowrap;
 }
+
+/* 状态文本颜色（原 inline style，迁移到 class 以便 i18n 纯文本化） */
+#statusValue.status-draw { color: #e8a838; }
+#statusValue.status-smudge { color: #c87dd4; }
+#statusValue.status-eyedropper-fg { color: #1473e6; }
+#statusValue.status-eyedropper-bg { color: #44b556; }
+#statusValue.status-rect-select { color: #FF9800; }

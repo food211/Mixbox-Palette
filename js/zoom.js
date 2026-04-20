@@ -81,8 +81,10 @@ function initResizeHandle() {
 
         // 弹出确认框
         const isGrow = pendingWidth > _containerMaxWidth;
-        const tpl = I18N.t(isGrow ? 'resizeGrow' : 'resizeShrink');
-        const msg = tpl.replace('{from}', _containerMaxWidth).replace('{to}', pendingWidth);
+        const msg = I18N.t(isGrow ? 'resizeGrow' : 'resizeShrink', {
+            from: _containerMaxWidth,
+            to: pendingWidth
+        });
         confirmText.textContent = msg;
         okBtn.textContent = I18N.t('confirm');
         cancelBtn.textContent = I18N.t('cancel');
