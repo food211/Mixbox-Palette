@@ -58,14 +58,14 @@ body {
     transition: background 0.15s;
 }
 
-/* 扩大点击/触控热区（向容器外侧延伸 16px），视觉宽度仍 6px 不变。
+/* 扩大点击/触控热区（向容器外侧延伸 30px），视觉宽度仍 6px 不变。
    内侧不扩展，避免触发到画布/内容区 */
 #resizeHandleLeft::before {
     content: '';
     position: absolute;
     top: 0;
     bottom: 0;
-    left: -16px;
+    left: -30px;
     right: 0;
 }
 
@@ -75,7 +75,7 @@ body {
     top: 0;
     bottom: 0;
     left: 0;
-    right: -16px;
+    right: -30px;
 }
 
 .resize-handle:hover,
