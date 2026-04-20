@@ -1145,8 +1145,18 @@ function bindEvents() {
 
     function _flushPendingStroke() {
         if (!_pendingStroke || !isDrawing) return;
-        const { x, y, pressure } = _pendingStroke;
+        const { x, y, rawPressure } = _pendingStroke;
         _pendingStroke = null;
+
+        // 压力 EMA 平滑（每帧按 α 更新一次；pointermove 事件只喂 rawPressure，不在事件回调里算）
+        let pressure;
+        if (rawPressure != null) {
+            _smoothedPressure = _smoothedPressure * (1 - PRESSURE_EMA_ALPHA) + rawPressure * PRESSURE_EMA_ALPHA;
+            const PRESSURE_NORM = 0.8;
+            pressure = Math.pow(Math.min(1.0, _smoothedPressure / PRESSURE_NORM), pressureGamma);
+        } else {
+            pressure = 1.0;  // 鼠标 / 非 pen
+        }
 
         if (currentTool === 'brush') {
             const distance = Math.sqrt(Math.pow(x - lastX, 2) + Math.pow(y - lastY, 2));
@@ -1191,7 +1201,8 @@ function bindEvents() {
                 if (painter) painter.flush();
 
                 if (rawSteps > MAX_STEPS_PER_FRAME) {
-                    _pendingStroke = { x, y, pressure };
+                    // 留尾巴到下一帧消费；rawPressure 存回原始值，下一帧继续 EMA
+                    _pendingStroke = { x, y, rawPressure };
                 }
             }
         } else if (currentTool === 'smudge') {
@@ -1217,7 +1228,8 @@ function bindEvents() {
                 if (painter) painter.flush();
 
                 if (rawSteps > MAX_STEPS_PER_FRAME) {
-                    _pendingStroke = { x, y, pressure };
+                    // 留尾巴到下一帧消费；rawPressure 存回原始值，下一帧继续 EMA
+                    _pendingStroke = { x, y, rawPressure };
                 }
             }
         }
@@ -1315,19 +1327,12 @@ function bindEvents() {
         if (isDrawing && !isEyedropperMode) {
             const x = (e.clientX - rect.left) * (mixCanvas.width / rect.width);
             const y = (e.clientY - rect.top) * (mixCanvas.height / rect.height);
-            // pen + 压感开启时：先 EMA 平滑 e.pressure（pencil 原始读数抖动 ±0.03，
-            // 在软 gamma 档会被放大成肉眼粗细抖动），再归一化到 0.8 满压，最后走 gamma 曲线。
-            // 抬笔瞬间 e.pressure=0 被原样传下去（不 fallback 成 1.0，避免大笔触）。
-            const PRESSURE_NORM = 0.8;
-            let pressure;
-            if (pressureEnabled && e.pointerType === 'pen') {
-                _smoothedPressure = _smoothedPressure * (1 - PRESSURE_EMA_ALPHA) + e.pressure * PRESSURE_EMA_ALPHA;
-                pressure = Math.pow(Math.min(1.0, _smoothedPressure / PRESSURE_NORM), pressureGamma);
-            } else {
-                pressure = 1.0;
-            }
+            // pointermove 只记录原始 e.pressure（或 null 表示鼠标/非 pen）。
+            // EMA 平滑 + 归一化 + gamma 映射统一在 scheduler tick 的 _flushPendingStroke 里做，
+            // 确保 α 的时间常数按帧而非事件（pencil 120Hz 事件会让 α 的"帧权重"失真）。
+            const rawPressure = (pressureEnabled && e.pointerType === 'pen') ? e.pressure : null;
             // 只记录最新目标位置，实际绘制由 scheduler 'stroke-draw' 任务每帧消费
-            _pendingStroke = { x, y, pressure };
+            _pendingStroke = { x, y, rawPressure };
         }
 
         // 笔刷光标跟随（无论是否在绘制）——UI 必须即时响应，不走 scheduler
