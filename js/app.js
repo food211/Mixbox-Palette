@@ -1663,7 +1663,8 @@ function updateStatus(mode) {
  * 开始新笔画
  */
 function beginStroke(type, color = null, startX = 0, startY = 0, pressure = 1.0) {
-    const effectiveSize = Math.max(brushSize * 0.01, brushSize * pressure);
+    // 压感映射：pressure=0 → 40% 大小，pressure=1 → 100% 大小
+    const effectiveSize = brushSize * (0.4 + 0.6 * pressure);
     currentStroke = {
         type: type,
         points: [],
@@ -1942,8 +1943,9 @@ function drawBrush(x, y, color, prevX = x, prevY = y, pressure = 1.0) {
 
     const colorRGB = hexToRgb(color);
 
-    // 压感映射：1% ~ 100% 的笔刷大小；鼠标传入 1.0 保持满大小
-    const effectiveSize = Math.max(brushSize * 0.01, brushSize * pressure);
+    // 压感映射：pressure=0 → 40% 大小 & 50% 浓度，pressure=1 → 100% / 100%
+    const effectiveSize = brushSize * (0.4 + 0.6 * pressure);
+    const pressureMixScale = 0.5 + 0.5 * pressure;
 
     const isSplatter = currentBrush.type === 'splatter';
     const isCircle = currentBrush.type === 'circle';
@@ -1960,6 +1962,12 @@ function drawBrush(x, y, color, prevX = x, prevY = y, pressure = 1.0) {
     // 喷溅笔刷每步用随机角度旋转纹理，模拟喷枪散点无规律感
     const brushRotation = isSplatter ? Math.random() * Math.PI * 2 : 0;
 
+    // 临时按压感缩放 painter 的 baseMixStrength，画完恢复（不污染用户设置）
+    const originalMixStrength = painter.baseMixStrength;
+    if (pressureMixScale < 1.0) {
+        painter.baseMixStrength = originalMixStrength * pressureMixScale;
+    }
+
     const dirtyRect = painter.drawBrush(
         x,
         y,
@@ -1972,6 +1980,9 @@ function drawBrush(x, y, color, prevX = x, prevY = y, pressure = 1.0) {
         false, 1.0, false, 0, 0,
         brushRotation, 0, isWatercolor,
     );
+
+    // 恢复用户设置的 baseMixStrength
+    painter.baseMixStrength = originalMixStrength;
 
     return dirtyRect;
 }
