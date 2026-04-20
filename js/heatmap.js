@@ -663,6 +663,13 @@ function startHeatmapFadeOut() {
     if (FrameScheduler.has(taskName)) return;
 
     const painter = this;
+    // 水彩扩散/颜色 pass 降频：每 N tick 同步一次 GPU。
+    // JS 侧（计数/累加）仍每帧更新保证时间线精确；GPU 全屏 pass 批在同步帧执行，
+    // 攒住的多次 _applyWetColor 触发合并成一次。
+    // STRIDE 由 DeviceProfile 决定：桌面 1（每帧）、触控 2（每 2 帧）
+    const WET_PASS_STRIDE = (typeof DeviceProfile !== 'undefined' && DeviceProfile.WET_PASS_STRIDE) || 1;
+    let wetFrameCounter = 0;
+    let pendingApplyWetColorCount = 0;
 
     function tick() {
         if (painter._disposed) {
@@ -681,20 +688,7 @@ function startHeatmapFadeOut() {
         if (painter._wetPaperActive && painter._wetHeatFrames > 0) {
             painter._wetHeatFrames--;
 
-            // wetHeatmap 独立衰减：用专属常量，与涂抹解耦
-            const wetDecayScale = WET_HEAT_DECAY_SCALE_MAX
-                                + (WET_HEAT_DECAY_SCALE_MIN - WET_HEAT_DECAY_SCALE_MAX) * w;
-            painter._decayWetHeatmap(WET_HEAT_DECAY_STEP * wetDecayScale);
-
-            // wetMaskHeatmap 独立衰减：与 wetHeatmap 解耦，可单独调寿命
-            const wetMaskDecayScale = WET_MASK_HEAT_DECAY_SCALE_MAX
-                                    + (WET_MASK_HEAT_DECAY_SCALE_MIN - WET_MASK_HEAT_DECAY_SCALE_MAX) * w;
-            painter._decayWetMaskHeatmap(WET_MASK_HEAT_DECAY_STEP * wetMaskDecayScale);
-
-            painter._spreadWetHeatmap();
-
-            // 绘制期：叠加湿纸颜色效果（depositStr/diluteStr 由 _applyWetColor 内部按湿度调制）
-            // 浓度→写入间隔（帧数）线性插值，再换算成每帧累加步长 1/interval
+            // JS 侧每帧更新颜色写入累加器（时间线精确）
             if (painter._wetIsDrawing && painter._wetColor) {
                 const c = painter.baseMixStrength ?? 1.0;
                 const cNorm = Math.min(1.0, c / 0.85);
@@ -703,16 +697,40 @@ function startHeatmapFadeOut() {
                 painter._wetColorFreqAcc = (painter._wetColorFreqAcc ?? 1.0) + p;
                 if (painter._wetColorFreqAcc >= 1.0) {
                     painter._wetColorFreqAcc -= 1.0;
-                    painter._applyWetColor(painter._wetColor);
+                    pendingApplyWetColorCount++;
                 }
             }
 
-            // depositHeatmap 扩散 + 画布颜色扩散：
-            // 不要求 _wetIsDrawing，松开鼠标后也继续（让颜料"流完"直到 _wetHeatFrames 归零）
-            if (painter._wetColor) {
-                painter._spreadDepositHeatmap();
-                painter._applyWetBleed();
-                painter.flush();
+            // GPU 同步帧：每 WET_PASS_STRIDE tick 一次，把攒下的工作一次性 flush
+            wetFrameCounter++;
+            if (wetFrameCounter >= WET_PASS_STRIDE) {
+                wetFrameCounter = 0;
+
+                // wetHeatmap / wetMaskHeatmap 衰减：step × STRIDE 补偿频率减半
+                const wetDecayScale = WET_HEAT_DECAY_SCALE_MAX
+                                    + (WET_HEAT_DECAY_SCALE_MIN - WET_HEAT_DECAY_SCALE_MAX) * w;
+                painter._decayWetHeatmap(WET_HEAT_DECAY_STEP * wetDecayScale * WET_PASS_STRIDE);
+
+                const wetMaskDecayScale = WET_MASK_HEAT_DECAY_SCALE_MAX
+                                        + (WET_MASK_HEAT_DECAY_SCALE_MIN - WET_MASK_HEAT_DECAY_SCALE_MAX) * w;
+                painter._decayWetMaskHeatmap(WET_MASK_HEAT_DECAY_STEP * wetMaskDecayScale * WET_PASS_STRIDE);
+
+                painter._spreadWetHeatmap();
+
+                // 把攒下的 _applyWetColor 触发次数合并成一次调用
+                // （多次等频小剂量 vs 一次大剂量 视觉差异在高频下难分辨）
+                if (pendingApplyWetColorCount > 0 && painter._wetColor) {
+                    painter._applyWetColor(painter._wetColor);
+                    pendingApplyWetColorCount = 0;
+                }
+
+                // depositHeatmap 扩散 + 画布颜色扩散：
+                // 不要求 _wetIsDrawing，松开鼠标后也继续（让颜料"流完"直到 _wetHeatFrames 归零）
+                if (painter._wetColor) {
+                    painter._spreadDepositHeatmap();
+                    painter._applyWetBleed();
+                    painter.flush();
+                }
             }
         }
 

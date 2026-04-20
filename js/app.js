@@ -1089,8 +1089,9 @@ function bindEvents() {
     let lastY = 0;
     // pointermove 合批：只记录最新目标位置，由 scheduler 每帧消费
     let _pendingStroke = null;
-    // 单帧最多 draw 次数（超过则剩余距离留到下一帧，防止一帧超预算导致跳帧）
-    const MAX_STEPS_PER_FRAME = 15;
+    // 单帧最多 draw 次数（超过则剩余距离留到下一帧）。
+    // DeviceProfile 设备自适应：桌面 120（几乎不触发）、触控 15（性能兜底）
+    const MAX_STEPS_PER_FRAME = (typeof DeviceProfile !== 'undefined' && DeviceProfile.MAX_STEPS_PER_FRAME) || 15;
 
     function _flushPendingStroke() {
         if (!_pendingStroke || !isDrawing) return;

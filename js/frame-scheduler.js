@@ -23,8 +23,10 @@
     let sortedCache = null;    // 按 priority 排序的数组，tasks 变动时失效
     let rafId = 0;
     let lastTick = 0;
-    let targetFps = 60;                           // 0 表示不限制；默认 60
-    let minFrameMs = (1000 / 60) * 0.9;           // 留 10% 缓冲，避免 RAF 抖动导致掉帧
+    // 初始值从 DeviceProfile 读取（桌面 100 / 触控 60）；后续可 setTargetFPS 覆盖
+    const _initialFps = (typeof DeviceProfile !== 'undefined' && DeviceProfile.TARGET_FPS) || 60;
+    let targetFps = _initialFps;
+    let minFrameMs = (1000 / targetFps) * 0.9;    // 留 10% 缓冲，避免 RAF 抖动导致掉帧
 
     function _invalidateSort() { sortedCache = null; }
 
