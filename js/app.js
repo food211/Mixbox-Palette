@@ -98,6 +98,7 @@ const toolStates = {
 };
 let currentTool = 'brush';  // 'brush' 或 'smudge'
 let pressureEnabled = false;  // 压感开关
+let pressureGamma = 1.0;      // 压感灵敏度曲线（output = pressure ^ gamma，<1 灵敏，>1 迟钝）
 let smudgeSnapshotCache = null;
 
 // 当前笔刷类型（笔刷工具下决定走 brush 还是 watercolor state）
@@ -342,6 +343,7 @@ async function initApp() {
             backgroundColor = savedAppSettings.backgroundColor;
         }
         if (savedAppSettings.pressureEnabled != null) pressureEnabled = savedAppSettings.pressureEnabled;
+        if (savedAppSettings.pressureGamma != null) pressureGamma = savedAppSettings.pressureGamma;
         console.log('✅ 已加载保存的应用设置');
     }
 
@@ -743,6 +745,18 @@ function bindEvents() {
         pressureEnabled = !pressureEnabled;
         pressureBtn.classList.toggle('active', pressureEnabled);
         paletteStorage.saveAppSettings({ pressureEnabled });
+    });
+
+    // 压感灵敏度 4 档 toggle
+    const pressureSensBtns = document.querySelectorAll('.pressure-sens-btn');
+    pressureSensBtns.forEach(btn => {
+        const btnGamma = parseFloat(btn.dataset.gamma);
+        btn.classList.toggle('active', Math.abs(btnGamma - pressureGamma) < 0.001);
+        btn.addEventListener('click', () => {
+            pressureGamma = btnGamma;
+            pressureSensBtns.forEach(b => b.classList.toggle('active', b === btn));
+            paletteStorage.saveAppSettings({ pressureGamma });
+        });
     });
 
     const smudgeBtn = document.getElementById('smudgeBtn');
@@ -1180,7 +1194,11 @@ function bindEvents() {
         const rect = mixCanvas.getBoundingClientRect();
         const x = (e.clientX - rect.left) * (mixCanvas.width / rect.width);
         const y = (e.clientY - rect.top) * (mixCanvas.height / rect.height);
-        const pressure = (pressureEnabled && e.pointerType === 'pen') ? (e.pressure > 0 ? e.pressure : 1.0) : 1.0;
+        // pen + 压感开启时，直接用 e.pressure（包括 0，避免抬笔瞬间 pressure=0 被 fallback 成 1.0 画出一个大笔触）
+        // 灵敏度曲线：gamma<1 灵敏（轻压即响应），>1 迟钝（要重压才满压）
+        const pressure = (pressureEnabled && e.pointerType === 'pen')
+            ? Math.pow(e.pressure, pressureGamma)
+            : 1.0;
 
         if (isEyedropperMode) {
             return;
@@ -1256,7 +1274,11 @@ function bindEvents() {
         if (isDrawing && !isEyedropperMode) {
             const x = (e.clientX - rect.left) * (mixCanvas.width / rect.width);
             const y = (e.clientY - rect.top) * (mixCanvas.height / rect.height);
-            const pressure = (pressureEnabled && e.pointerType === 'pen') ? (e.pressure > 0 ? e.pressure : 1.0) : 1.0;
+            // pen + 压感开启时，直接用 e.pressure（包括 0，避免抬笔瞬间 pressure=0 被 fallback 成 1.0 画出一个大笔触）
+        // 灵敏度曲线：gamma<1 灵敏（轻压即响应），>1 迟钝（要重压才满压）
+        const pressure = (pressureEnabled && e.pointerType === 'pen')
+            ? Math.pow(e.pressure, pressureGamma)
+            : 1.0;
             // 只记录最新目标位置，实际绘制由 scheduler 'stroke-draw' 任务每帧消费
             _pendingStroke = { x, y, pressure };
         }
