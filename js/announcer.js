@@ -68,6 +68,7 @@ const Announcer = {
 
     /** 页面启动时调用：自动检查更新，完成后检查公告 */
     async init() {
+        this._installErrorHandlers();
         const updateData = await Updater.check();
         if (updateData && updateData.error) {
             // 处理错误情况，但仍然继续检查公告
@@ -306,6 +307,23 @@ const Announcer = {
         modal.classList.add('active');
     },
 
+    /**
+     * 执行 SW + cache 清理并 reload
+     */
+    _clearAndReload() {
+        if (navigator.serviceWorker) {
+            navigator.serviceWorker.getRegistrations().then(regs =>
+                Promise.all(regs.map(r => r.unregister())).then(() =>
+                    caches.keys().then(keys =>
+                        Promise.all(keys.map(k => caches.delete(k))).finally(() => location.reload(true))
+                    )
+                )
+            );
+        } else {
+            location.reload(true);
+        }
+    },
+
     _showReloadOverlay() {
         const overlay = document.createElement('div');
         overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#2b2b2b;display:flex;flex-direction:column;justify-content:center;align-items:center;z-index:10000;';
@@ -325,17 +343,84 @@ const Announcer = {
         overlay.appendChild(text);
         document.body.appendChild(overlay);
 
-        if (navigator.serviceWorker) {
-            navigator.serviceWorker.getRegistrations().then(regs =>
-                Promise.all(regs.map(r => r.unregister())).then(() =>
-                    caches.keys().then(keys =>
-                        Promise.all(keys.map(k => caches.delete(k))).finally(() => location.reload(true))
-                    )
-                )
-            );
-        } else {
-            location.reload(true);
-        }
+        this._clearAndReload();
+    },
+
+    /**
+     * 错误 overlay：捕获全局异常时调用。同样的背景，文字红色警告，带"刷新恢复"按钮。
+     * 一次会话只显示一次，避免错误级联反复弹窗。
+     */
+    _errorOverlayShown: false,
+    _showErrorOverlay(errorInfo) {
+        if (this._errorOverlayShown) return;
+        this._errorOverlayShown = true;
+
+        const t = (k) => (typeof I18N !== 'undefined') ? I18N.t(k) : k;
+
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#2b2b2b;display:flex;flex-direction:column;justify-content:center;align-items:center;z-index:10000;padding:20px;box-sizing:border-box;';
+
+        const icon = document.createElement('div');
+        icon.style.cssText = 'font-size:48px;margin-bottom:20px;';
+        icon.textContent = '⚠️';
+
+        const title = document.createElement('div');
+        title.style.cssText = 'color:#ff6b6b;font-size:16px;font-weight:600;margin-bottom:12px;text-align:center;';
+        title.textContent = t('errorOverlayTitle');
+
+        const desc = document.createElement('div');
+        desc.style.cssText = 'color:#c0c0c0;font-size:13px;margin-bottom:24px;text-align:center;max-width:420px;line-height:1.5;';
+        desc.textContent = t('errorOverlayDesc');
+
+        const detail = document.createElement('div');
+        detail.style.cssText = 'color:#808080;font-size:11px;margin-bottom:24px;text-align:center;max-width:420px;word-break:break-all;font-family:monospace;';
+        detail.textContent = errorInfo || '';
+
+        const btnRow = document.createElement('div');
+        btnRow.style.cssText = 'display:flex;gap:12px;';
+
+        const reloadBtn = document.createElement('button');
+        reloadBtn.style.cssText = 'padding:10px 24px;background:#2196F3;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:14px;';
+        reloadBtn.textContent = t('errorOverlayReload');
+        reloadBtn.onclick = () => {
+            track('error_reload', { info: (errorInfo || '').slice(0, 100) });
+            this._clearAndReload();
+        };
+
+        const dismissBtn = document.createElement('button');
+        dismissBtn.style.cssText = 'padding:10px 24px;background:#3c3c3c;color:#e0e0e0;border:1px solid #4c4c4c;border-radius:4px;cursor:pointer;font-size:14px;';
+        dismissBtn.textContent = t('errorOverlayDismiss');
+        dismissBtn.onclick = () => {
+            track('error_dismiss', { info: (errorInfo || '').slice(0, 100) });
+            overlay.remove();
+        };
+
+        btnRow.appendChild(reloadBtn);
+        btnRow.appendChild(dismissBtn);
+
+        overlay.appendChild(icon);
+        overlay.appendChild(title);
+        overlay.appendChild(desc);
+        if (errorInfo) overlay.appendChild(detail);
+        overlay.appendChild(btnRow);
+        document.body.appendChild(overlay);
+
+        track('error_overlay_shown', { info: (errorInfo || '').slice(0, 100) });
+    },
+
+    /**
+     * 安装全局错误监听（uncaught error + unhandled promise rejection）
+     */
+    _installErrorHandlers() {
+        window.addEventListener('error', (e) => {
+            const info = e.message + (e.filename ? ' @ ' + e.filename.split('/').pop() + ':' + e.lineno : '');
+            this._showErrorOverlay(info);
+        });
+        window.addEventListener('unhandledrejection', (e) => {
+            const reason = e.reason;
+            const info = reason && reason.message ? reason.message : String(reason || 'unknown');
+            this._showErrorOverlay(info);
+        });
     },
 
     // ── 公告弹窗 ──────────────────────────────────────────────────────────
