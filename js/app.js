@@ -1089,6 +1089,8 @@ function bindEvents() {
     let lastY = 0;
     // pointermove 合批：只记录最新目标位置，由 scheduler 每帧消费
     let _pendingStroke = null;
+    // 单帧最多 draw 次数（超过则剩余距离留到下一帧，防止一帧超预算导致跳帧）
+    const MAX_STEPS_PER_FRAME = 15;
 
     function _flushPendingStroke() {
         if (!_pendingStroke || !isDrawing) return;
@@ -1105,29 +1107,41 @@ function bindEvents() {
                 : brushType === 'splatter'
                 ? brushSize * 0.3
                 : brushSize * 0.25;
-            const spacingRatio = brushType === 'watercolor' ? 0.01 : brushSpacingRatio;
-            const effectiveMinDist = Math.max(1, baseSpacing * spacingRatio);
+            // 水彩间距用户侧不暴露，固定 35%：baseSpacing * 0.35 = brushSize * 0.25 * 0.35 ≈ brushSize * 0.088
+            const spacingRatio = brushType === 'watercolor' ? 0.35 : brushSpacingRatio;
+            // 下限跟笔刷大小挂钩（最少 1px），避免大笔 + 低 spacingRatio 导致单帧 draw 次数暴涨
+            const effectiveMinDist = Math.max(1, brushSize * 0.05, baseSpacing * spacingRatio);
 
             if (distance >= effectiveMinDist) {
-                const steps = Math.floor(distance / effectiveMinDist);
+                const rawSteps = Math.floor(distance / effectiveMinDist);
+                const steps = Math.min(rawSteps, MAX_STEPS_PER_FRAME);
+                // 超预算时只画前 steps 段，末尾剩余下一帧继续
+                const reachedRatio = steps / rawSteps;
+                const endX = lastX + (x - lastX) * reachedRatio;
+                const endY = lastY + (y - lastY) * reachedRatio;
+
                 if (steps > 1) {
                     let prevIX = lastX, prevIY = lastY;
                     for (let i = 1; i <= steps; i++) {
                         const ratio = i / steps;
-                        const interpX = lastX + (x - lastX) * ratio;
-                        const interpY = lastY + (y - lastY) * ratio;
+                        const interpX = lastX + (endX - lastX) * ratio;
+                        const interpY = lastY + (endY - lastY) * ratio;
                         drawBrush(interpX, interpY, activeColor, prevIX, prevIY, pressure);
                         addStrokePoint(interpX, interpY);
                         prevIX = interpX; prevIY = interpY;
                     }
                 } else {
-                    drawBrush(x, y, activeColor, lastX, lastY, pressure);
-                    addStrokePoint(x, y);
+                    drawBrush(endX, endY, activeColor, lastX, lastY, pressure);
+                    addStrokePoint(endX, endY);
                 }
 
-                lastX = x;
-                lastY = y;
+                lastX = endX;
+                lastY = endY;
                 if (painter) painter.flush();
+
+                if (rawSteps > MAX_STEPS_PER_FRAME) {
+                    _pendingStroke = { x, y, pressure };
+                }
             }
         } else if (currentTool === 'smudge') {
             const distance = Math.sqrt(Math.pow(x - lastX, 2) + Math.pow(y - lastY, 2));
@@ -1136,14 +1150,24 @@ function bindEvents() {
                 : currentBrush.type === 'splatter'
                 ? brushSize * 0.3
                 : brushSize * 0.25;
-            const smudgeMinDist = Math.max(1, smudgeBaseSpacing * smudgeSpacingRatio);
+            const smudgeMinDist = Math.max(1, brushSize * 0.05, smudgeBaseSpacing * smudgeSpacingRatio);
 
             if (distance >= smudgeMinDist) {
-                addStrokePoint(x, y);
-                smudgeAlongPath(lastX, lastY, x, y);
-                lastX = x;
-                lastY = y;
+                const rawSteps = Math.max(1, Math.floor(distance / smudgeMinDist));
+                const steps = Math.min(rawSteps, MAX_STEPS_PER_FRAME);
+                const reachedRatio = steps / rawSteps;
+                const endX = lastX + (x - lastX) * reachedRatio;
+                const endY = lastY + (y - lastY) * reachedRatio;
+
+                addStrokePoint(endX, endY);
+                smudgeAlongPath(lastX, lastY, endX, endY);
+                lastX = endX;
+                lastY = endY;
                 if (painter) painter.flush();
+
+                if (rawSteps > MAX_STEPS_PER_FRAME) {
+                    _pendingStroke = { x, y, pressure };
+                }
             }
         }
     }
@@ -1963,7 +1987,7 @@ function smudgeAlongPath(x1, y1, x2, y2) {
         : currentBrush.type === 'splatter'
         ? brushSize * 0.3
         : brushSize * 0.25;
-    const smudgeStep = Math.max(1, smudgeBaseSpacing * smudgeSpacingRatio);
+    const smudgeStep = Math.max(1, brushSize * 0.05, smudgeBaseSpacing * smudgeSpacingRatio);
     const steps = Math.max(1, Math.floor(distance / smudgeStep));
 
     let unionRect = null;
