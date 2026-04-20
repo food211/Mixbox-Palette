@@ -2,8 +2,8 @@
   "versions": [
     {
       "version": "V1.4.1",
-      "zh": "### 新增\r\n- **日语界面支持** — 新增日文 UI，语言按钮点击可在英语 / 中文 / 日语间循环切换；首次打开会自动跟随系统语言。界面中的颜料名仍保留英文，方便日本水彩圈对照专业术语\r\n- **操作说明新增一条** — 使用水彩笔时推荐切换到 KM 引擎，混色结果会更自然\r\n\r\n### 优化\r\n- **语言选择现在会被记住** — 切换语言后刷新或重开插件，会停留在你上次选的语言，不会被重置",
-      "en": "### New\r\n- **Japanese UI** — Japanese interface added. The language button now cycles through English / 中文 / 日本語, and first-time users follow their system language automatically. Pigment names stay in English so Japanese watercolorists can cross-reference professional terminology easily\r\n- **New instruction tip** — When using the watercolor brush, switching to the KM engine produces more natural blending\r\n\r\n### Improvement\r\n- **Language selection persists** — Your chosen language now sticks across refreshes and plugin reopens, no longer silently resetting"
+      "zh": "### 新增\r\n- **日语界面支持** — 新增日文 UI，语言按钮点击可在英语 / 中文 / 日语间循环切换；首次打开会自动跟随系统语言。界面中的颜料名仍保留英文，方便日本水彩圈对照专业术语\r\n- **操作说明新增一条** — 使用水彩笔时推荐切换到 KM 引擎，混色结果会更自然\r\n\r\n### 优化\r\n- **语言选择现在会被记住** — 切换语言后刷新或重开插件，会停留在你上次选的语言，不会被重置\r\n- **底部信息区微调** — 当前模式上移至操作说明之前，展开说明时状态也能一眼看到；整体留白稍收紧",
+      "en": "### New\r\n- **Japanese UI** — Japanese interface added. The language button now cycles through English / 中文 / 日本語, and first-time users follow their system language automatically. Pigment names stay in English so Japanese watercolorists can cross-reference professional terminology easily\r\n- **New instruction tip** — When using the watercolor brush, switching to the KM engine produces more natural blending\r\n\r\n### Improvement\r\n- **Language selection persists** — Your chosen language now sticks across refreshes and plugin reopens, no longer silently resetting\r\n- **Info panel tweaks** — The current mode line moved above Instructions so the status stays visible even when the guide is expanded; overall padding tightened a bit"
     },
     {
       "version": "V1.4.0",
@@ -16,5 +16,5 @@
       "en": "### Improvement\r\n- **More stable long sessions** — Overhauled memory handling around large canvases, canvas resize, and engine switching; far fewer stutters and black-screen incidents\r\n- **Smoother undo / redo** — Fixed an occasional wrong-frame flash when clicking undo repeatedly; long history stacks no longer bloat memory over time\r\n- **Faster brush rendering** — Lower-level drawing path optimized; continuous painting uses less resources\r\n\r\n### Fix\r\n- Fixed rare black-screen after switching engine or resizing the canvas\r\n- Fixed a case where strokes wouldn't register after resizing the canvas"
     }
   ],
-  "generatedAt": "2026-04-20T04:06:18.943Z"
+  "generatedAt": "2026-04-20T04:11:11.771Z"
 }

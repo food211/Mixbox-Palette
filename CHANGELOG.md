@@ -8,6 +8,7 @@
 
 ### 优化
 - **语言选择现在会被记住** — 切换语言后刷新或重开插件，会停留在你上次选的语言，不会被重置
+- **底部信息区微调** — 当前模式上移至操作说明之前，展开说明时状态也能一眼看到；整体留白稍收紧
 
 [EN]
 ### New
@@ -16,6 +17,7 @@
 
 ### Improvement
 - **Language selection persists** — Your chosen language now sticks across refreshes and plugin reopens, no longer silently resetting
+- **Info panel tweaks** — The current mode line moved above Instructions so the status stays visible even when the guide is expanded; overall padding tightened a bit
 
 == V1.4.0 ==
 [ZH]
