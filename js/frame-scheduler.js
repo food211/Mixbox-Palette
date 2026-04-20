@@ -23,6 +23,8 @@
     let sortedCache = null;    // 按 priority 排序的数组，tasks 变动时失效
     let rafId = 0;
     let lastTick = 0;
+    let targetFps = 60;                           // 0 表示不限制；默认 60
+    let minFrameMs = (1000 / 60) * 0.9;           // 留 10% 缓冲，避免 RAF 抖动导致掉帧
 
     function _invalidateSort() { sortedCache = null; }
 
@@ -39,6 +41,12 @@
     }
 
     function _tick(now) {
+        // 节流：帧间隔未到目标最小值就跳过这一轮（不更新 lastTick，等下一帧再判断）
+        if (targetFps > 0 && lastTick && (now - lastTick) < minFrameMs) {
+            rafId = requestAnimationFrame(_tick);
+            return;
+        }
+
         const dt = lastTick ? (now - lastTick) : 0;
         lastTick = now;
 
@@ -86,6 +94,17 @@
         },
 
         has(name) { return tasks.has(name); },
+
+        /**
+         * 设置目标帧率。0 表示不限制（跟随原生 RAF，通常 60/120Hz）。
+         * 设备屏幕 > 目标 fps 时会跳过中间帧，节省 GPU 开销。
+         */
+        setTargetFPS(fps) {
+            targetFps = Math.max(0, fps | 0);
+            minFrameMs = targetFps > 0 ? (1000 / targetFps) * 0.9 : 0;
+        },
+
+        getTargetFPS() { return targetFps; },
 
         // 调试用
         _list() {
