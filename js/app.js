@@ -49,15 +49,21 @@ function reportAnalyticsEnv() {
         else if (/Linux/i.test(ua)) os = 'linux';
         const isTouch = matchMedia('(pointer:coarse)').matches;
         const deviceType = isUXP ? 'desktop' : (isTouch ? 'mobile' : 'desktop');
+        const appVersion = (typeof Updater !== 'undefined' && Updater.CURRENT_VERSION) || 'unknown';
+        const hostVersion = isUXP ? (new URLSearchParams(window.location.search).get('host') || 'unknown') : 'n/a';
         window.gtag('set', 'user_properties', {
             app_env: isUXP ? 'uxp_plugin' : 'web_browser',
             device_os: os,
-            device_type: deviceType
+            device_type: deviceType,
+            app_version: appVersion,
+            host_version: hostVersion
         });
         track('app_env', {
             env: isUXP ? 'uxp_plugin' : 'web_browser',
             device_os: os,
-            device_type: deviceType
+            device_type: deviceType,
+            app_version: appVersion,
+            host_version: hostVersion
         });
     } catch (_) {}
 }
@@ -812,6 +818,10 @@ function bindEvents() {
             a.href = dataURL;
             a.download = 'mixbox-palette.png';
             a.click();
+            track('save_canvas_png', {
+                canvas_w: mixCanvas.width,
+                canvas_h: mixCanvas.height
+            });
         });
     } else {
     // 动态创建 overlay canvas，尺寸完全复制 mixCanvas
@@ -1594,6 +1604,12 @@ function extractAndSendPixels(sx, sy, sw, sh) {
         height: sh
     });
     console.log(`[rectSelect] Sent ${sw}x${sh} pixels to PS`);
+    const areaRatio = (sw * sh) / (mixCanvas.width * mixCanvas.height);
+    track('send_to_ps', {
+        region_w: sw,
+        region_h: sh,
+        area_ratio: Math.round(areaRatio * 100) / 100
+    });
 }
 
 /**
@@ -2072,9 +2088,11 @@ window.addEventListener("message", (e) => {
   } else if (type === "pastePixelsResult") {
     if (e.data.success) {
       console.log('[rectSelect] Transfer success');
+      track('send_to_ps_result', { success: true });
     } else {
       const errorKey = e.data.error || 'rectSelectFailed';
       showAlert(t(errorKey));
+      track('send_to_ps_result', { success: false, error: errorKey });
     }
   }
 });
