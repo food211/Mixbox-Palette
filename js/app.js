@@ -1206,7 +1206,7 @@ function bindEvents() {
                 const endY = lastY + (y - lastY) * reachedRatio;
 
                 addStrokePoint(endX, endY);
-                smudgeAlongPath(lastX, lastY, endX, endY);
+                smudgeAlongPath(lastX, lastY, endX, endY, pressure);
                 lastX = endX;
                 lastY = endY;
                 if (painter) painter.flush();
@@ -2045,7 +2045,7 @@ function drawBrush(x, y, color, prevX = x, prevY = y, pressure = 1.0) {
 /**
  * 涂抹工具：沿着路径涂抹
  */
-function smudgeAlongPath(x1, y1, x2, y2) {
+function smudgeAlongPath(x1, y1, x2, y2, pressure = 1.0) {
     if (!painter) return;
 
     const distance = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
@@ -2062,7 +2062,7 @@ function smudgeAlongPath(x1, y1, x2, y2) {
         const ratio = i / steps;
         const x = x1 + (x2 - x1) * ratio;
         const y = y1 + (y2 - y1) * ratio;
-        const r = smudgeAtPoint(x, y, x2 - x1, y2 - y1);
+        const r = smudgeAtPoint(x, y, x2 - x1, y2 - y1, pressure);
         if (r) {
             unionRect = unionRect ? unionDirtyRect(unionRect, r) : r;
         }
@@ -2072,32 +2072,44 @@ function smudgeAlongPath(x1, y1, x2, y2) {
 /**
  * 在指定点执行涂抹：复用笔刷 smear 逻辑，把移动方向后方的颜色带到当前位置。
  * density=0（baseMixStrength=0）→ 纯 smear，不混入新颜料，不会反复混浊。
+ *
+ * 压感映射与 brush 工具一致：size 范围 [floor, ceil]，strength 范围 [mixFloor, 1]。
+ * 为避免连续压力值导致 brushCanvas cache key 爆炸，size 量化到 2px 网格。
  */
-function smudgeAtPoint(x, y, dx, dy) {
+function smudgeAtPoint(x, y, dx, dy, pressure = 1.0) {
     if (!painter) return;
 
     const len = Math.sqrt(dx * dx + dy * dy);
     const dirX = len > 0 ? dx / len : 0;
     const dirY = len > 0 ? dy / len : 0;
-    const smearLen = brushSize * 0.5 * (smudgeStrength / 100) * 0.3;
 
+    // 压感：size 下限/上限、strength 下限（strength 上限固定 1.0，避免 smudgeMix 超范围）
+    const sizeScale = pressureSizeFloor + (pressureSizeCeil - pressureSizeFloor) * pressure;
+    const strengthScale = pressureMixFloor + (1 - pressureMixFloor) * pressure;
+    const effectiveSize = brushSize * sizeScale;
+    const effectiveStrength = smudgeStrength * strengthScale;
+
+    // smudgeCanvas 用的 size 量化到 2px 网格（防连续压力值导致 cache key 每帧不同）
+    const canvasSize = Math.max(2, Math.round(effectiveSize / 2) * 2);
     const brushCanvas = currentStrokeBrushCanvas
-        || brushManager.createBrushTexture(brushSize, currentBrush);
+        || brushManager.createBrushTexture(canvasSize, currentBrush);
+
+    const smearLen = effectiveSize * 0.5 * (effectiveStrength / 100) * 0.3;
 
     // smudgeMix：后方颜色参与物理混色的比例，低强度保留更多当前位置颜色感
     // 映射到原始 smudgeStrength 30~60 对应的区间 0.32~0.44
-    const smudgeMix = 0.32 + (smudgeStrength / 100) * 0.12;
+    const smudgeMix = 0.32 + (effectiveStrength / 100) * 0.12;
 
     const prevStrength = painter.getMixStrength();
     painter.setMixStrength(0); // density=0 → 纯 smear 分支
     const result = painter.drawBrush(
-        x, y, brushSize * 2,
+        x, y, effectiveSize * 2,
         { r: 0, g: 0, b: 0 },
         brushCanvas,
         true,
         { x: dirX, y: dirY }, smearLen,
         false,  // disableSmear=false，走 smear 路径
-        1.0, true, brushSize, 0, 0, smudgeMix
+        1.0, true, effectiveSize, 0, 0, smudgeMix
     );
     painter.setMixStrength(prevStrength);
     return result;
