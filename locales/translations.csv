@@ -24,7 +24,7 @@ pressureSensHigh,Soft tip,笔尖偏软,筆先が柔らかめ
 pressureSensLinear,Medium tip,笔尖适中,筆先が標準
 pressureSensFirm,Firm tip,笔尖偏硬,筆先が硬め
 errorOverlayTitle,Something went wrong,出现错误,エラーが発生しました
-errorOverlayDesc,"An unexpected error happened. Reload to recover. If it keeps happening, please report on Discord or GitHub.",发生了未预期的错误。点击刷新即可恢复。如果反复出现，请在 Discord 或 GitHub 反馈。,予期しないエラーが発生しました。リロードすれば復旧できます。繰り返し発生する場合は Discord または GitHub でご連絡ください。
+errorOverlayDesc,"An unexpected error happened. Reload to recover. If it keeps happening, please report on {discord} or {github}.",发生了未预期的错误。点击刷新即可恢复。如果反复出现，请在 {discord} 或 {github} 反馈。,予期しないエラーが発生しました。リロードすれば復旧できます。繰り返し発生する場合は {discord} または {github} でご連絡ください。
 errorOverlayReload,Reload,刷新恢复,リロード
 errorOverlayDismiss,Dismiss,关闭提示,閉じる
 mixArea,Mixing Area,混色区,混色エリア

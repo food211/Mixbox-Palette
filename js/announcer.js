@@ -370,7 +370,11 @@ const Announcer = {
 
         const desc = document.createElement('div');
         desc.style.cssText = 'color:#c0c0c0;font-size:13px;margin-bottom:24px;text-align:center;max-width:420px;line-height:1.5;';
-        desc.textContent = t('errorOverlayDesc');
+        // 占位符替换成带 href 的链接。文案本身是 hardcoded i18n，不含用户输入，可安全走 innerHTML
+        const linkStyle = 'color:#29b6f6;text-decoration:underline;';
+        desc.innerHTML = t('errorOverlayDesc')
+            .replace('{discord}', '<a href="https://discord.gg/d3ubWGpe" target="_blank" rel="noopener" style="' + linkStyle + '">Discord</a>')
+            .replace('{github}', '<a href="https://github.com/food211/Mixbox-Palette/issues" target="_blank" rel="noopener" style="' + linkStyle + '">GitHub</a>');
 
         const detail = document.createElement('div');
         detail.style.cssText = 'color:#808080;font-size:11px;margin-bottom:24px;text-align:center;max-width:420px;word-break:break-all;font-family:monospace;';
