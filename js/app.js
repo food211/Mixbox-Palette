@@ -1251,6 +1251,10 @@ function bindEvents() {
             // 开始新笔画
             beginStroke('brush', strokeColor, x, y, pressure);
 
+            // 首点压力固定用 0（映射到 floor 下限）：pen 落笔瞬间 e.pressure 通常不稳且偏大，
+            // 实际体验是笔尖刚碰纸，视觉上应该最轻。后续 pointermove 才反映真实压感。
+            const firstPressure = (pressureEnabled && e.pointerType === 'pen') ? 0 : pressure;
+
             // 检查是否需要插值（连续点击场景）
             if (lastX !== 0 || lastY !== 0) {  // 不是第一次点击
                 const distance = Math.sqrt(Math.pow(x - lastX, 2) + Math.pow(y - lastY, 2));
@@ -1265,17 +1269,17 @@ function bindEvents() {
                         const ratio = i / steps;
                         const interpX = lastX + (x - lastX) * ratio;
                         const interpY = lastY + (y - lastY) * ratio;
-                        drawBrush(interpX, interpY, strokeColor, interpX, interpY, pressure);
+                        drawBrush(interpX, interpY, strokeColor, interpX, interpY, firstPressure);
                         addStrokePoint(interpX, interpY);
                     }
                 } else {
                     // 距离太远或太近，直接绘制
-                    drawBrush(x, y, strokeColor, x, y, pressure);
+                    drawBrush(x, y, strokeColor, x, y, firstPressure);
                     addStrokePoint(x, y);
                 }
             } else {
                 // 第一次点击，直接绘制
-                drawBrush(x, y, strokeColor, x, y, pressure);
+                drawBrush(x, y, strokeColor, x, y, firstPressure);
                 addStrokePoint(x, y);
             }
 
