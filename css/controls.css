@@ -246,7 +246,7 @@
     color: #ffffff;
 }
 
-/* 压感灵敏度：4 档 toggle，从绿（灵敏）到蓝（迟钝） */
+/* 压感灵敏度：4 档 toggle，白色圆点从大→小对应灵敏度递减；选中时背景亮起（绿→蓝） */
 .pressure-sens-buttons {
     display: flex;
     gap: 3px;
@@ -257,27 +257,37 @@
     width: 22px;
     height: 22px;
     border-radius: 4px;
+    background-color: #3c3c3c;
     border: 1px solid #4c4c4c;
     cursor: pointer;
     padding: 0;
-    opacity: 0.45;
-    transition: opacity 0.2s, box-shadow 0.2s, transform 0.1s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s, border-color 0.2s, box-shadow 0.2s;
 }
 
-.pressure-sens-btn[data-gamma="0.5"]  { background-color: #4caf50; }
-.pressure-sens-btn[data-gamma="0.75"] { background-color: #26a69a; }
-.pressure-sens-btn[data-gamma="1.0"]  { background-color: #2196f3; }
-.pressure-sens-btn[data-gamma="1.5"]  { background-color: #3f51b5; }
+.pressure-sens-btn .dot {
+    display: block;
+    border-radius: 50%;
+    background-color: #ffffff;
+    transition: width 0.15s, height 0.15s;
+}
+
+.pressure-sens-btn .dot-xl { width: 14px; height: 14px; }
+.pressure-sens-btn .dot-lg { width: 11px; height: 11px; }
+.pressure-sens-btn .dot-md { width: 8px;  height: 8px;  }
+.pressure-sens-btn .dot-sm { width: 5px;  height: 5px;  }
 
 .pressure-sens-btn:hover {
-    opacity: 0.75;
+    background-color: #4c4c4c;
 }
 
-.pressure-sens-btn.active {
-    opacity: 1;
-    box-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
-    border-color: #ffffff;
-}
+/* 选中态：背景切换到对应的亮绿→亮蓝 */
+.pressure-sens-btn.active[data-gamma="0.5"]  { background-color: #4caf50; border-color: #66bb6a; box-shadow: 0 0 8px rgba(76, 175, 80, 0.6); }
+.pressure-sens-btn.active[data-gamma="0.75"] { background-color: #26c6da; border-color: #4dd0e1; box-shadow: 0 0 8px rgba(38, 198, 218, 0.6); }
+.pressure-sens-btn.active[data-gamma="1.0"]  { background-color: #29b6f6; border-color: #4fc3f7; box-shadow: 0 0 8px rgba(41, 182, 246, 0.6); }
+.pressure-sens-btn.active[data-gamma="1.5"]  { background-color: #3f51b5; border-color: #5c6bc0; box-shadow: 0 0 8px rgba(63, 81, 181, 0.6); }
 
 /* 日语下文字更宽，缩小字号避免溢出/换行；容器宽度保持不变 */
 :lang(ja) .brush-size label,
