@@ -86,8 +86,7 @@ const Announcer = {
 
     /** 版本号点击时调用：立即显示弹窗，在窗口内异步加载检查结果 */
     async checkUpdate() {
-        const isZH = this._getLang() === 'zh';
-        const t = (k) => (typeof I18N !== 'undefined') ? I18N.t(k) : k;
+        const t = (k, vars) => (typeof I18N !== 'undefined') ? I18N.t(k, vars) : k;
 
         const modal         = document.getElementById('updateModal');
         const titleEl       = document.getElementById('updateModalTitle');
@@ -146,13 +145,13 @@ const Announcer = {
         };
 
         // 初始状态：正在获取
-        bodyEl.innerHTML     = `<p style="color:#888;">${isZH ? '正在获取版本信息…' : 'Fetching version info…'}</p>`;
+        bodyEl.innerHTML     = `<p style="color:#888;">${t('updateFetching')}</p>`;
         changelogLink.textContent = '';
         changelogLink.href   = '#';
         laterBtn.style.display   = 'none';
         dismissBtn.style.display = 'none';
         closeBtn.style.display   = '';
-        refreshBtn.textContent   = isZH ? '检查中…' : 'Checking…';
+        refreshBtn.textContent   = t('updateChecking');
         refreshBtn.disabled      = true;
 
         const close = (dismissed, updateData) => {
@@ -172,13 +171,13 @@ const Announcer = {
         // 处理错误情况
         if (result && result.error) {
             if (result.timeout) {
-                bodyEl.innerHTML = `<p style="color:#e67e22;">${isZH ? '请求超时，请检查网络连接' : 'Request timed out. Please check your network connection.'}</p>`;
+                bodyEl.innerHTML = `<p style="color:#e67e22;">${t('updateTimeout')}</p>`;
             } else {
-                bodyEl.innerHTML = `<p style="color:#e74c3c;">${isZH ? '检查更新失败，请稍后再试' : 'Failed to check for updates. Please try again later.'}</p>`;
+                bodyEl.innerHTML = `<p style="color:#e74c3c;">${t('updateFailed')}</p>`;
             }
-            changelogLink.textContent = isZH ? '查看完整更新日志 →' : 'View Full Changelog →';
+            changelogLink.textContent = t('updateViewChangelog');
             changelogLink.href = Updater.CHANGELOG_PAGE;
-            refreshBtn.textContent = isZH ? '重试' : 'Retry';
+            refreshBtn.textContent = t('updateRetry');
             refreshBtn.disabled = false;
             refreshBtn.onclick = () => {
                 this.checkUpdate();
@@ -198,7 +197,7 @@ const Announcer = {
 
         // 填充 changelog
         if (updateData) {
-            bodyEl.innerHTML = this._renderVersionsHtml(updateData, isZH);
+            bodyEl.innerHTML = this._renderVersionsHtml(updateData);
         } else {
             bodyEl.innerHTML = `<p style="color:#6abf6a;">${t('versionUpToDate')}</p>`;
             // 已最新：展示当前版本（recent-changelogs 的第一条）的更新说明
@@ -206,22 +205,22 @@ const Announcer = {
                 const recent = await fetch(Updater.RECENT_URL, { cache: 'no-store' }).then(r => r.json());
                 const cur = (recent.versions || []).find(v => v.version === appVer) || (recent.versions || [])[0];
                 if (cur) {
-                    const content = isZH ? cur.zh || cur.en : cur.en || cur.zh;
+                    const content = this._pickLocalized(cur);
                     bodyEl.innerHTML += Updater._mdToHtml(content);
                 }
             } catch (e) { /* 离线时静默失败 */ }
         }
 
-        changelogLink.textContent = isZH ? '查看完整更新日志 →' : 'View Full Changelog →';
+        changelogLink.textContent = t('updateViewChangelog');
         changelogLink.href = Updater.CHANGELOG_PAGE;
 
         // 更新按钮状态
         laterBtn.style.display   = updateData ? '' : 'none';
         dismissBtn.style.display = updateData ? '' : 'none';
         if (updateData) {
-            laterBtn.textContent   = isZH ? '稍后' : 'Later';
-            dismissBtn.textContent = isZH ? '不再提示此版本' : "Don't remind me";
-            refreshBtn.textContent = isZH ? '立即更新' : 'Update Now';
+            laterBtn.textContent   = t('updateBtnLater');
+            dismissBtn.textContent = t('updateBtnDismiss');
+            refreshBtn.textContent = t('updateBtnRefresh');
             refreshBtn.disabled    = false;
             dismissBtn.onclick     = () => close(true, updateData);
             refreshBtn.onclick     = () => {
@@ -229,35 +228,42 @@ const Announcer = {
                 this._showReloadOverlay();
             };
         } else {
-            refreshBtn.textContent = isZH ? '已是最新版本' : 'Up to Date';
+            refreshBtn.textContent = t('updateUpToDateBtn');
             refreshBtn.disabled    = true;
         }
     },
 
     // ── 更新弹窗 ──────────────────────────────────────────────────────────
 
+    /**
+     * 从 CHANGELOG 版本块里挑当前语言的内容。
+     * recent-changelogs.json 目前只有 zh/en 两列，日语 fallback 到英文。
+     */
+    _pickLocalized(v) {
+        const lang = this._getLang();
+        if (lang === 'zh') return v.zh || v.en;
+        return v.en || v.zh;
+    },
+
     /** 把 updateData.versions 数组渲染为多版本堆叠 HTML */
-    _renderVersionsHtml(data, isZH) {
+    _renderVersionsHtml(data) {
+        const t = (k, vars) => (typeof I18N !== 'undefined') ? I18N.t(k, vars) : k;
         const shown = data.versions;
         const parts = shown.map(v => {
-            const content = isZH ? v.zh || v.en : v.en || v.zh;
-            const label = isZH ? `版本 ${v.version}` : `Version ${v.version}`;
+            const content = this._pickLocalized(v);
+            const label = t('updateVersionLabel', { version: v.version });
             return `<div class="update-version-block"><p class="update-version-label">${label}</p>${Updater._mdToHtml(content)}</div>`;
         });
         // 超过展示数量时附加"还有更多"提示
         if (data.totalNewer > shown.length) {
             const more = data.totalNewer - shown.length;
-            const moreText = isZH
-                ? `还有 ${more} 个较早版本的更新，查看完整日志了解详情 →`
-                : `${more} earlier version(s) not shown. View full changelog for details →`;
-            parts.push(`<p class="update-more-hint">${moreText}</p>`);
+            parts.push(`<p class="update-more-hint">${t('updateMoreHint', { count: more })}</p>`);
         }
         return parts.join('');
     },
 
     _showUpdateModal(data, { onDone }) {
-        const lang  = this._getLang();
-        const isZH  = lang === 'zh';
+        const t = (k, vars) => (typeof I18N !== 'undefined') ? I18N.t(k, vars) : k;
 
         const track = (name, params) => {
             try { if (typeof window.gtag === 'function') window.gtag('event', name, params || {}); } catch (_) {}
@@ -273,15 +279,13 @@ const Announcer = {
         const dismissBtn = document.getElementById('updateDismissBtn');
         const refreshBtn = document.getElementById('updateRefreshBtn');
 
-        titleEl.textContent = isZH
-            ? `🆕 发现新版本 ${data.latest}`
-            : `🆕 New Version Available: ${data.latest}`;
-        bodyEl.innerHTML = this._renderVersionsHtml(data, isZH);
-        changelogLink.textContent = isZH ? '查看完整更新日志 →' : 'View Full Changelog →';
+        titleEl.textContent = t('updateNewVersionTitle', { version: data.latest });
+        bodyEl.innerHTML = this._renderVersionsHtml(data);
+        changelogLink.textContent = t('updateViewChangelog');
         changelogLink.href = Updater.CHANGELOG_PAGE;
-        laterBtn.textContent  = isZH ? '稍后' : 'Later';
-        dismissBtn.textContent = isZH ? '不再提示此版本' : "Don't remind me";
-        refreshBtn.textContent = isZH ? '立即更新' : 'Update Now';
+        laterBtn.textContent  = t('updateBtnLater');
+        dismissBtn.textContent = t('updateBtnDismiss');
+        refreshBtn.textContent = t('updateBtnRefresh');
 
         const close = (dismissed) => {
             if (dismissed) localStorage.setItem(Updater.STORAGE_KEY, data.latest);
@@ -308,10 +312,10 @@ const Announcer = {
         const icon = document.createElement('div');
         icon.style.cssText = 'font-size:48px;margin-bottom:20px;';
         icon.textContent = '🎨';
-        const isZH = this._getLang() === 'zh';
+        const t = (k) => (typeof I18N !== 'undefined') ? I18N.t(k) : k;
         const text = document.createElement('div');
         text.style.cssText = 'color:#e0e0e0;font-size:14px;';
-        text.textContent = isZH ? '正在更新，请稍候' : 'Updating, please wait';
+        text.textContent = t('updateReloading');
         const dots = document.createElement('span');
         dots.textContent = '';
         text.appendChild(dots);
@@ -344,22 +348,24 @@ const Announcer = {
     },
 
     _showAnnouncement(lang, ann) {
-        const isZH  = lang === 'zh';
+        // 公告数据只提供 zh / en 两列，其他语言 fallback 到英文
+        const useZH = lang === 'zh';
+        const t = (k) => (typeof I18N !== 'undefined') ? I18N.t(k) : k;
         const modal = document.getElementById('announcementModal');
         if (!modal) return;
 
         document.getElementById('announcementTitle').textContent =
-            isZH ? ann.titleZH : ann.titleEN;
+            useZH ? ann.titleZH : ann.titleEN;
 
         const contentEl = document.getElementById('announcementContent');
-        const raw = isZH ? ann.contentZH : ann.contentEN;
+        const raw = useZH ? ann.contentZH : ann.contentEN;
         contentEl.innerHTML = raw
             .split('\n')
             .map(l => l.trim() ? `<p>${l}</p>` : '')
             .join('');
 
         const linkEl = document.getElementById('announcementLink');
-        linkEl.textContent = isZH ? ann.linkZH : ann.linkEN;
+        linkEl.textContent = useZH ? ann.linkZH : ann.linkEN;
         linkEl.onclick = () => {
             this._markSeen(lang, ann);
             modal.classList.remove('active');
@@ -368,7 +374,7 @@ const Announcer = {
 
         const closeBtn = document.getElementById('announcementCloseBtn');
         const okBtn    = document.getElementById('announcementOkBtn');
-        okBtn.textContent = isZH ? '知道了' : 'Got it';
+        okBtn.textContent = t('announcementOk');
 
         const dismiss = () => {
             this._markSeen(lang, ann);

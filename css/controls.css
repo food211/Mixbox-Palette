@@ -245,3 +245,11 @@
     box-shadow: 0 0 8px rgba(33, 150, 243, 0.5);
     color: #ffffff;
 }
+
+/* 日语下文字更宽，缩小字号避免溢出/换行；容器宽度保持不变 */
+:lang(ja) .brush-size label,
+:lang(ja) .brush-label,
+:lang(ja) .clear {
+    font-size: 10px;
+    white-space: nowrap;
+}

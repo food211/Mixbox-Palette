@@ -1,0 +1,110 @@
+key,en,zh,ja
+title,🎨 Mixbox Palette,🎨 Mixbox 调色板,🎨 Mixbox パレット
+switchPalette,Palette,切换颜料,パレット
+clear,Clear,清空,クリア
+brushSize,Size,大小,サイズ
+brushSpacing,Sp.,间距,間隔
+brushWetness,Wet,湿度,水分
+paintConcentration,Conc.,浓度,濃度
+smudgeStrength,Str.,强度,強度
+brushSizeTitle,Brush Size,笔刷大小,筆の太さ
+brushSpacingTitle,Brush Spacing,笔刷间距,ブラシ間隔
+brushWetnessTitle,Watercolor Wetness,水彩湿度,水彩の水分量
+paintConcentrationTitle,Paint Concentration,颜料浓度,絵具の濃度
+smudgeStrengthTitle,Smudge Strength,涂抹强度,スマッジ強度
+brushLabel,Brush,笔刷,ブラシ
+selectBrush,Select Brush,选择笔刷,ブラシを選択
+undo,Undo,撤销,元に戻す
+redo,Redo,重做,やり直し
+smudgeTool,Smudge (S),涂抹 (S),スマッジ (S)
+eyedropperTool,Eyedropper (I),吸管 (I),スポイト (I)
+mixArea,Mixing Area,混色区,混色エリア
+foreground,FG,前景,前景
+background,BG,背景,背景
+instructions,Instructions,操作说明,操作方法
+inst1_action,Left/Right Click paint,左键/右键点击颜料,左クリック/右クリック：絵具
+inst1_desc,Select as foreground/background color,选择为前景色/背景色,前景色・背景色として選択
+inst2_action,Click brush icon,点击笔刷图标,ブラシアイコンをクリック
+inst2_desc,Switch brush texture,切换笔刷材质,ブラシテクスチャを切り替え
+inst3_action,Alt + Left Click canvas,Alt + 左键点击画布,Alt + 左クリック：キャンバス
+inst3_desc,Pick as foreground,取色为前景色,前景色としてスポイト
+inst4_action,Alt + Right Click canvas,Alt + 右键点击画布,Alt + 右クリック：キャンバス
+inst4_desc,Pick as background,取色为背景色,背景色としてスポイト
+inst5,Click ↶ Undo / ↷ Redo,点击 ↶ 撤销 / ↷ 重做,↶ 元に戻す / ↷ やり直し をクリック
+inst6_action,Hold Space + click PS canvas,按住空格 + 点击 PS 画布,スペースキー + PSキャンバスをクリック
+inst6_desc,Return shortcuts to PS,将快捷键归还给 PS,ショートカットをPSに戻す
+inst7_action,Drag panel left/right edge,拖动面板左右边缘,パネルの左右端をドラッグ
+inst7_desc,Resize canvas,调整画布宽度,キャンバスサイズを変更
+inst8_action,Click version number,点击版本号,バージョン番号をクリック
+inst8_desc,Check for updates,检查更新,アップデートを確認
+inst9_question,UI display issues?,UI 显示异常？,UIの表示がおかしい？
+inst9_action,Press F5,按 F5,F5キー
+inst9_desc,to reload from remote,刷新重新获取远端,でリモートから再読み込み
+inst10_condition,Watercolor brush,水彩笔刷,水彩ブラシ
+inst10_desc,→ KM engine recommended for more natural blending,→ 推荐使用 KM 引擎以获得更自然的混色效果,→ より自然な混色にはKMエンジンを推奨
+statusDraw_prefix,Mode:,当前模式:,モード:
+statusDraw_value,Draw,绘制,描画
+statusSmudge_value,Smudge,涂抹,スマッジ
+statusEyedropper_value,Eyedropper,吸管,スポイト
+statusRectSelect_value,Rect Select → PS,矩形选取 → PS,矩形選択 → PS
+selectBrushModal,Select Brush,选择笔刷,ブラシを選択
+mixStrengthLabel,Mix Strength:,混色强度:,ミックス強度:
+paletteName_winsorNewtonCotman,Winsor & Newton Cotman 16,温莎牛顿 Cotman 16色,ウィンザー&ニュートン コットマン 16色
+paletteName_digitalArtist,Digital Artist Palette,数字艺术家调色板,デジタルアーティストパレット
+paletteName_schminckeHoradam,Schmincke Horadam 16,施美尔 Horadam 16色,シュミンケ ホラダム 16色
+paletteName_kuretakeGansai,Kuretake Gansai 16,吴竹 Gansai 16色,呉竹 顔彩 16色
+paletteName_rembrandtOil,Rembrandt Oil 16,伦勃朗油画 16色,レンブラント 油彩 16色
+paletteName_wnGouache,Winsor & Newton Designers Gouache Mix,温莎牛顿 Designers Gouache,ウィンザー&ニュートン デザイナーズ ガッシュ
+switchLanguage,Switch Language,切换语言,言語を切り替え
+versionModalTitle,Version Info,版本信息,バージョン情報
+versionUpToDate,✓ Up to date,✓ 已是最新版本,✓ 最新バージョンです
+versionTagApp,App,App,App
+versionTagHost,Host,宿主,ホスト
+versionTagCache,Cache,缓存,Cache
+versionCopyBtn,Copy,复制,コピー
+versionCopied,Copied!,已复制！,コピーしました！
+zoomTitle,Zoom — Zoom in expands canvas size; zoom out does not,缩放 — 放大会同步扩展画布尺寸，缩小不会,ズーム — 拡大時はキャンバスサイズも拡張、縮小時はそのまま
+switchEngine,Switch Mixing Engine (Mixbox / KM),切换混色引擎 (Mixbox / KM),ミキシングエンジン切り替え (Mixbox / KM)
+focusHint,Hold Space + click PS canvas to return shortcuts,按住空格 + 点击 PS 画布以切回快捷键,スペース + PSキャンバスをクリックでショートカットを戻す
+saveCanvas,Save PNG,保存 PNG,PNG保存
+saveCanvasTitle,Save canvas as PNG image,将画布保存为 PNG 图片,キャンバスをPNG画像として保存
+rectSelectTool,Send to PS (M),传输至PS (M),PSへ送信 (M)
+rectSelectNoSelection,No active selection in Photoshop. Please create a selection first.,Photoshop 中没有活动选区，请先创建选区。,Photoshopに選択範囲がありません。先に選択範囲を作成してください。
+rectSelectNoDocument,No document open in Photoshop.,Photoshop 中没有打开文档。,Photoshopでドキュメントが開かれていません。
+rectSelectSuccess,Pixels transferred to Photoshop.,像素已传输至 Photoshop。,ピクセルをPhotoshopに転送しました。
+rectSelectFailed,Failed to transfer pixels.,传输失败。,転送に失敗しました。
+rectSelectTransferring,Transferring...,传输中...,転送中...
+confirm,Confirm,确认,確認
+cancel,Cancel,取消,キャンセル
+resizeGrow,"Canvas width will expand from {from}px to {to}px. Continue?","画布宽度将从 {from}px 扩大到 {to}px，是否继续？","キャンバス幅を {from}px から {to}px に拡大します。続行しますか？"
+resizeShrink,"Canvas width will shrink from {from}px to {to}px. Pixels outside the new bounds will be cropped. Continue?","画布宽度将从 {from}px 缩小到 {to}px，超出部分将被裁剪，是否继续？","キャンバス幅を {from}px から {to}px に縮小します。範囲外のピクセルは切り取られます。続行しますか？"
+brush_circle,Circle,圆形,円形
+brush_soft,Soft,柔边,ソフト
+brush_watercolor,Watercolor,水彩,水彩
+brush_splatter,Splatter,喷溅,スプラッター
+brush_flat,Flat,扁平笔,平筆
+brush_dry,Dry,干笔刷,ドライブラシ
+valueRulerLabel,Value,明度,明度
+engineInitFailed,Engine initialization failed. The page needs to reload.\nClick OK to refresh.,引擎初始化失败，需要刷新页面重新加载资源。\n点击确定后将自动刷新。,エンジンの初期化に失敗しました。ページを再読み込みする必要があります。\nOKをクリックすると自動的に更新されます。
+clickCheckUpdate,Click to check for updates,点击检查更新,クリックしてアップデートを確認
+updateFetching,Fetching version info…,正在获取版本信息…,バージョン情報を取得中…
+updateTimeout,Request timed out. Please check your network connection.,请求超时，请检查网络连接,リクエストがタイムアウトしました。ネットワーク接続を確認してください。
+updateFailed,Failed to check for updates. Please try again later.,检查更新失败，请稍后再试,アップデートの確認に失敗しました。後でもう一度お試しください。
+updateRetry,Retry,重试,再試行
+updateChecking,Checking…,检查中…,確認中…
+updateViewChangelog,View Full Changelog →,查看完整更新日志 →,完全な更新履歴を見る →
+updateBtnLater,Later,稍后,後で
+updateBtnDismiss,Don't remind me,不再提示此版本,このバージョンを通知しない
+updateBtnRefresh,Update Now,立即更新,今すぐ更新
+updateUpToDateBtn,Up to Date,已是最新版本,最新バージョンです
+updateNewVersionTitle,🆕 New Version Available: {version},🆕 发现新版本 {version},🆕 新しいバージョンがあります: {version}
+updateVersionLabel,Version {version},版本 {version},バージョン {version}
+updateMoreHint,{count} earlier version(s) not shown. View full changelog for details →,还有 {count} 个较早版本的更新，查看完整日志了解详情 →,他に {count} 件の旧バージョンの更新があります。完全な更新履歴で詳細を確認 →
+updateReloading,"Updating, please wait",正在更新，请稍候,更新中、しばらくお待ちください
+copyVersionInfoTip,Copy version info,复制版本信息,バージョン情報をコピー
+closeTip,Close,关闭,閉じる
+laterTip,Later,稍后再提示,後でまた通知
+dismissTip,Don't remind me about this version,不再提示此版本,このバージョンを通知しない
+refreshTip,Reload to apply update,刷新以应用更新,更新を適用するため再読み込み
+announcementOk,Got it,知道了,了解
+resizeHandleTip,Drag to resize canvas,拖动调整画布宽度,ドラッグしてキャンバスサイズを変更

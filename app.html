@@ -45,7 +45,7 @@
         <div class="title">Mixbox Palette</div>
         <div class="spinner"></div>
     </div>
-    <div class="resize-handle resize-handle-left" id="resizeHandleLeft"></div>
+    <div class="resize-handle resize-handle-left" id="resizeHandleLeft" data-i18n-title="resizeHandleTip"></div>
     <div class="container">
         <div class="focus-indicator" id="focusIndicator"><span data-i18n="focusHint">Hold Space + click PS canvas to return shortcuts</span></div>
         <div class="header-container">
@@ -166,22 +166,23 @@
         
         <!-- 信息显示 -->
         <div class="info">
+            <p id="statusText">• <span data-i18n="statusDraw_prefix"></span> <strong id="statusValue" class="status-draw" data-i18n="statusDraw_value"></strong></p>
             <p class="info-header" id="instructionsToggle">
                 <strong data-i18n="instructions">Instructions</strong>
                 <svg class="info-chevron" id="instructionsChevron" width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><path d="M2 4l4 4 4-4"/></svg>
             </p>
             <div class="info-body" id="instructionsBody">
-                <p>• <span data-i18n="inst1"><strong>Left/Right Click paint</strong> → Select as foreground/background color</span></p>
-                <p>• <span data-i18n="inst2"><strong>Click brush icon</strong> → Switch brush texture</span></p>
-                <p>• <span data-i18n="inst3"><strong>Alt + Left Click canvas</strong> → Pick as foreground</span></p>
-                <p>• <span data-i18n="inst4"><strong>Alt + Right Click canvas</strong> → Pick as background</span></p>
-                <p>• <span data-i18n="inst5">Click ↶ Undo / ↷ Redo</span></p>
-                <p>• <span data-i18n="inst6">Click <strong>PS canvas</strong> → Return shortcuts to PS</span></p>
-                <p>• <span data-i18n="inst7"><strong>Drag edge handle</strong> → Resize canvas</span></p>
-                <p>• <span data-i18n="inst8"><strong>Click version number</strong> → Check for updates</span></p>
-                <p>• <span data-i18n="inst9">UI display issues? Press <strong>F5</strong> to reload from remote</span></p>
+                <p>• <strong data-i18n="inst1_action"></strong> → <span data-i18n="inst1_desc"></span></p>
+                <p>• <strong data-i18n="inst2_action"></strong> → <span data-i18n="inst2_desc"></span></p>
+                <p>• <strong data-i18n="inst3_action"></strong> → <span data-i18n="inst3_desc"></span></p>
+                <p>• <strong data-i18n="inst4_action"></strong> → <span data-i18n="inst4_desc"></span></p>
+                <p>• <span data-i18n="inst5"></span></p>
+                <p>• <strong data-i18n="inst6_action"></strong> → <span data-i18n="inst6_desc"></span></p>
+                <p>• <strong data-i18n="inst7_action"></strong> → <span data-i18n="inst7_desc"></span></p>
+                <p>• <strong data-i18n="inst8_action"></strong> → <span data-i18n="inst8_desc"></span></p>
+                <p>• <span data-i18n="inst9_question"></span> <strong data-i18n="inst9_action"></strong> <span data-i18n="inst9_desc"></span></p>
+                <p>• <strong data-i18n="inst10_condition"></strong> <span data-i18n="inst10_desc"></span></p>
             </div>
-            <p id="statusText" data-i18n="statusDraw">• Mode: <strong>Draw</strong></p>
             <p class="github-link">
                 <a href="javascript:void(0)" onclick="openExternalURL('https://github.com/food211/mixbox-palette')" title="GitHub"><span class="icon-github"></span></a>
                 <a href="javascript:void(0)" onclick="openExternalURL('https://discord.gg/d3ubWGpe')" title="Join our Discord" class="discord-link"><span class="icon-discord"></span></a>
@@ -189,7 +190,7 @@
             </p>
         </div>
     </div>
-    <div class="resize-handle resize-handle-right" id="resizeHandleRight"></div>
+    <div class="resize-handle resize-handle-right" id="resizeHandleRight" data-i18n-title="resizeHandleTip"></div>
 
     <!-- 画布宽度调整确认弹窗 -->
     <div class="brush-selector-modal" id="resizeConfirmModal">
@@ -207,18 +208,18 @@
         <div class="brush-selector-content update-modal-content">
             <div class="brush-selector-header">
                 <h3 id="updateModalTitle"></h3>
-                <button class="close-btn" id="updateCloseBtn">×</button>
+                <button class="close-btn" id="updateCloseBtn" data-i18n-title="closeTip">×</button>
             </div>
             <div class="update-version-info-row">
                 <div id="updateVersionInfo" class="update-version-info"></div>
-                <button id="updateCopyBtn" class="update-copy-btn" title="Copy version info"></button>
+                <button id="updateCopyBtn" class="update-copy-btn" data-i18n-title="copyVersionInfoTip"></button>
             </div>
             <div id="updateModalBody" class="update-modal-body"></div>
             <a id="updateChangelogLink" href="#" target="_blank" class="update-changelog-link"></a>
             <div class="update-modal-actions">
-                <button id="updateLaterBtn" class="update-btn-later"></button>
-                <button id="updateDismissBtn" class="update-btn-dismiss"></button>
-                <button id="updateRefreshBtn" class="update-btn-refresh"></button>
+                <button id="updateLaterBtn" class="update-btn-later" data-i18n-title="laterTip"></button>
+                <button id="updateDismissBtn" class="update-btn-dismiss" data-i18n-title="dismissTip"></button>
+                <button id="updateRefreshBtn" class="update-btn-refresh" data-i18n-title="refreshTip"></button>
             </div>
         </div>
     </div>
@@ -318,10 +319,17 @@
             // 判断启动引擎：若用户上次用的是 KM，首帧就需要 KM
             const savedEngine = localStorage.getItem('mixbox_engine') || 'km';
 
+            // 前置：i18n 必须在所有其他脚本之前就绪，否则后续脚本顶层代码读取 I18N 会拿到未初始化状态
+            await Promise.all([
+                loadScript('js/i18n-translations.js'),
+                loadScript('js/i18n.js'),
+            ]);
+            I18N.init();
+            console.log('✅ i18n 就绪:', I18N.getLang());
+
             // Tier 0：无依赖的脚本全部并行下载
             const tier0 = Promise.all([
                 loadScript('js/params.js'),
-                loadScript('js/i18n.js'),
                 loadScript('js/base-painter.js'),
                 loadScript('js/brush-manager.js'),
                 loadScript('js/palette-storage.js'),
@@ -385,7 +393,7 @@
                 const versionLabel = document.getElementById('versionLabel');
                 if (versionLabel && typeof Updater !== 'undefined') {
                     versionLabel.textContent = Updater.CURRENT_VERSION;
-                    versionLabel.title = I18N.getLang() === 'zh' ? '点击检查更新' : 'Click to check for updates';
+                    versionLabel.title = I18N.t('clickCheckUpdate');
                     versionLabel.addEventListener('click', () => Announcer.checkUpdate());
                 }
                 // 延迟启动公告组件（包揽更新检测 + 公告推送）

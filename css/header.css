@@ -189,6 +189,13 @@
     transition: opacity 0.2s, background-color 0.2s;
 }
 
+.lang-btn {
+    width: 32px;
+    padding: 4px 0;
+    text-align: center;
+    box-sizing: border-box;
+}
+
 .lang-btn:hover, .engine-btn:hover {
     background-color: #505050;
     opacity: 1;

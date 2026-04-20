@@ -199,10 +199,7 @@ async function switchEngine(engine) {
         await newPainter.init();
     } catch (err) {
         console.error('❌ 引擎切换失败:', err);
-        const msg = I18N.getLang() === 'zh'
-            ? '引擎初始化失败，需要刷新页面重新加载资源。\n点击确定后将自动刷新。'
-            : 'Engine initialization failed. The page needs to reload.\nClick OK to refresh.';
-        if (confirm(msg)) location.reload();
+        if (confirm(t('engineInitFailed'))) location.reload();
         return;
     }
     // 释放旧 painter 的 RAF 和 GPU/CPU 资源，避免泄漏
@@ -1613,20 +1610,20 @@ function extractAndSendPixels(sx, sy, sw, sh) {
 }
 
 /**
- * 更新状态文本
+ * 更新状态文本：改 class 控制颜色，改 textContent 填当前语言文本
  */
 function updateStatus(mode) {
-    if (mode === 'eyedropper-fg') {
-        statusText.innerHTML = t('statusEyedropperFg');
-    } else if (mode === 'eyedropper-bg') {
-        statusText.innerHTML = t('statusEyedropperBg');
-    } else if (mode === 'rect-select') {
-        statusText.innerHTML = t('statusRectSelect');
-    } else if (mode === 'smudge') {
-        statusText.innerHTML = t('statusSmudge');
-    } else {
-        statusText.innerHTML = t('statusDraw');
-    }
+    const value = document.getElementById('statusValue');
+    if (!value) return;
+    const map = {
+        'eyedropper-fg': { cls: 'status-eyedropper-fg', key: 'statusEyedropper_value' },
+        'eyedropper-bg': { cls: 'status-eyedropper-bg', key: 'statusEyedropper_value' },
+        'rect-select':   { cls: 'status-rect-select',   key: 'statusRectSelect_value' },
+        'smudge':        { cls: 'status-smudge',        key: 'statusSmudge_value' },
+    };
+    const cfg = map[mode] || { cls: 'status-draw', key: 'statusDraw_value' };
+    value.className = cfg.cls;
+    value.textContent = t(cfg.key);
 }
 
 /**
@@ -2031,12 +2028,13 @@ function initInstructionsToggle() {
 // ============ 语言切换 ============
 function initLangToggle() {
     const langBtn = document.getElementById('langBtn');
-    langBtn.textContent = I18N.getLang().toUpperCase();
+    const labelOf = (lang) => (lang === 'ja' ? 'JA' : lang.toUpperCase());
+    langBtn.textContent = labelOf(I18N.getLang());
 
     langBtn.addEventListener('click', () => {
-        const newLang = I18N.getLang() === 'en' ? 'zh' : 'en';
+        const newLang = I18N.nextLang();
         I18N.setLang(newLang);
-        langBtn.textContent = newLang.toUpperCase();
+        langBtn.textContent = labelOf(newLang);
 
         // 更新所有 data-i18n DOM 元素
         I18N.applyToDOM();

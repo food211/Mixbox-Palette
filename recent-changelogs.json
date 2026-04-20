@@ -1,6 +1,11 @@
 {
   "versions": [
     {
+      "version": "V1.4.1",
+      "zh": "### 新增\r\n- **日语界面支持** — 新增日文 UI，语言按钮点击可在英语 / 中文 / 日语间循环切换；首次打开会自动跟随系统语言。界面中的颜料名仍保留英文，方便日本水彩圈对照专业术语\r\n- **操作说明新增一条** — 使用水彩笔时推荐切换到 KM 引擎，混色结果会更自然\r\n\r\n### 优化\r\n- **语言选择现在会被记住** — 切换语言后刷新或重开插件，会停留在你上次选的语言，不会被重置",
+      "en": "### New\r\n- **Japanese UI** — Japanese interface added. The language button now cycles through English / 中文 / 日本語, and first-time users follow their system language automatically. Pigment names stay in English so Japanese watercolorists can cross-reference professional terminology easily\r\n- **New instruction tip** — When using the watercolor brush, switching to the KM engine produces more natural blending\r\n\r\n### Improvement\r\n- **Language selection persists** — Your chosen language now sticks across refreshes and plugin reopens, no longer silently resetting"
+    },
+    {
       "version": "V1.4.0",
       "zh": "### 新增\r\n- **默认引擎改为 KM** — 经过实际对比，KM 引擎在大多数颜料组合下混合结果更接近真实调色的观感，因此从本版开始新用户默认启用 KM 引擎；老用户设置保留不变，可随时手动切换\r\n- **水彩笔刷体验重做** — 全面调整水彩笔的颜料沉积、边缘晕染、咖啡圈强度与湿区扩散范围，笔触更细腻、颜色堆积更自然；浓度滑条的响应也更接近真实水彩（低浓度清透、高浓度浓重但不生硬）\r\n- **三工具独立记忆** — 笔刷、水彩、涂抹现在各自记住自己的大小、笔型、混色/浓度/强度，切换工具不会再互相干扰\r\n\r\n### 优化\r\n- **切换引擎不再卡顿** — 切 KM ↔ Mixbox 时的 shader 编译、色彩查找表、顶点缓存改为全局复用，一次会话内切换几乎无感\r\n- **绘制性能进一步优化** — 削减热路径上的重复计算与重绘，长时间绘制更轻\r\n- **光标显示更稳定** — 笔刷光标改用 GPU 合成层移动，不再触发整页布局重新计算，复杂画面下依然稳定跟随\r\n\r\n### 修复\r\n- **调色盘 RGB 校准** — Cotman、伦勃朗、温莎牛顿 Gouache 等调色盘的部分颜料 RGB 值经过二轮校准，修复了这些颜料在 KM 引擎下混合表现异常的问题（KM 的物理混合对颜料 RGB 的准确度要求比 Mixbox 更高）。感谢 Reddit 用户 **digitizerstylus** 提供的详细反馈\r\n- **修复笔刷间距被错误套用到涂抹工具** — 之前调整普通笔刷的笔触间距后，涂抹工具的行为也会被一起改变；本版重构了工具设置的存储方式，两者彻底独立",
       "en": "### New\r\n- **KM is now the default engine** — After side-by-side comparison, KM produces color mixes closer to real-life pigment behavior across most palettes, so new users now start with KM by default. Existing users keep their current setting and can switch at any time\r\n- **Watercolor brush overhaul** — Reworked pigment deposition, edge bleed, coffee-ring intensity, and wet-area spread. Strokes feel finer, pigment buildup is more natural, and the strength slider now behaves more like real watercolor (translucent at low values, rich but never harsh at high values)\r\n- **Per-tool memory** — Brush, Watercolor, and Smudge now each remember their own size, brush type, and strength / mix settings. Switching tools no longer overwrites the other two\r\n\r\n### Improvement\r\n- **Engine switching no longer stutters** — Shader compilation, color LUT, and vertex buffers are reused across engines, making KM ↔ Mixbox switching nearly instant within a session\r\n- **Faster brush rendering** — Trimmed redundant work along the hot path; long sessions stay lighter\r\n- **Smoother cursor** — The brush preview cursor now moves via a GPU compositor layer instead of page-level positioning, so it no longer triggers layout recalculation on complex canvases\r\n\r\n### Fix\r\n- **Palette RGB recalibration** — Several pigments across Cotman, Rembrandt, and Winsor & Newton Gouache palettes received a second-pass RGB correction. This fixes mixing behavior that looked off under the KM engine (KM's physically-based mixing is more sensitive to pigment RGB accuracy than Mixbox). Thanks to Reddit user **digitizerstylus** for the detailed feedback\r\n- **Brush spacing no longer leaks into the Smudge tool** — Changing brush spacing used to silently affect the Smudge tool as well. The tool settings storage has been refactored so the two are fully independent now"
@@ -9,12 +14,7 @@
       "version": "V1.3.8",
       "zh": "### 优化\r\n- **长时间绘制更稳定** — 大画布反复绘制、修改画布尺寸、切换引擎时的内存管理全面改进，显著降低卡顿与黑屏概率\r\n- **撤销/重做更流畅** — 修复了连续撤销时偶发的画面错乱；超长历史记录也不会再越积越多拖慢浏览器\r\n- **绘制性能提升** — 笔触渲染路径底层优化，持续绘制时更省资源\r\n\r\n### 修复\r\n- 修复极端情况下切换引擎或修改画布后出现黑屏的问题\r\n- 修复画布尺寸修改后偶尔画不上颜色的问题",
       "en": "### Improvement\r\n- **More stable long sessions** — Overhauled memory handling around large canvases, canvas resize, and engine switching; far fewer stutters and black-screen incidents\r\n- **Smoother undo / redo** — Fixed an occasional wrong-frame flash when clicking undo repeatedly; long history stacks no longer bloat memory over time\r\n- **Faster brush rendering** — Lower-level drawing path optimized; continuous painting uses less resources\r\n\r\n### Fix\r\n- Fixed rare black-screen after switching engine or resizing the canvas\r\n- Fixed a case where strokes wouldn't register after resizing the canvas"
-    },
-    {
-      "version": "V1.3.7",
-      "zh": "### 新增\r\n- **匿名使用统计** — 新增匿名统计功能，仅记录笔刷、引擎、调色盘的使用偏好以及绘制时长，用于帮助我改进插件。不会收集任何画作内容或个人信息，如不希望参与可通过浏览器的广告拦截插件屏蔽 Google Analytics",
-      "en": "### New\r\n- **Anonymous usage analytics** — Added opt-out anonymous tracking of brush / engine / palette preferences and stroke duration to help improve the plugin. No artwork or personal info is collected; you can block Google Analytics with any ad blocker if you'd rather not participate"
     }
   ],
-  "generatedAt": "2026-04-19T16:03:04.574Z"
+  "generatedAt": "2026-04-20T04:06:18.943Z"
 }
