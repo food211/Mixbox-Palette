@@ -1,7 +1,7 @@
 /**
  * Service Worker - KM Watercolor Palette 离线缓存
  */
-const CACHE_NAME = 'km-palette-v86';
+const CACHE_NAME = 'km-palette-v87';
 const CACHE_URLS = [
   './app.html',
   './css/base.css',
@@ -18,6 +18,8 @@ const CACHE_URLS = [
   './js/zoom.js',
   './js/app.js',
   './js/mixbox.js',
+  './js/device-profile.js',
+  './js/frame-scheduler.js',
   './js/base-painter.js',
   './js/heatmap.js',
   './js/wetpaper.js',

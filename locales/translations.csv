@@ -18,6 +18,11 @@ undo,Undo,撤销,元に戻す
 redo,Redo,重做,やり直し
 smudgeTool,Smudge (S),涂抹 (S),スマッジ (S)
 eyedropperTool,Eyedropper (I),吸管 (I),スポイト (I)
+pressureSensitivity,Pressure Sensitivity,压感灵敏度,筆圧の感度
+pressureSensVery,Softest tip,笔尖最软,筆先が最も柔らかい
+pressureSensHigh,Soft tip,笔尖偏软,筆先が柔らかめ
+pressureSensLinear,Medium tip,笔尖适中,筆先が標準
+pressureSensFirm,Firm tip,笔尖偏硬,筆先が硬め
 mixArea,Mixing Area,混色区,混色エリア
 foreground,FG,前景,前景
 background,BG,背景,背景

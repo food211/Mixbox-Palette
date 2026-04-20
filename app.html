@@ -2,6 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mixbox Palette</title>
     <!-- Google tag (gtag.js) — 本地开发（localhost / 127.0.0.1）不加载，避免污染统计 -->
     <script>
@@ -96,7 +97,7 @@
             <div class="brush-size">
                 <label class="label-size" data-i18n="brushSize" data-i18n-title="brushSizeTitle" title="Brush Size">Brush Size</label>
                 <div class="custom-range-wrap">
-                    <input type="range" id="brushSize" min="2" max="50" value="15">
+                    <input type="range" id="brushSize" min="2" max="80" value="15">
                     <div class="custom-range" data-for="brushSize"></div>
                 </div>
                 <span id="brushSizeValue">15</span><span class="unit">px</span>
@@ -134,6 +135,12 @@
                 <button id="smudgeBtn" class="tool-btn" data-i18n-title="smudgeTool" title="Smudge Tool"><img src="icons/smudge.svg" width="14" height="14" alt="Smudge"></button>
                 <button id="eyedropperBtn" class="tool-btn" data-i18n-title="eyedropperTool" title="Eyedropper (Alt)"><img src="icons/eyedropper.svg" width="14" height="14" alt="Eyedropper"></button>
                 <button id="rectSelectBtn" class="tool-btn" data-i18n-title="rectSelectTool" title="Select area to PS"><img src="icons/rect-select.svg" width="14" height="14" alt="Select"></button>
+            </div>
+            <div class="pressure-sens-buttons" data-i18n-title="pressureSensitivity" title="Pressure Sensitivity">
+                <button class="pressure-sens-btn" data-gamma="0.3" data-size-floor="0.2"  data-size-ceil="1.5" data-mix-floor="0.3"  data-i18n-title="pressureSensVery"   title="Softest tip"><span class="dot dot-xl"></span></button>
+                <button class="pressure-sens-btn" data-gamma="0.6" data-size-floor="0.3"  data-size-ceil="1.2" data-mix-floor="0.4"  data-i18n-title="pressureSensHigh"   title="Soft tip"><span class="dot dot-lg"></span></button>
+                <button class="pressure-sens-btn active" data-gamma="1.0" data-size-floor="0.4"  data-size-ceil="1.0" data-mix-floor="0.5"  data-i18n-title="pressureSensLinear" title="Medium tip"><span class="dot dot-md"></span></button>
+                <button class="pressure-sens-btn" data-gamma="2.0" data-size-floor="0.55" data-size-ceil="1.0" data-mix-floor="0.65" data-i18n-title="pressureSensFirm"   title="Firm tip"><span class="dot dot-sm"></span></button>
             </div>
         </div>
         
@@ -337,6 +344,8 @@
             // Tier 0：无依赖的脚本全部并行下载
             const tier0 = Promise.all([
                 loadScript('js/params.js'),
+                loadScript('js/device-profile.js'),
+                loadScript('js/frame-scheduler.js'),
                 loadScript('js/base-painter.js'),
                 loadScript('js/brush-manager.js'),
                 loadScript('js/palette-storage.js'),

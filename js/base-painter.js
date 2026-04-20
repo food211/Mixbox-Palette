@@ -14,8 +14,11 @@
  *  async _loadLUT()         → 加载 LUT 纹理到 this.textures.lut
  *  _bindLUT()               → drawBrush 时绑定 LUT 到正确纹理槽
  */
+let _painterInstanceSeq = 0;
+
 class BaseWebGLPainter {
     constructor(canvas) {
+        this._instanceId = ++_painterInstanceSeq;
         this.canvas = canvas;
         this.gl = null;
 

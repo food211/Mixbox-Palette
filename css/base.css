@@ -16,8 +16,9 @@ body {
     flex-direction: column;
     align-items: center;
     min-height: 100vh;
-    touch-action: none;
     overflow-y: auto;
+    /* 注意：body 不设 touch-action: none 以保留移动端页面滚动/双指缩放；
+       画布和滑条自己设 touch-action: none 屏蔽绘画/拖拽时的手势干扰 */
 }
 
 .focus-indicator {
@@ -57,6 +58,26 @@ body {
     transition: background 0.15s;
 }
 
+/* 扩大点击/触控热区（向容器外侧延伸 30px），视觉宽度仍 6px 不变。
+   内侧不扩展，避免触发到画布/内容区 */
+#resizeHandleLeft::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -30px;
+    right: 0;
+}
+
+#resizeHandleRight::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: -30px;
+}
+
 .resize-handle:hover,
 .resize-handle.dragging {
     background: rgba(255, 255, 255, 0.15);
@@ -64,12 +85,12 @@ body {
 
 .container.glow-left,
 .container.glow-right {
-    box-shadow: -8px 0 20px rgba(74, 158, 255, 0.85), 8px 0 20px rgba(74, 158, 255, 0.85), 0 4px 12px rgba(0, 0, 0, 0.3);
+    box-shadow: -8px 0 40px rgba(74, 158, 255, 0.85), 8px 0 40px rgba(74, 158, 255, 0.85), 0 4px 12px rgba(0, 0, 0, 0.3);
     transition: box-shadow 0.15s;
 }
 
 .container.glow-dragging {
-    box-shadow: -8px 0 20px rgba(255, 200, 50, 0.85), 8px 0 20px rgba(255, 200, 50, 0.85), 0 4px 12px rgba(0, 0, 0, 0.3);
+    box-shadow: -8px 0 40px rgba(255, 200, 50, 0.85), 8px 0 40px rgba(255, 200, 50, 0.85), 0 4px 12px rgba(0, 0, 0, 0.3);
     transition: box-shadow 0.15s;
 }
 
