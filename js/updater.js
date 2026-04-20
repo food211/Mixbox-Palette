@@ -9,7 +9,7 @@ const Updater = {
     RECENT_URL: 'recent-changelogs.json',
     CHANGELOG_PAGE: 'https://food211.github.io/Mixbox-Palette/changelog.html',
     STORAGE_KEY: 'mixbox_dismissed_update',
-    CURRENT_VERSION: 'V1.4.1',
+    CURRENT_VERSION: 'V1.5.0',
 
     /** 将 markdown 列表转为简单 HTML（支持加粗和链接） */
     _mdToHtml(md) {

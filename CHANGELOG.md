@@ -1,5 +1,40 @@
 # 更新日志 / Changelog
 
+== V1.5.0 ==
+[ZH]
+### 新增
+- **压感灵敏度四档可选** — 顶部新增四个圆点按钮（从大到小），代表笔尖从最软到最硬。最软档轻触就能画出细淡的线、用力按还能画出比笔刷设置更大的笔触；最硬档需要稳定用力才能画出饱满的线。适合不同手感偏好
+- **涂抹工具也支持压感** — 之前压感只影响笔刷；现在涂抹工具的大小、推拖距离、涂抹强度都会跟随压力变化，轻触点戳、重压拖拽
+- **笔刷上限扩到 80px** — 最大笔刷尺寸从 50px 提高到 80px，适合大画布的铺色
+
+### 优化
+- **iPad 绘画体验大幅改善** — 针对纯触控平板（无鼠标/数位笔）自动启用降频模式，水彩笔和 dry 笔在大画布上的卡顿明显减轻；快速画曲线时不再出现"折线"断帧
+- **压感曲线更平滑** — 数位笔原始压力读数加入滤波，软档位下轻画的粗细抖动消失
+- **落笔首点自然** — 数位笔落笔瞬间不再出现异常大的笔触（之前压力读数未稳时容易画出一个粗黑点）
+- **移动端页面可滚动和缩放** — 之前整个页面禁用触控手势导致 iPad/手机上无法用手指浏览界面；现在画布外的区域可以正常滚动、双指缩放页面
+- **画布宽度调整条更好按** — 左右两侧的拖拽条触控热区加宽三倍（实际宽度不变），iPad 上手指也能轻松点到；拖拽时的光晕更明显
+
+### 修复
+- **数位笔抬笔瞬间偶尔画出超大笔触** — 某些设备在松笔瞬间会误报满压力，被代码当成"重压"处理；现已纠正
+- **多指误触干扰** — 数位笔画画时手掌搭到屏幕上，或者两指同时按下，会互相打断笔画；现在只认第一指，笔画不会串线
+
+[EN]
+### New
+- **Four pressure sensitivity presets** — Four round buttons (large → small dots) added at the top, representing tip softness from softest to firmest. The softest lets light touches draw thin, faint lines and pressed strokes go larger than your brush size; the firmest requires steady pressure for full strokes. Different feels for different hands
+- **Smudge tool now pressure-sensitive** — Previously pressure only affected the brush; now smudge size, drag distance, and intensity all react to pressure — tap lightly for small pokes, press harder for long smears
+- **Brush size upper limit raised to 80px** — Max brush size increased from 50px to 80px for broader strokes on large canvases
+
+### Improvement
+- **Major iPad painting improvements** — Pure touchscreen tablets (no mouse / stylus) now auto-enable a lower-frequency mode, making watercolor and dry brushes much smoother on large canvases; fast curves no longer break into "line segments"
+- **Smoother pressure curve** — Stylus raw pressure readings now pass through a low-pass filter; wobbly thickness on the softest setting is gone
+- **Natural stroke start** — Stylus touches no longer produce an oversized first dab (previously unstable initial pressure readings caused a thick black dot on landing)
+- **Mobile page scrolls and zooms properly** — Previously the whole page disabled touch gestures, making it impossible to scroll/pinch-zoom the UI on iPad/phone; now areas outside the canvas allow normal scrolling and pinch-zoom
+- **Canvas-width drag handles easier to grab** — The left/right drag handles have a 3× wider touch hit zone (visual size unchanged), much easier to hit with a finger on iPad; the glow feedback during drag is also more visible
+
+### Fix
+- **Stylus lift-off occasionally drew huge strokes** — Some devices briefly report full pressure during lift-off, which the code treated as a hard press; now corrected
+- **Multi-touch interference** — With a stylus, resting your palm on the screen or tapping with a second finger used to interrupt the current stroke; now only the first pointer counts, strokes stay clean
+
 == V1.4.1 ==
 [ZH]
 ### 新增
