@@ -3,13 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <title>Mixbox Palette</title>
-    <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-9C4JZPQVMC"></script>
+    <!-- Google tag (gtag.js) — 本地开发（localhost / 127.0.0.1）不加载，避免污染统计 -->
     <script>
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-9C4JZPQVMC');
+      (function(){
+        var h = location.hostname;
+        if (h === 'localhost' || h === '127.0.0.1' || h === '') return;
+        var s = document.createElement('script');
+        s.async = true;
+        s.src = 'https://www.googletagmanager.com/gtag/js?id=G-9C4JZPQVMC';
+        document.head.appendChild(s);
+        gtag('js', new Date());
+        gtag('config', 'G-9C4JZPQVMC');
+      })();
     </script>
     <link rel="stylesheet" href="css/base.css">
     <link rel="stylesheet" href="css/header.css">
