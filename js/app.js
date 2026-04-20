@@ -98,6 +98,10 @@ const toolStates = {
 };
 let currentTool = 'brush';  // 'brush' 或 'smudge'
 let pressureEnabled = false;  // 压感开关
+let pressureGamma = 1.0;      // 压感灵敏度曲线（output = pressure ^ gamma，<1 灵敏，>1 迟钝）
+let pressureSizeFloor = 0.4;  // 最小压力时的笔刷大小比例
+let pressureSizeCeil  = 1.0;  // 最大压力时的笔刷大小比例（软档位可 > 1 放大超最大 brushSize）
+let pressureMixFloor = 0.5;   // 最小压力时的浓度比例
 let smudgeSnapshotCache = null;
 
 // 当前笔刷类型（笔刷工具下决定走 brush 还是 watercolor state）
@@ -342,6 +346,10 @@ async function initApp() {
             backgroundColor = savedAppSettings.backgroundColor;
         }
         if (savedAppSettings.pressureEnabled != null) pressureEnabled = savedAppSettings.pressureEnabled;
+        if (savedAppSettings.pressureGamma != null) pressureGamma = savedAppSettings.pressureGamma;
+        if (savedAppSettings.pressureSizeFloor != null) pressureSizeFloor = savedAppSettings.pressureSizeFloor;
+        if (savedAppSettings.pressureSizeCeil != null) pressureSizeCeil = savedAppSettings.pressureSizeCeil;
+        if (savedAppSettings.pressureMixFloor != null) pressureMixFloor = savedAppSettings.pressureMixFloor;
         console.log('✅ 已加载保存的应用设置');
     }
 
@@ -745,6 +753,43 @@ function bindEvents() {
         paletteStorage.saveAppSettings({ pressureEnabled });
     });
 
+    // 压感灵敏度 4 档 toggle（gamma + size 下限/上限 + 浓度下限 绑定存储在 data-* 属性）
+    // 必须恰有一个按钮处于 active 状态
+    const pressureSensBtns = document.querySelectorAll('.pressure-sens-btn');
+
+    function _applyPressureSensBtn(btn, persist) {
+        pressureGamma = parseFloat(btn.dataset.gamma);
+        pressureSizeFloor = parseFloat(btn.dataset.sizeFloor);
+        pressureSizeCeil  = parseFloat(btn.dataset.sizeCeil);
+        pressureMixFloor  = parseFloat(btn.dataset.mixFloor);
+        pressureSensBtns.forEach(b => b.classList.toggle('active', b === btn));
+        if (persist) {
+            paletteStorage.saveAppSettings({
+                pressureGamma,
+                pressureSizeFloor,
+                pressureSizeCeil,
+                pressureMixFloor,
+            });
+        }
+    }
+
+    // 初始化：找到与已存 gamma 匹配的按钮，找不到就退回"适中"档（gamma=1.0）
+    let _initialBtn = null;
+    for (const btn of pressureSensBtns) {
+        if (Math.abs(parseFloat(btn.dataset.gamma) - pressureGamma) < 0.001) {
+            _initialBtn = btn;
+            break;
+        }
+    }
+    if (!_initialBtn) {
+        _initialBtn = [...pressureSensBtns].find(b => parseFloat(b.dataset.gamma) === 1.0) || pressureSensBtns[0];
+    }
+    _applyPressureSensBtn(_initialBtn, false);
+
+    pressureSensBtns.forEach(btn => {
+        btn.addEventListener('click', () => _applyPressureSensBtn(btn, true));
+    });
+
     const smudgeBtn = document.getElementById('smudgeBtn');
     smudgeBtn.addEventListener('click', () => {
         const brushPreviewBtn = document.getElementById('brushPreviewBtn');
@@ -1087,6 +1132,91 @@ function bindEvents() {
     let strokeStarted = false;
     let lastX = 0;
     let lastY = 0;
+    // pointermove 合批：只记录最新目标位置，由 scheduler 每帧消费
+    let _pendingStroke = null;
+    // 单帧最多 draw 次数（超过则剩余距离留到下一帧）。
+    // DeviceProfile 设备自适应：桌面 120（几乎不触发）、触控 15（性能兜底）
+    const MAX_STEPS_PER_FRAME = (typeof DeviceProfile !== 'undefined' && DeviceProfile.MAX_STEPS_PER_FRAME) || 15;
+
+    function _flushPendingStroke() {
+        if (!_pendingStroke || !isDrawing) return;
+        const { x, y, pressure } = _pendingStroke;
+        _pendingStroke = null;
+
+        if (currentTool === 'brush') {
+            const distance = Math.sqrt(Math.pow(x - lastX, 2) + Math.pow(y - lastY, 2));
+            const activeColor = currentStroke ? currentStroke.color : currentBrushColor;
+
+            const brushType = currentBrush.type;
+            const baseSpacing = brushType === 'dry'
+                ? brushSize * 0.15
+                : brushType === 'splatter'
+                ? brushSize * 0.3
+                : brushSize * 0.25;
+            // 水彩间距用户侧不暴露，固定 35%：baseSpacing * 0.35 = brushSize * 0.25 * 0.35 ≈ brushSize * 0.088
+            const spacingRatio = brushType === 'watercolor' ? 0.35 : brushSpacingRatio;
+            // 下限跟笔刷大小挂钩（最少 1px），避免大笔 + 低 spacingRatio 导致单帧 draw 次数暴涨
+            const effectiveMinDist = Math.max(1, brushSize * 0.05, baseSpacing * spacingRatio);
+
+            if (distance >= effectiveMinDist) {
+                const rawSteps = Math.floor(distance / effectiveMinDist);
+                const steps = Math.min(rawSteps, MAX_STEPS_PER_FRAME);
+                // 超预算时只画前 steps 段，末尾剩余下一帧继续
+                const reachedRatio = steps / rawSteps;
+                const endX = lastX + (x - lastX) * reachedRatio;
+                const endY = lastY + (y - lastY) * reachedRatio;
+
+                if (steps > 1) {
+                    let prevIX = lastX, prevIY = lastY;
+                    for (let i = 1; i <= steps; i++) {
+                        const ratio = i / steps;
+                        const interpX = lastX + (endX - lastX) * ratio;
+                        const interpY = lastY + (endY - lastY) * ratio;
+                        drawBrush(interpX, interpY, activeColor, prevIX, prevIY, pressure);
+                        addStrokePoint(interpX, interpY);
+                        prevIX = interpX; prevIY = interpY;
+                    }
+                } else {
+                    drawBrush(endX, endY, activeColor, lastX, lastY, pressure);
+                    addStrokePoint(endX, endY);
+                }
+
+                lastX = endX;
+                lastY = endY;
+                if (painter) painter.flush();
+
+                if (rawSteps > MAX_STEPS_PER_FRAME) {
+                    _pendingStroke = { x, y, pressure };
+                }
+            }
+        } else if (currentTool === 'smudge') {
+            const distance = Math.sqrt(Math.pow(x - lastX, 2) + Math.pow(y - lastY, 2));
+            const smudgeBaseSpacing = currentBrush.type === 'dry'
+                ? brushSize * 0.15
+                : currentBrush.type === 'splatter'
+                ? brushSize * 0.3
+                : brushSize * 0.25;
+            const smudgeMinDist = Math.max(1, brushSize * 0.05, smudgeBaseSpacing * smudgeSpacingRatio);
+
+            if (distance >= smudgeMinDist) {
+                const rawSteps = Math.max(1, Math.floor(distance / smudgeMinDist));
+                const steps = Math.min(rawSteps, MAX_STEPS_PER_FRAME);
+                const reachedRatio = steps / rawSteps;
+                const endX = lastX + (x - lastX) * reachedRatio;
+                const endY = lastY + (y - lastY) * reachedRatio;
+
+                addStrokePoint(endX, endY);
+                smudgeAlongPath(lastX, lastY, endX, endY);
+                lastX = endX;
+                lastY = endY;
+                if (painter) painter.flush();
+
+                if (rawSteps > MAX_STEPS_PER_FRAME) {
+                    _pendingStroke = { x, y, pressure };
+                }
+            }
+        }
+    }
 
     mixCanvas.addEventListener('pointerdown', (e) => {
         // 阻止默认行为（防止长按时浏览器恢复系统光标）
@@ -1095,7 +1225,12 @@ function bindEvents() {
         const rect = mixCanvas.getBoundingClientRect();
         const x = (e.clientX - rect.left) * (mixCanvas.width / rect.width);
         const y = (e.clientY - rect.top) * (mixCanvas.height / rect.height);
-        const pressure = (pressureEnabled && e.pointerType === 'pen') ? (e.pressure > 0 ? e.pressure : 1.0) : 1.0;
+        // pen + 压感开启时：先归一化（Pencil / Wacom 实际最大 e.pressure 往往只到 0.7~0.85，不是 1.0），
+        // 再走 gamma 曲线。抬笔瞬间 pressure=0 被原样传下去（不 fallback 成 1.0，避免大笔触）。
+        const PRESSURE_NORM = 0.8;
+        const pressure = (pressureEnabled && e.pointerType === 'pen')
+            ? Math.pow(Math.min(1.0, e.pressure / PRESSURE_NORM), pressureGamma)
+            : 1.0;
 
         if (isEyedropperMode) {
             return;
@@ -1107,6 +1242,8 @@ function bindEvents() {
             // 笔刷工具模式
             isDrawing = true;
             strokeStarted = true;
+            _pendingStroke = null;
+            FrameScheduler.register('stroke-draw', _flushPendingStroke, 10);
 
             // 左键用前景色，右键用背景色
             const strokeColor = e.button === 2 ? backgroundColor : currentBrushColor;
@@ -1149,6 +1286,8 @@ function bindEvents() {
             // 涂抹工具模式
             isDrawing = true;
             strokeStarted = true;
+            _pendingStroke = null;
+            FrameScheduler.register('stroke-draw', _flushPendingStroke, 10);
 
             // 开始新涂抹笔画，落笔时采样一次颜色，整笔复用
             beginStroke('smudge', null, x, y);
@@ -1167,73 +1306,17 @@ function bindEvents() {
         if (isDrawing && !isEyedropperMode) {
             const x = (e.clientX - rect.left) * (mixCanvas.width / rect.width);
             const y = (e.clientY - rect.top) * (mixCanvas.height / rect.height);
-            const pressure = (pressureEnabled && e.pointerType === 'pen') ? (e.pressure > 0 ? e.pressure : 1.0) : 1.0;
-
-            if (currentTool === 'brush') {
-                // 笔刷工具模式
-                const distance = Math.sqrt(Math.pow(x - lastX, 2) + Math.pow(y - lastY, 2));
-                const activeColor = currentStroke ? currentStroke.color : currentBrushColor;
-
-                // 步长跟笔刷大小挂钩，乘以间距系数（1%时趋近1px，100%时为最大间距）
-                const brushType = currentBrush.type;
-                const baseSpacing = brushType === 'dry'
-                    ? brushSize * 0.15
-                    : brushType === 'splatter'
-                    ? brushSize * 0.3
-                    : brushSize * 0.25;
-                const spacingRatio = brushType === 'watercolor' ? 0.01 : brushSpacingRatio;
-                const effectiveMinDist = Math.max(1, baseSpacing * spacingRatio);
-
-                if (distance >= effectiveMinDist) {
-                    const steps = Math.floor(distance / effectiveMinDist);
-                    let unionRect = null;
-
-                    if (steps > 1) {
-                        let prevIX = lastX, prevIY = lastY;
-                        for (let i = 1; i <= steps; i++) {
-                            const ratio = i / steps;
-                            const interpX = lastX + (x - lastX) * ratio;
-                            const interpY = lastY + (y - lastY) * ratio;
-                            const r = drawBrush(interpX, interpY, activeColor, prevIX, prevIY, pressure);
-                            if (r) unionRect = unionRect ? unionDirtyRect(unionRect, r) : r;
-                            addStrokePoint(interpX, interpY);
-                            prevIX = interpX; prevIY = interpY;
-                        }
-                    } else {
-                        const r = drawBrush(x, y, activeColor, lastX, lastY, pressure);
-                        unionRect = r;
-                        addStrokePoint(x, y);
-                    }
-
-                    lastX = x;
-                    lastY = y;
-                }
-            } else if (currentTool === 'smudge') {
-                // 涂抹工具模式
-                const distance = Math.sqrt(Math.pow(x - lastX, 2) + Math.pow(y - lastY, 2));
-                const smudgeBaseSpacing = currentBrush.type === 'dry'
-                    ? brushSize * 0.15
-                    : currentBrush.type === 'splatter'
-                    ? brushSize * 0.3
-                    : brushSize * 0.25;
-                const smudgeMinDist = Math.max(1, smudgeBaseSpacing * smudgeSpacingRatio);
-
-                if (distance >= smudgeMinDist) {
-                    // 记录路径点
-                    addStrokePoint(x, y);
-
-                    // 沿着拖动路径涂抹
-                    smudgeAlongPath(lastX, lastY, x, y);
-
-                    lastX = x;
-                    lastY = y;
-                }
-            }
-            // 每个 pointermove 末尾统一 flush 一次，避免中间帧闪烁
-            if (painter) painter.flush();
+            // pen + 压感开启时：先归一化（Pencil / Wacom 实际最大 e.pressure 往往只到 0.7~0.85，不是 1.0），
+        // 再走 gamma 曲线。抬笔瞬间 pressure=0 被原样传下去（不 fallback 成 1.0，避免大笔触）。
+        const PRESSURE_NORM = 0.8;
+        const pressure = (pressureEnabled && e.pointerType === 'pen')
+            ? Math.pow(Math.min(1.0, e.pressure / PRESSURE_NORM), pressureGamma)
+            : 1.0;
+            // 只记录最新目标位置，实际绘制由 scheduler 'stroke-draw' 任务每帧消费
+            _pendingStroke = { x, y, pressure };
         }
 
-        // 笔刷光标跟随（无论是否在绘制）
+        // 笔刷光标跟随（无论是否在绘制）——UI 必须即时响应，不走 scheduler
         {
             const zoom = typeof getCurrentZoom === 'function' ? getCurrentZoom() : 1;
             updateBrushCursor((e.clientX - rect.left) / zoom, (e.clientY - rect.top) / zoom);
@@ -1272,8 +1355,11 @@ function bindEvents() {
         
         // 笔刷/涂抹模式：结束笔画
         if (isDrawing && strokeStarted) {
+            // 消费最后一帧残留的 pending，防止笔触尾部缺失
+            if (_pendingStroke) _flushPendingStroke();
             isDrawing = false;
             strokeStarted = false;
+            FrameScheduler.unregister('stroke-draw');
 
             endStroke();
         }
@@ -1281,8 +1367,10 @@ function bindEvents() {
 
     mixCanvas.addEventListener('pointerleave', () => {
         if (isDrawing && strokeStarted) {
+            if (_pendingStroke) _flushPendingStroke();
             isDrawing = false;
             strokeStarted = false;
+            FrameScheduler.unregister('stroke-draw');
 
             endStroke();
         }
@@ -1630,7 +1718,8 @@ function updateStatus(mode) {
  * 开始新笔画
  */
 function beginStroke(type, color = null, startX = 0, startY = 0, pressure = 1.0) {
-    const effectiveSize = Math.max(brushSize * 0.01, brushSize * pressure);
+    // 压感映射：pressure=0 → floor，pressure=1 → ceil（软档位 ceil 可 > 1 放大超最大 brushSize）
+    const effectiveSize = brushSize * (pressureSizeFloor + (pressureSizeCeil - pressureSizeFloor) * pressure);
     currentStroke = {
         type: type,
         points: [],
@@ -1666,7 +1755,7 @@ function beginStroke(type, color = null, startX = 0, startY = 0, pressure = 1.0)
             painter._wetColor = color ? hexToRgb(color) : { r: 0, g: 0, b: 0 };
             painter._wetMixStrength = painter.baseMixStrength;
             // RAF 未运行时（如第一笔）立即启动，确保第一笔就有湿纸效果
-            if (!painter._fadeRafId) painter.startHeatmapFadeOut();
+            painter.startHeatmapFadeOut();
         }
     }
 }
@@ -1909,8 +1998,9 @@ function drawBrush(x, y, color, prevX = x, prevY = y, pressure = 1.0) {
 
     const colorRGB = hexToRgb(color);
 
-    // 压感映射：1% ~ 100% 的笔刷大小；鼠标传入 1.0 保持满大小
-    const effectiveSize = Math.max(brushSize * 0.01, brushSize * pressure);
+    // 压感映射：size 下限 floor → 上限 ceil（软档 ceil>1 放大超最大）；浓度下限 floor → 最大 1.0
+    const effectiveSize = brushSize * (pressureSizeFloor + (pressureSizeCeil - pressureSizeFloor) * pressure);
+    const pressureMixScale = pressureMixFloor + (1 - pressureMixFloor) * pressure;
 
     const isSplatter = currentBrush.type === 'splatter';
     const isCircle = currentBrush.type === 'circle';
@@ -1927,6 +2017,12 @@ function drawBrush(x, y, color, prevX = x, prevY = y, pressure = 1.0) {
     // 喷溅笔刷每步用随机角度旋转纹理，模拟喷枪散点无规律感
     const brushRotation = isSplatter ? Math.random() * Math.PI * 2 : 0;
 
+    // 临时按压感缩放 painter 的 baseMixStrength，画完恢复（不污染用户设置）
+    const originalMixStrength = painter.baseMixStrength;
+    if (pressureMixScale < 1.0) {
+        painter.baseMixStrength = originalMixStrength * pressureMixScale;
+    }
+
     const dirtyRect = painter.drawBrush(
         x,
         y,
@@ -1939,6 +2035,9 @@ function drawBrush(x, y, color, prevX = x, prevY = y, pressure = 1.0) {
         false, 1.0, false, 0, 0,
         brushRotation, 0, isWatercolor,
     );
+
+    // 恢复用户设置的 baseMixStrength
+    painter.baseMixStrength = originalMixStrength;
 
     return dirtyRect;
 }
@@ -1955,7 +2054,7 @@ function smudgeAlongPath(x1, y1, x2, y2) {
         : currentBrush.type === 'splatter'
         ? brushSize * 0.3
         : brushSize * 0.25;
-    const smudgeStep = Math.max(1, smudgeBaseSpacing * smudgeSpacingRatio);
+    const smudgeStep = Math.max(1, brushSize * 0.05, smudgeBaseSpacing * smudgeSpacingRatio);
     const steps = Math.max(1, Math.floor(distance / smudgeStep));
 
     let unionRect = null;

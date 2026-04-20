@@ -657,18 +657,26 @@ function _applyWetColor(color) {
  * 松开画笔时，用 depositHeatmap 的梯度交界（maskDeposit）做渐进沉积。
  * 分 8 帧 RAF 叠入，强度线性衰减，完成后清空 depositHeatmap。
  */
+let _depositSeq = 0;
+
 function _applyDepositColor() {
     if (!this._wetColorProgram || !this._wetColor) return;
 
     const TOTAL_FRAMES = 8;
     let frame = 0;
     const color = this._wetColor;
+    // 同一 painter 可能短时间内多次落笔，每次用独立 id 防止旧任务覆盖
+    const taskName = 'deposit-color-' + this._instanceId + '-' + (++_depositSeq);
 
     const tick = () => {
-        if (this._disposed) return;
+        if (this._disposed) {
+            FrameScheduler.unregister(taskName);
+            return;
+        }
         if (frame >= TOTAL_FRAMES) {
             this.clearDepositHeatmap();
             this.flush();
+            FrameScheduler.unregister(taskName);
             return;
         }
 
@@ -679,10 +687,9 @@ function _applyDepositColor() {
         this._applyDepositColorPass(color, frameStr);
         this.flush();
         frame++;
-        requestAnimationFrame(tick);
     };
 
-    requestAnimationFrame(tick);
+    FrameScheduler.register(taskName, tick, 30);
 }
 
 /**
