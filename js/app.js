@@ -753,24 +753,41 @@ function bindEvents() {
         paletteStorage.saveAppSettings({ pressureEnabled });
     });
 
-    // 压感灵敏度 4 档 toggle（gamma + size 下限 + 浓度下限 绑定存储在 data-* 属性）
+    // 压感灵敏度 4 档 toggle（gamma + size 下限/上限 + 浓度下限 绑定存储在 data-* 属性）
+    // 必须恰有一个按钮处于 active 状态
     const pressureSensBtns = document.querySelectorAll('.pressure-sens-btn');
-    pressureSensBtns.forEach(btn => {
-        const btnGamma = parseFloat(btn.dataset.gamma);
-        btn.classList.toggle('active', Math.abs(btnGamma - pressureGamma) < 0.001);
-        btn.addEventListener('click', () => {
-            pressureGamma = btnGamma;
-            pressureSizeFloor = parseFloat(btn.dataset.sizeFloor);
-            pressureSizeCeil  = parseFloat(btn.dataset.sizeCeil);
-            pressureMixFloor  = parseFloat(btn.dataset.mixFloor);
-            pressureSensBtns.forEach(b => b.classList.toggle('active', b === btn));
+
+    function _applyPressureSensBtn(btn, persist) {
+        pressureGamma = parseFloat(btn.dataset.gamma);
+        pressureSizeFloor = parseFloat(btn.dataset.sizeFloor);
+        pressureSizeCeil  = parseFloat(btn.dataset.sizeCeil);
+        pressureMixFloor  = parseFloat(btn.dataset.mixFloor);
+        pressureSensBtns.forEach(b => b.classList.toggle('active', b === btn));
+        if (persist) {
             paletteStorage.saveAppSettings({
                 pressureGamma,
                 pressureSizeFloor,
                 pressureSizeCeil,
                 pressureMixFloor,
             });
-        });
+        }
+    }
+
+    // 初始化：找到与已存 gamma 匹配的按钮，找不到就退回"适中"档（gamma=1.0）
+    let _initialBtn = null;
+    for (const btn of pressureSensBtns) {
+        if (Math.abs(parseFloat(btn.dataset.gamma) - pressureGamma) < 0.001) {
+            _initialBtn = btn;
+            break;
+        }
+    }
+    if (!_initialBtn) {
+        _initialBtn = [...pressureSensBtns].find(b => parseFloat(b.dataset.gamma) === 1.0) || pressureSensBtns[0];
+    }
+    _applyPressureSensBtn(_initialBtn, false);
+
+    pressureSensBtns.forEach(btn => {
+        btn.addEventListener('click', () => _applyPressureSensBtn(btn, true));
     });
 
     const smudgeBtn = document.getElementById('smudgeBtn');
