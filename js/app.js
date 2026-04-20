@@ -1718,8 +1718,9 @@ function updateStatus(mode) {
  * 开始新笔画
  */
 function beginStroke(type, color = null, startX = 0, startY = 0, pressure = 1.0) {
-    // 压感映射：pressure=0 → floor，pressure=1 → ceil（软档位 ceil 可 > 1 放大超最大 brushSize）
-    const effectiveSize = brushSize * (pressureSizeFloor + (pressureSizeCeil - pressureSizeFloor) * pressure);
+    // brushCanvas 按整笔可能达到的最大尺寸（ceil）生成，后续 shader 按实际 effectiveSize 缩小采样。
+    // 否则首点 pressure 小 → canvas 小 → 中途压力变大时纹理被拉伸采样变模糊。
+    const canvasSize = brushSize * pressureSizeCeil;
     currentStroke = {
         type: type,
         points: [],
@@ -1729,8 +1730,8 @@ function beginStroke(type, color = null, startX = 0, startY = 0, pressure = 1.0)
         mixStrength: painter ? painter.getMixStrength() : 0.5,
         startedAt: performance.now()
     };
-    brushManager.refreshRandomBrush(effectiveSize, currentBrush);
-    currentStrokeBrushCanvas = brushManager.createBrushTexture(effectiveSize, currentBrush);
+    brushManager.refreshRandomBrush(canvasSize, currentBrush);
+    currentStrokeBrushCanvas = brushManager.createBrushTexture(canvasSize, currentBrush);
 
     if (type === 'smudge') {
         _smudgeAngle = 0;
