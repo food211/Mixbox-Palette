@@ -100,6 +100,7 @@ let currentTool = 'brush';  // 'brush' 或 'smudge'
 let pressureEnabled = false;  // 压感开关
 let pressureGamma = 1.0;      // 压感灵敏度曲线（output = pressure ^ gamma，<1 灵敏，>1 迟钝）
 let pressureSizeFloor = 0.4;  // 最小压力时的笔刷大小比例
+let pressureSizeCeil  = 1.0;  // 最大压力时的笔刷大小比例（软档位可 > 1 放大超最大 brushSize）
 let pressureMixFloor = 0.5;   // 最小压力时的浓度比例
 let smudgeSnapshotCache = null;
 
@@ -347,6 +348,7 @@ async function initApp() {
         if (savedAppSettings.pressureEnabled != null) pressureEnabled = savedAppSettings.pressureEnabled;
         if (savedAppSettings.pressureGamma != null) pressureGamma = savedAppSettings.pressureGamma;
         if (savedAppSettings.pressureSizeFloor != null) pressureSizeFloor = savedAppSettings.pressureSizeFloor;
+        if (savedAppSettings.pressureSizeCeil != null) pressureSizeCeil = savedAppSettings.pressureSizeCeil;
         if (savedAppSettings.pressureMixFloor != null) pressureMixFloor = savedAppSettings.pressureMixFloor;
         console.log('✅ 已加载保存的应用设置');
     }
@@ -759,11 +761,13 @@ function bindEvents() {
         btn.addEventListener('click', () => {
             pressureGamma = btnGamma;
             pressureSizeFloor = parseFloat(btn.dataset.sizeFloor);
+            pressureSizeCeil  = parseFloat(btn.dataset.sizeCeil);
             pressureMixFloor  = parseFloat(btn.dataset.mixFloor);
             pressureSensBtns.forEach(b => b.classList.toggle('active', b === btn));
             paletteStorage.saveAppSettings({
                 pressureGamma,
                 pressureSizeFloor,
+                pressureSizeCeil,
                 pressureMixFloor,
             });
         });
@@ -1697,8 +1701,8 @@ function updateStatus(mode) {
  * 开始新笔画
  */
 function beginStroke(type, color = null, startX = 0, startY = 0, pressure = 1.0) {
-    // 压感映射：pressure=0 → pressureSizeFloor，pressure=1 → 100%
-    const effectiveSize = brushSize * (pressureSizeFloor + (1 - pressureSizeFloor) * pressure);
+    // 压感映射：pressure=0 → floor，pressure=1 → ceil（软档位 ceil 可 > 1 放大超最大 brushSize）
+    const effectiveSize = brushSize * (pressureSizeFloor + (pressureSizeCeil - pressureSizeFloor) * pressure);
     currentStroke = {
         type: type,
         points: [],
@@ -1977,8 +1981,8 @@ function drawBrush(x, y, color, prevX = x, prevY = y, pressure = 1.0) {
 
     const colorRGB = hexToRgb(color);
 
-    // 压感映射：pressure=0 → pressureSizeFloor / pressureMixFloor，pressure=1 → 100%
-    const effectiveSize = brushSize * (pressureSizeFloor + (1 - pressureSizeFloor) * pressure);
+    // 压感映射：size 下限 floor → 上限 ceil（软档 ceil>1 放大超最大）；浓度下限 floor → 最大 1.0
+    const effectiveSize = brushSize * (pressureSizeFloor + (pressureSizeCeil - pressureSizeFloor) * pressure);
     const pressureMixScale = pressureMixFloor + (1 - pressureMixFloor) * pressure;
 
     const isSplatter = currentBrush.type === 'splatter';
