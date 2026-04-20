@@ -18,6 +18,7 @@ const CACHE_URLS = [
   './js/zoom.js',
   './js/app.js',
   './js/mixbox.js',
+  './js/frame-scheduler.js',
   './js/base-painter.js',
   './js/heatmap.js',
   './js/wetpaper.js',

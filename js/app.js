@@ -1087,6 +1087,66 @@ function bindEvents() {
     let strokeStarted = false;
     let lastX = 0;
     let lastY = 0;
+    // pointermove 合批：只记录最新目标位置，由 scheduler 每帧消费
+    let _pendingStroke = null;
+
+    function _flushPendingStroke() {
+        if (!_pendingStroke || !isDrawing) return;
+        const { x, y, pressure } = _pendingStroke;
+        _pendingStroke = null;
+
+        if (currentTool === 'brush') {
+            const distance = Math.sqrt(Math.pow(x - lastX, 2) + Math.pow(y - lastY, 2));
+            const activeColor = currentStroke ? currentStroke.color : currentBrushColor;
+
+            const brushType = currentBrush.type;
+            const baseSpacing = brushType === 'dry'
+                ? brushSize * 0.15
+                : brushType === 'splatter'
+                ? brushSize * 0.3
+                : brushSize * 0.25;
+            const spacingRatio = brushType === 'watercolor' ? 0.01 : brushSpacingRatio;
+            const effectiveMinDist = Math.max(1, baseSpacing * spacingRatio);
+
+            if (distance >= effectiveMinDist) {
+                const steps = Math.floor(distance / effectiveMinDist);
+                if (steps > 1) {
+                    let prevIX = lastX, prevIY = lastY;
+                    for (let i = 1; i <= steps; i++) {
+                        const ratio = i / steps;
+                        const interpX = lastX + (x - lastX) * ratio;
+                        const interpY = lastY + (y - lastY) * ratio;
+                        drawBrush(interpX, interpY, activeColor, prevIX, prevIY, pressure);
+                        addStrokePoint(interpX, interpY);
+                        prevIX = interpX; prevIY = interpY;
+                    }
+                } else {
+                    drawBrush(x, y, activeColor, lastX, lastY, pressure);
+                    addStrokePoint(x, y);
+                }
+
+                lastX = x;
+                lastY = y;
+                if (painter) painter.flush();
+            }
+        } else if (currentTool === 'smudge') {
+            const distance = Math.sqrt(Math.pow(x - lastX, 2) + Math.pow(y - lastY, 2));
+            const smudgeBaseSpacing = currentBrush.type === 'dry'
+                ? brushSize * 0.15
+                : currentBrush.type === 'splatter'
+                ? brushSize * 0.3
+                : brushSize * 0.25;
+            const smudgeMinDist = Math.max(1, smudgeBaseSpacing * smudgeSpacingRatio);
+
+            if (distance >= smudgeMinDist) {
+                addStrokePoint(x, y);
+                smudgeAlongPath(lastX, lastY, x, y);
+                lastX = x;
+                lastY = y;
+                if (painter) painter.flush();
+            }
+        }
+    }
 
     mixCanvas.addEventListener('pointerdown', (e) => {
         // 阻止默认行为（防止长按时浏览器恢复系统光标）
@@ -1107,6 +1167,8 @@ function bindEvents() {
             // 笔刷工具模式
             isDrawing = true;
             strokeStarted = true;
+            _pendingStroke = null;
+            FrameScheduler.register('stroke-draw', _flushPendingStroke, 10);
 
             // 左键用前景色，右键用背景色
             const strokeColor = e.button === 2 ? backgroundColor : currentBrushColor;
@@ -1149,6 +1211,8 @@ function bindEvents() {
             // 涂抹工具模式
             isDrawing = true;
             strokeStarted = true;
+            _pendingStroke = null;
+            FrameScheduler.register('stroke-draw', _flushPendingStroke, 10);
 
             // 开始新涂抹笔画，落笔时采样一次颜色，整笔复用
             beginStroke('smudge', null, x, y);
@@ -1168,72 +1232,11 @@ function bindEvents() {
             const x = (e.clientX - rect.left) * (mixCanvas.width / rect.width);
             const y = (e.clientY - rect.top) * (mixCanvas.height / rect.height);
             const pressure = (pressureEnabled && e.pointerType === 'pen') ? (e.pressure > 0 ? e.pressure : 1.0) : 1.0;
-
-            if (currentTool === 'brush') {
-                // 笔刷工具模式
-                const distance = Math.sqrt(Math.pow(x - lastX, 2) + Math.pow(y - lastY, 2));
-                const activeColor = currentStroke ? currentStroke.color : currentBrushColor;
-
-                // 步长跟笔刷大小挂钩，乘以间距系数（1%时趋近1px，100%时为最大间距）
-                const brushType = currentBrush.type;
-                const baseSpacing = brushType === 'dry'
-                    ? brushSize * 0.15
-                    : brushType === 'splatter'
-                    ? brushSize * 0.3
-                    : brushSize * 0.25;
-                const spacingRatio = brushType === 'watercolor' ? 0.01 : brushSpacingRatio;
-                const effectiveMinDist = Math.max(1, baseSpacing * spacingRatio);
-
-                if (distance >= effectiveMinDist) {
-                    const steps = Math.floor(distance / effectiveMinDist);
-                    let unionRect = null;
-
-                    if (steps > 1) {
-                        let prevIX = lastX, prevIY = lastY;
-                        for (let i = 1; i <= steps; i++) {
-                            const ratio = i / steps;
-                            const interpX = lastX + (x - lastX) * ratio;
-                            const interpY = lastY + (y - lastY) * ratio;
-                            const r = drawBrush(interpX, interpY, activeColor, prevIX, prevIY, pressure);
-                            if (r) unionRect = unionRect ? unionDirtyRect(unionRect, r) : r;
-                            addStrokePoint(interpX, interpY);
-                            prevIX = interpX; prevIY = interpY;
-                        }
-                    } else {
-                        const r = drawBrush(x, y, activeColor, lastX, lastY, pressure);
-                        unionRect = r;
-                        addStrokePoint(x, y);
-                    }
-
-                    lastX = x;
-                    lastY = y;
-                }
-            } else if (currentTool === 'smudge') {
-                // 涂抹工具模式
-                const distance = Math.sqrt(Math.pow(x - lastX, 2) + Math.pow(y - lastY, 2));
-                const smudgeBaseSpacing = currentBrush.type === 'dry'
-                    ? brushSize * 0.15
-                    : currentBrush.type === 'splatter'
-                    ? brushSize * 0.3
-                    : brushSize * 0.25;
-                const smudgeMinDist = Math.max(1, smudgeBaseSpacing * smudgeSpacingRatio);
-
-                if (distance >= smudgeMinDist) {
-                    // 记录路径点
-                    addStrokePoint(x, y);
-
-                    // 沿着拖动路径涂抹
-                    smudgeAlongPath(lastX, lastY, x, y);
-
-                    lastX = x;
-                    lastY = y;
-                }
-            }
-            // 每个 pointermove 末尾统一 flush 一次，避免中间帧闪烁
-            if (painter) painter.flush();
+            // 只记录最新目标位置，实际绘制由 scheduler 'stroke-draw' 任务每帧消费
+            _pendingStroke = { x, y, pressure };
         }
 
-        // 笔刷光标跟随（无论是否在绘制）
+        // 笔刷光标跟随（无论是否在绘制）——UI 必须即时响应，不走 scheduler
         {
             const zoom = typeof getCurrentZoom === 'function' ? getCurrentZoom() : 1;
             updateBrushCursor((e.clientX - rect.left) / zoom, (e.clientY - rect.top) / zoom);
@@ -1272,8 +1275,11 @@ function bindEvents() {
         
         // 笔刷/涂抹模式：结束笔画
         if (isDrawing && strokeStarted) {
+            // 消费最后一帧残留的 pending，防止笔触尾部缺失
+            if (_pendingStroke) _flushPendingStroke();
             isDrawing = false;
             strokeStarted = false;
+            FrameScheduler.unregister('stroke-draw');
 
             endStroke();
         }
@@ -1281,8 +1287,10 @@ function bindEvents() {
 
     mixCanvas.addEventListener('pointerleave', () => {
         if (isDrawing && strokeStarted) {
+            if (_pendingStroke) _flushPendingStroke();
             isDrawing = false;
             strokeStarted = false;
+            FrameScheduler.unregister('stroke-draw');
 
             endStroke();
         }
@@ -1666,7 +1674,7 @@ function beginStroke(type, color = null, startX = 0, startY = 0, pressure = 1.0)
             painter._wetColor = color ? hexToRgb(color) : { r: 0, g: 0, b: 0 };
             painter._wetMixStrength = painter.baseMixStrength;
             // RAF 未运行时（如第一笔）立即启动，确保第一笔就有湿纸效果
-            if (!painter._fadeRafId) painter.startHeatmapFadeOut();
+            painter.startHeatmapFadeOut();
         }
     }
 }

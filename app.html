@@ -337,6 +337,7 @@
             // Tier 0：无依赖的脚本全部并行下载
             const tier0 = Promise.all([
                 loadScript('js/params.js'),
+                loadScript('js/frame-scheduler.js'),
                 loadScript('js/base-painter.js'),
                 loadScript('js/brush-manager.js'),
                 loadScript('js/palette-storage.js'),

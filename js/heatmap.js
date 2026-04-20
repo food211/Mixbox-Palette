@@ -658,13 +658,17 @@ function setHeatmapDecayActive(active) {
 }
 
 function startHeatmapFadeOut() {
-    // RAF 已在运行则不重复启动
-    if (this._fadeRafId) return;
+    const taskName = 'heatmap-fade-' + this._instanceId;
+    // 已注册则不重复启动
+    if (FrameScheduler.has(taskName)) return;
 
     const painter = this;
 
     function tick() {
-        if (painter._disposed) return;
+        if (painter._disposed) {
+            FrameScheduler.unregister(taskName);
+            return;
+        }
         // 热度衰减（始终运行，让已有热度自然消退）
         // 湿度滑条调制：湿度高→水多干得慢；湿度低→水少干得快
         // w=0 时 MAX 倍（干得快）、w=1 时 MIN 倍（干得慢）
@@ -717,11 +721,9 @@ function startHeatmapFadeOut() {
             || painter._debugWetPaperEnabled
             || painter._debugDepositHeatmapEnabled
             || painter._debugWetMaskHeatmapEnabled) painter.flush();
-
-        painter._fadeRafId = requestAnimationFrame(tick);
     }
 
-    this._fadeRafId = requestAnimationFrame(tick);
+    FrameScheduler.register(taskName, tick, 40);
 }
 
 /**
@@ -736,10 +738,7 @@ function _resetHeatmapFade() {
  * 停止衰减 RAF。切换引擎或销毁 painter 时调用，避免旧实例的 RAF 持续运行。
  */
 function stopHeatmapFadeOut() {
-    if (this._fadeRafId) {
-        cancelAnimationFrame(this._fadeRafId);
-        this._fadeRafId = null;
-    }
+    FrameScheduler.unregister('heatmap-fade-' + this._instanceId);
 }
 
 
