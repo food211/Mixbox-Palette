@@ -511,7 +511,7 @@ function updatePaletteInfo() {
  */
 function switchPalette(paletteKey) {
     if (palettePresets[paletteKey] && paletteKey !== currentPalette) {
-        track('palette_preset_change', { from: currentPalette, to: paletteKey });
+        track('palette_preset_change', { from_palette: currentPalette, to_palette: paletteKey });
         currentPalette = paletteKey;
         colors = palettePresets[paletteKey].colors;
         
@@ -917,7 +917,7 @@ function bindEvents() {
         engineBtn.classList.toggle('mb', currentEngine === 'mixbox');
         engineBtn.addEventListener('click', () => {
             const nextEngine = currentEngine === 'mixbox' ? 'km' : 'mixbox';
-            track('engine_switch', { from: currentEngine, to: nextEngine });
+            track('engine_switch', { from_engine: currentEngine, to_engine: nextEngine });
             switchEngine(nextEngine);
         });
     }
