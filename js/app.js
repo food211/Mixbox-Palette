@@ -1235,7 +1235,12 @@ function bindEvents() {
         }
     }
 
+    let _activePointerId = null;  // 锁定第一指的 pointerId，忽略多指干扰
+
     mixCanvas.addEventListener('pointerdown', (e) => {
+        // 已有笔画进行中：忽略第二指（防多指触控干扰，也保护 Windows 触控屏手掌误触）
+        if (_activePointerId !== null && e.pointerId !== _activePointerId) return;
+
         // 阻止默认行为（防止长按时浏览器恢复系统光标）
         e.preventDefault();
 
@@ -1254,6 +1259,8 @@ function bindEvents() {
         }
 
         if (e.button !== 0 && e.button !== 2) return; // 左键或右键
+
+        _activePointerId = e.pointerId;
 
         if (currentTool === 'brush') {
             // 笔刷工具模式
@@ -1379,6 +1386,7 @@ function bindEvents() {
             isDrawing = false;
             strokeStarted = false;
             _smoothedPressure = 0;
+            _activePointerId = null;
             FrameScheduler.unregister('stroke-draw');
 
             endStroke();
@@ -1391,11 +1399,25 @@ function bindEvents() {
             isDrawing = false;
             strokeStarted = false;
             _smoothedPressure = 0;
+            _activePointerId = null;
             FrameScheduler.unregister('stroke-draw');
 
             endStroke();
         }
         hideBrushCursor();
+    });
+
+    // pointercancel：系统中断笔画（如手势冲突、应用切换）时 pointerup 不会触发，要单独处理
+    mixCanvas.addEventListener('pointercancel', () => {
+        if (isDrawing && strokeStarted) {
+            if (_pendingStroke) _flushPendingStroke();
+            isDrawing = false;
+            strokeStarted = false;
+            _smoothedPressure = 0;
+            _activePointerId = null;
+            FrameScheduler.unregister('stroke-draw');
+            endStroke();
+        }
     });
 
     // ── 笔刷光标 ──────────────────────────────────────
