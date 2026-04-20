@@ -1204,10 +1204,11 @@ function bindEvents() {
         const rect = mixCanvas.getBoundingClientRect();
         const x = (e.clientX - rect.left) * (mixCanvas.width / rect.width);
         const y = (e.clientY - rect.top) * (mixCanvas.height / rect.height);
-        // pen + 压感开启时，直接用 e.pressure（包括 0，避免抬笔瞬间 pressure=0 被 fallback 成 1.0 画出一个大笔触）
-        // 灵敏度曲线：gamma<1 灵敏（轻压即响应），>1 迟钝（要重压才满压）
+        // pen + 压感开启时：先归一化（Pencil / Wacom 实际最大 e.pressure 往往只到 0.7~0.85，不是 1.0），
+        // 再走 gamma 曲线。抬笔瞬间 pressure=0 被原样传下去（不 fallback 成 1.0，避免大笔触）。
+        const PRESSURE_NORM = 0.8;
         const pressure = (pressureEnabled && e.pointerType === 'pen')
-            ? Math.pow(e.pressure, pressureGamma)
+            ? Math.pow(Math.min(1.0, e.pressure / PRESSURE_NORM), pressureGamma)
             : 1.0;
 
         if (isEyedropperMode) {
@@ -1284,10 +1285,11 @@ function bindEvents() {
         if (isDrawing && !isEyedropperMode) {
             const x = (e.clientX - rect.left) * (mixCanvas.width / rect.width);
             const y = (e.clientY - rect.top) * (mixCanvas.height / rect.height);
-            // pen + 压感开启时，直接用 e.pressure（包括 0，避免抬笔瞬间 pressure=0 被 fallback 成 1.0 画出一个大笔触）
-        // 灵敏度曲线：gamma<1 灵敏（轻压即响应），>1 迟钝（要重压才满压）
+            // pen + 压感开启时：先归一化（Pencil / Wacom 实际最大 e.pressure 往往只到 0.7~0.85，不是 1.0），
+        // 再走 gamma 曲线。抬笔瞬间 pressure=0 被原样传下去（不 fallback 成 1.0，避免大笔触）。
+        const PRESSURE_NORM = 0.8;
         const pressure = (pressureEnabled && e.pointerType === 'pen')
-            ? Math.pow(e.pressure, pressureGamma)
+            ? Math.pow(Math.min(1.0, e.pressure / PRESSURE_NORM), pressureGamma)
             : 1.0;
             // 只记录最新目标位置，实际绘制由 scheduler 'stroke-draw' 任务每帧消费
             _pendingStroke = { x, y, pressure };
