@@ -1134,6 +1134,11 @@ function bindEvents() {
     let lastY = 0;
     // pointermove 合批：只记录最新目标位置，由 scheduler 每帧消费
     let _pendingStroke = null;
+    // pen pressure EMA 平滑：pencil 每帧压力读数有天然抖动（±0.03）
+    // 在软档位 gamma<1 下斜率巨大会被放大为肉眼可见的粗细抖动，需要低通滤波。
+    // α 越小越平滑越延迟，0.35 在"跟手"和"稳定"之间
+    let _smoothedPressure = 0;
+    const PRESSURE_EMA_ALPHA = 0.35;
     // 单帧最多 draw 次数（超过则剩余距离留到下一帧）。
     // DeviceProfile 设备自适应：桌面 120（几乎不触发）、触控 15（性能兜底）
     const MAX_STEPS_PER_FRAME = (typeof DeviceProfile !== 'undefined' && DeviceProfile.MAX_STEPS_PER_FRAME) || 15;
@@ -1310,12 +1315,17 @@ function bindEvents() {
         if (isDrawing && !isEyedropperMode) {
             const x = (e.clientX - rect.left) * (mixCanvas.width / rect.width);
             const y = (e.clientY - rect.top) * (mixCanvas.height / rect.height);
-            // pen + 压感开启时：先归一化（Pencil / Wacom 实际最大 e.pressure 往往只到 0.7~0.85，不是 1.0），
-        // 再走 gamma 曲线。抬笔瞬间 pressure=0 被原样传下去（不 fallback 成 1.0，避免大笔触）。
-        const PRESSURE_NORM = 0.8;
-        const pressure = (pressureEnabled && e.pointerType === 'pen')
-            ? Math.pow(Math.min(1.0, e.pressure / PRESSURE_NORM), pressureGamma)
-            : 1.0;
+            // pen + 压感开启时：先 EMA 平滑 e.pressure（pencil 原始读数抖动 ±0.03，
+            // 在软 gamma 档会被放大成肉眼粗细抖动），再归一化到 0.8 满压，最后走 gamma 曲线。
+            // 抬笔瞬间 e.pressure=0 被原样传下去（不 fallback 成 1.0，避免大笔触）。
+            const PRESSURE_NORM = 0.8;
+            let pressure;
+            if (pressureEnabled && e.pointerType === 'pen') {
+                _smoothedPressure = _smoothedPressure * (1 - PRESSURE_EMA_ALPHA) + e.pressure * PRESSURE_EMA_ALPHA;
+                pressure = Math.pow(Math.min(1.0, _smoothedPressure / PRESSURE_NORM), pressureGamma);
+            } else {
+                pressure = 1.0;
+            }
             // 只记录最新目标位置，实际绘制由 scheduler 'stroke-draw' 任务每帧消费
             _pendingStroke = { x, y, pressure };
         }
@@ -1363,6 +1373,7 @@ function bindEvents() {
             if (_pendingStroke) _flushPendingStroke();
             isDrawing = false;
             strokeStarted = false;
+            _smoothedPressure = 0;
             FrameScheduler.unregister('stroke-draw');
 
             endStroke();
@@ -1374,6 +1385,7 @@ function bindEvents() {
             if (_pendingStroke) _flushPendingStroke();
             isDrawing = false;
             strokeStarted = false;
+            _smoothedPressure = 0;
             FrameScheduler.unregister('stroke-draw');
 
             endStroke();
