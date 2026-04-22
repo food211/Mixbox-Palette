@@ -67,6 +67,12 @@ const WET_SPREAD_FALLOFF = 0.995;
 /** 通用/遗留扩散半径（像素），仅 _spreadHeatmapGeneric 使用 */
 const WET_SPREAD_RADIUS = 2;
 
+/** 扩散/噪点半径随 brushSize 线性缩放的基准尺寸。size=40 时 scale=1，size=80 时 scale=2 */
+const WET_SIZE_SCALE_BASE = 40;
+/** scale 的夹逼范围：太小会让扩散步长缩到亚像素，太大单帧爬得太远 */
+const WET_SIZE_SCALE_MIN = 0.5;
+const WET_SIZE_SCALE_MAX = 3.0;
+
 // ─── 1.3 wetMaskHeatmap（水彩区域 mask）──────────────────────────────────────
 
 /** 注入步长（每次 drawcall 叠加量，与 wetHeatmap 解耦） */

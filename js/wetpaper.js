@@ -162,7 +162,8 @@ function _spreadWetHeatmap() {
     const ch = this.canvas.height;
 
     const w = this._wetness ?? 0.5;
-    const radius = WET_SPREAD_RADIUS_MIN + (WET_SPREAD_RADIUS_MAX - WET_SPREAD_RADIUS_MIN) * w;
+    const sizeScale = this._wetSizeScale ?? 1.0;
+    const radius = (WET_SPREAD_RADIUS_MIN + (WET_SPREAD_RADIUS_MAX - WET_SPREAD_RADIUS_MIN) * w) * sizeScale;
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.wetHeatmap);
     gl.bindTexture(gl.TEXTURE_2D, this.textures.wetHeatTemp);
@@ -283,8 +284,9 @@ function _spreadDepositHeatmap() {
     gl.uniform1i(this._depositSpreadLoc.u_heatmap, 0);
     gl.uniform2f(this._depositSpreadLoc.u_resolution, cw, ch);
     const w = this._wetness ?? 0.5;
-    const depositRadius = WET_DEPOSIT_SPREAD_RADIUS_MIN
-                        + (WET_DEPOSIT_SPREAD_RADIUS_MAX - WET_DEPOSIT_SPREAD_RADIUS_MIN) * w;
+    const sizeScale = this._wetSizeScale ?? 1.0;
+    const depositRadius = (WET_DEPOSIT_SPREAD_RADIUS_MIN
+                        + (WET_DEPOSIT_SPREAD_RADIUS_MAX - WET_DEPOSIT_SPREAD_RADIUS_MIN) * w) * sizeScale;
     gl.uniform1f(this._depositSpreadLoc.u_radius,  depositRadius);
     gl.uniform1f(this._depositSpreadLoc.u_falloff, WET_DEPOSIT_SPREAD_FALLOFF);
 
@@ -358,6 +360,13 @@ function _getOrCreateSoftBrushTexture(size) {
 
 function updateWetHeatmap(x, y, size, brushCanvas, useFalloff, heatStep = HEAT_ACCUMULATE_STEP) {
     this.refreshWetHeatLifetime();
+
+    // 按 brushSize 缩放的扩散/噪点倍率：让大笔刷的湿度扩散范围相对笔刷本身保持一致
+    // （size=40 时 1×，size=80 时 2×）。压感缩放后的 effectiveSize 直接传进来，这里同步更新
+    this._wetSizeScale = Math.max(
+        WET_SIZE_SCALE_MIN,
+        Math.min(WET_SIZE_SCALE_MAX, size / WET_SIZE_SCALE_BASE)
+    );
 
     const gl = this.gl;
     const cw = this.canvas.width;
@@ -629,12 +638,13 @@ function _applyWetColor(color) {
 
     // wet低→沉积强、稀释弱；wet高→沉积弱、稀释强
     const w = this._wetness ?? 0.5;
+    const sizeScale = this._wetSizeScale ?? 1.0;
     const depositStr = WET_DEPOSIT_STRENGTH * (WET_DEPOSIT_SCALE_MAX + (WET_DEPOSIT_SCALE_MIN - WET_DEPOSIT_SCALE_MAX) * w);
     const diluteStr  = WET_DILUTE_STRENGTH  * (WET_DILUTE_SCALE_MIN  + (WET_DILUTE_SCALE_MAX  - WET_DILUTE_SCALE_MIN)  * w);
 
     gl.uniform2f(this._wetColorLoc.u_resolution, cw, ch);
     gl.uniform3f(this._wetColorLoc.u_color, color.r, color.g, color.b);
-    gl.uniform1f(this._wetColorLoc.u_gradRadius,         WET_GRADIENT_RADIUS);
+    gl.uniform1f(this._wetColorLoc.u_gradRadius,         WET_GRADIENT_RADIUS * sizeScale);
     gl.uniform1f(this._wetColorLoc.u_depositStr,         depositStr);
     gl.uniform1f(this._wetColorLoc.u_diluteStr,          diluteStr);
     gl.uniform1f(this._wetColorLoc.u_depositGradMin,     WET_DEPOSIT_GRAD_MIN);
@@ -722,9 +732,10 @@ function _applyDepositColorPass(color, depositStr) {
     gl.bindTexture(gl.TEXTURE_2D, this.textures.depositHeatmap);
     gl.uniform1i(this._wetColorLoc.u_wetHeatmap, 1);
 
+    const sizeScale = this._wetSizeScale ?? 1.0;
     gl.uniform2f(this._wetColorLoc.u_resolution, cw, ch);
     gl.uniform3f(this._wetColorLoc.u_color, color.r, color.g, color.b);
-    gl.uniform1f(this._wetColorLoc.u_gradRadius,         WET_GRADIENT_RADIUS);
+    gl.uniform1f(this._wetColorLoc.u_gradRadius,         WET_GRADIENT_RADIUS * sizeScale);
     gl.uniform1f(this._wetColorLoc.u_depositStr,         depositStr);
     gl.uniform1f(this._wetColorLoc.u_diluteStr,          0.0);
     gl.uniform1f(this._wetColorLoc.u_depositGradMin,     WET_DEPOSIT_GRAD_MIN);
@@ -777,6 +788,7 @@ function _initWetBleedProgram() {
         uniform float u_strength;        // 扩散强度
         uniform float u_depositMin;      // deposit 低于此值不扩散
         uniform float u_noiseAmount;     // 噪声扰动量（0~1）
+        uniform float u_noiseScale;      // 噪声网格尺寸倍率：1.0=原始（1px/3px 聚簇），随 brushSize 放大
         uniform float u_wetGateMin;      // wetness 低于此值完全停止扩散（已干）
         varying vec2 v_uv;
 
@@ -809,11 +821,12 @@ function _initWetBleedProgram() {
 
             // 像素级纸纤维噪声：扰动半径和吸色强度
             // 低频噪声（hash 分像素坐标）模拟纤维聚集，让相邻像素有相关性
-            vec2 pixelCoord = floor(v_uv * u_resolution);
+            // 网格尺寸随 brushSize 等比放大（u_noiseScale），颗粒相对笔刷保持一致
+            vec2 pixelCoord = floor(v_uv * u_resolution / u_noiseScale);
             float noise1 = hash(pixelCoord);
             float noise2 = hash(pixelCoord + vec2(3.7, 1.3));
-            // 低频纤维聚集（每 ~3 像素一组）
-            vec2 clusterCoord = floor(v_uv * u_resolution / 3.0);
+            // 低频纤维聚集（每 ~3 像素一组 × noiseScale）
+            vec2 clusterCoord = floor(v_uv * u_resolution / (3.0 * u_noiseScale));
             float clusterNoise = hash(clusterCoord);
 
             // 半径扰动：以本像素为单位，让邻居采样距离不规则
@@ -891,6 +904,7 @@ function _initWetBleedProgram() {
         u_strength:    gl.getUniformLocation(prog, 'u_strength'),
         u_depositMin:  gl.getUniformLocation(prog, 'u_depositMin'),
         u_noiseAmount: gl.getUniformLocation(prog, 'u_noiseAmount'),
+        u_noiseScale:  gl.getUniformLocation(prog, 'u_noiseScale'),
         u_wetGateMin:  gl.getUniformLocation(prog, 'u_wetGateMin'),
     };
 
@@ -937,15 +951,17 @@ function _applyWetBleed() {
     gl.uniform1i(this._wetBleedLoc.u_wetHeatmap, 2);
 
     const w = this._wetness ?? 0.5;
+    const sizeScale = this._wetSizeScale ?? 1.0;
     const scale = WET_CANVAS_BLEED_SCALE_MIN
                 + (WET_CANVAS_BLEED_SCALE_MAX - WET_CANVAS_BLEED_SCALE_MIN) * w;
     const strength = WET_CANVAS_BLEED_STRENGTH * scale;
 
     gl.uniform2f(this._wetBleedLoc.u_resolution,  cw, ch);
-    gl.uniform1f(this._wetBleedLoc.u_radius,      WET_CANVAS_BLEED_RADIUS);
+    gl.uniform1f(this._wetBleedLoc.u_radius,      WET_CANVAS_BLEED_RADIUS * sizeScale);
     gl.uniform1f(this._wetBleedLoc.u_strength,    strength);
     gl.uniform1f(this._wetBleedLoc.u_depositMin,  WET_CANVAS_BLEED_DEPOSIT_MIN);
     gl.uniform1f(this._wetBleedLoc.u_noiseAmount, WET_CANVAS_BLEED_NOISE);
+    gl.uniform1f(this._wetBleedLoc.u_noiseScale,  sizeScale);
     gl.uniform1f(this._wetBleedLoc.u_wetGateMin,  WET_CANVAS_BLEED_WET_GATE_MIN);
 
     this._disableAllVertexAttribs();
