@@ -3,11 +3,11 @@
 == V1.5.1 ==
 [ZH]
 ### 修复
-- **大笔刷水彩扩散更协调** — 之前笔刷调到 60-80px 时，水彩晕染、湿润边缘、纸纤维噪点的范围都还停在小笔刷的尺度，看起来"扩散跟不上笔触"；现在湿度扩散、咖啡环、画布渗色和纸纤维颗粒都会跟着笔刷大小等比放大，大笔刷下的水彩观感保持和 40px 一致
+- **大笔刷水彩晕染更自然** — 笔刷调大到 60-80px 时，水彩的扩散范围和颗粒感不会再"跟不上"，整体观感和小笔刷保持一致
 
 [EN]
 ### Fix
-- **Watercolor diffusion now scales with brush size** — Previously at brush sizes 60-80px, the watercolor bleed, wet edge, and paper-fiber noise all stayed at the small-brush scale, making diffusion look "behind" the stroke; now wetness spread, coffee ring, canvas bleed, and paper fiber grain all scale proportionally with brush size, keeping watercolor behavior consistent with the 40px reference
+- **Large watercolor brushes feel more natural** — When brush size is 60-80px, the watercolor diffusion and texture no longer feel "behind" the stroke; the overall look stays consistent with smaller brushes
 
 == V1.5.0 ==
 [ZH]
