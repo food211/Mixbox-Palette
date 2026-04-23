@@ -1184,8 +1184,13 @@ function bindEvents() {
                 : brushSize * 0.25;
             // 水彩间距用户侧不暴露，固定 35%：baseSpacing * 0.35 = brushSize * 0.25 * 0.35 ≈ brushSize * 0.088
             const spacingRatio = brushType === 'watercolor' ? 0.35 : brushSpacingRatio;
-            // 下限跟笔刷大小挂钩（最少 1px），避免大笔 + 低 spacingRatio 导致单帧 draw 次数暴涨
-            const effectiveMinDist = Math.max(1, brushSize * 0.05, baseSpacing * spacingRatio);
+            // 下限跟笔刷大小挂钩：
+            //   - 大笔刷（size ≥ 50）：brushSize * 0.05 占优，保持原来手感
+            //   - 小笔刷（size < 50）：min(2.5, size*0.3) 抬高下限，避免过密导致单帧 draw 次数暴涨
+            // 例：size=5→1.5, size=10→2.5, size=40→2.5, size=80→4.0
+            const smallBrushFloor = Math.min(2.5, brushSize * 0.3);
+            const sizeBasedFloor = Math.max(brushSize * 0.05, smallBrushFloor);
+            const effectiveMinDist = Math.max(1, sizeBasedFloor, baseSpacing * spacingRatio);
 
             if (distance >= effectiveMinDist) {
                 const rawSteps = Math.floor(distance / effectiveMinDist);
