@@ -237,3 +237,19 @@
         opacity: 1;
     }
 }
+
+/* 吸管工具：光标右下角颜色预览方块 */
+#eyedropperPreview {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 28px;
+    height: 28px;
+    border: 1.5px solid rgba(255, 255, 255, 0.9);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 2px 4px rgba(0, 0, 0, 0.4);
+    border-radius: 3px;
+    pointer-events: none;
+    display: none;
+    will-change: transform, background-color;
+    z-index: 20;
+}

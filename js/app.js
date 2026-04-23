@@ -843,6 +843,7 @@ function bindEvents() {
             mixCanvas.classList.remove('eyedropper');
             mixCanvas.classList.add('brush');
             updateStatus('draw'); // 改为'draw'而不是'ready'
+            if (typeof hideEyedropperPreview === 'function') hideEyedropperPreview();
             console.log('✅ 退出吸管模式');
         }
     });
@@ -1059,14 +1060,19 @@ function bindEvents() {
             return;
         }
 
-        // Alt 临时切换吸管
-        if (e.altKey && !isEyedropperMode) {
-            isEyedropperMode = true;
-            mixCanvas.classList.add('eyedropper');
-            mixCanvas.classList.remove('brush');
-            updateStatus('eyedropper-fg');
-            const eyedropperBtn = document.getElementById('eyedropperBtn');
-            if (eyedropperBtn) eyedropperBtn.classList.add('active');
+        // Alt 临时切换吸管；同时压住浏览器默认行为（Alt 单按会聚焦菜单栏 / 三点按钮）
+        if (e.altKey) {
+            if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+                e.preventDefault();
+            }
+            if (!isEyedropperMode) {
+                isEyedropperMode = true;
+                mixCanvas.classList.add('eyedropper');
+                mixCanvas.classList.remove('brush');
+                updateStatus('eyedropper-fg');
+                const eyedropperBtn = document.getElementById('eyedropperBtn');
+                if (eyedropperBtn) eyedropperBtn.classList.add('active');
+            }
         }
 
         // Shift 临时切换涂抹
@@ -1094,6 +1100,12 @@ function bindEvents() {
     });
 
     document.addEventListener('keyup', (e) => {
+        // Alt 抬起要压掉默认行为（Chrome/Edge 单击 Alt 会聚焦菜单栏 / 三点按钮）
+        if (e.key === 'Alt' || e.code === 'AltLeft' || e.code === 'AltRight') {
+            if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+                e.preventDefault();
+            }
+        }
         // 松开 Alt 退出吸管
         if (!e.altKey && isEyedropperMode) {
             isEyedropperMode = false;
@@ -1102,6 +1114,7 @@ function bindEvents() {
             updateStatus('draw');
             const eyedropperBtn = document.getElementById('eyedropperBtn');
             if (eyedropperBtn) eyedropperBtn.classList.remove('active');
+            if (typeof hideEyedropperPreview === 'function') hideEyedropperPreview();
         }
 
         // 松开 Shift 退出临时涂抹
@@ -1121,6 +1134,7 @@ function bindEvents() {
             updateStatus('draw');
             const eyedropperBtn = document.getElementById('eyedropperBtn');
             if (eyedropperBtn) eyedropperBtn.classList.remove('active');
+            if (typeof hideEyedropperPreview === 'function') hideEyedropperPreview();
         }
         if (shiftSmudgeActive) {
             shiftSmudgeActive = false;
@@ -1351,6 +1365,16 @@ function bindEvents() {
             const zoom = typeof getCurrentZoom === 'function' ? getCurrentZoom() : 1;
             updateBrushCursor((e.clientX - rect.left) / zoom, (e.clientY - rect.top) / zoom);
         }
+
+        // 吸管预览：记录画布坐标 + CSS 坐标，实际采样与 DOM 更新在 rAF 里做
+        if (isEyedropperMode) {
+            const zoom = typeof getCurrentZoom === 'function' ? getCurrentZoom() : 1;
+            const cssX = (e.clientX - rect.left) / zoom;
+            const cssY = (e.clientY - rect.top) / zoom;
+            const canvasX = Math.floor((e.clientX - rect.left) * (mixCanvas.width / rect.width));
+            const canvasY = Math.floor((e.clientY - rect.top) * (mixCanvas.height / rect.height));
+            scheduleEyedropperPreview(cssX, cssY, canvasX, canvasY);
+        }
     });
 
     mixCanvas.addEventListener('pointerup', (e) => {
@@ -1379,6 +1403,7 @@ function bindEvents() {
             }
             mixCanvas.classList.remove('eyedropper');
             mixCanvas.classList.add('brush');
+            hideEyedropperPreview();
             updateStatus('ready');
             return;
         }
@@ -1410,6 +1435,7 @@ function bindEvents() {
             endStroke();
         }
         hideBrushCursor();
+        if (typeof hideEyedropperPreview === 'function') hideEyedropperPreview();
     });
 
     // pointercancel：系统中断笔画（如手势冲突、应用切换）时 pointerup 不会触发，要单独处理
@@ -1517,6 +1543,88 @@ function bindEvents() {
     function hideBrushCursor() {
         brushCursorCanvas.style.display = 'none';
         mixCanvas.style.cursor = '';
+    }
+
+    // ── 吸管颜色预览 ──────────────────────────────────────
+    // 光标右下角一个小方块，显示即将 pick 的颜色。
+    // 采样本身很便宜（1×1 readPixels），但 pointermove 在 iPad 上 120Hz，
+    // 所以统一用 rAF 合帧：一帧最多采一次 + 更新一次 DOM。
+    const eyedropperPreview = document.getElementById('eyedropperPreview');
+    let _eyePreviewPendingCssX = 0;
+    let _eyePreviewPendingCssY = 0;
+    let _eyePreviewPendingCanvasX = 0;
+    let _eyePreviewPendingCanvasY = 0;
+    let _eyePreviewRafHandle = 0;
+    let _eyePreviewLastBg = '';
+
+    function scheduleEyedropperPreview(cssX, cssY, canvasX, canvasY) {
+        _eyePreviewPendingCssX = cssX;
+        _eyePreviewPendingCssY = cssY;
+        _eyePreviewPendingCanvasX = canvasX;
+        _eyePreviewPendingCanvasY = canvasY;
+        if (_eyePreviewRafHandle) return;
+        _eyePreviewRafHandle = requestAnimationFrame(_flushEyedropperPreview);
+    }
+
+    function _flushEyedropperPreview() {
+        _eyePreviewRafHandle = 0;
+        if (!isEyedropperMode || !painter) {
+            eyedropperPreview.style.display = 'none';
+            return;
+        }
+        const cx = _eyePreviewPendingCanvasX;
+        const cy = _eyePreviewPendingCanvasY;
+        if (cx < 0 || cy < 0 || cx >= mixCanvas.width || cy >= mixCanvas.height) {
+            eyedropperPreview.style.display = 'none';
+            return;
+        }
+        let hex;
+        try {
+            hex = pickColor(cx, cy);
+        } catch (_) {
+            return;
+        }
+        // 吸管 SVG 从热点(2,22)往右上延伸到约(22,2)，笔身占据右上方向。
+        // 默认预览放在光标右下方；靠近画布右/下边时翻到左/上，避免跑出画布被裁掉。
+        const OFFSET = 14;
+        // 预览方块几何：28×28 + 1.5 描边 + 1 阴影层 ≈ 32（再留点余量）
+        const PREVIEW_SIZE = 32;
+        // 画布 CSS 尺寸（与 _eyePreviewPendingCssX/Y 同一坐标空间）
+        const zoom = typeof getCurrentZoom === 'function' ? getCurrentZoom() : 1;
+        const rect = mixCanvas.getBoundingClientRect();
+        const cssW = rect.width / zoom;
+        const cssH = rect.height / zoom;
+
+        let tx = _eyePreviewPendingCssX + OFFSET;
+        let ty = _eyePreviewPendingCssY + OFFSET;
+        // 右边放不下 → 翻到光标左边
+        if (tx + PREVIEW_SIZE > cssW) {
+            tx = _eyePreviewPendingCssX - OFFSET - PREVIEW_SIZE;
+        }
+        // 下边放不下 → 翻到光标上边
+        if (ty + PREVIEW_SIZE > cssH) {
+            ty = _eyePreviewPendingCssY - OFFSET - PREVIEW_SIZE;
+        }
+        // 翻到左/上后若还越界（极端小画布），夹一下到可视区内
+        if (tx < 0) tx = 0;
+        if (ty < 0) ty = 0;
+        eyedropperPreview.style.transform = `translate(${tx}px, ${ty}px)`;
+        if (hex !== _eyePreviewLastBg) {
+            eyedropperPreview.style.backgroundColor = hex;
+            _eyePreviewLastBg = hex;
+        }
+        if (eyedropperPreview.style.display !== 'block') {
+            eyedropperPreview.style.display = 'block';
+        }
+    }
+
+    function hideEyedropperPreview() {
+        if (_eyePreviewRafHandle) {
+            cancelAnimationFrame(_eyePreviewRafHandle);
+            _eyePreviewRafHandle = 0;
+        }
+        eyedropperPreview.style.display = 'none';
+        _eyePreviewLastBg = '';
     }
 
     mixCanvas.addEventListener('contextmenu', (e) => {
@@ -1767,9 +1875,17 @@ function updateStatus(mode) {
  * 开始新笔画
  */
 function beginStroke(type, color = null, startX = 0, startY = 0, pressure = 1.0) {
+    // 告诉 painter 开始绘制，暂停 idle 备份（连续画时避免 rIC 挤进帧间隙）
+    if (painter?.notifyStrokeStart) painter.notifyStrokeStart();
+
     // brushCanvas 按整笔可能达到的最大尺寸（ceil）生成，后续 shader 按实际 effectiveSize 缩小采样。
     // 否则首点 pressure 小 → canvas 小 → 中途压力变大时纹理被拉伸采样变模糊。
-    const canvasSize = brushSize * pressureSizeCeil;
+    //
+    // 例外：水彩笔是"随机散点"纹理（WC_DOT_COUNT 个点撒在 canvas 上），canvas 尺寸直接决定
+    // 点的空间密度。用 ceil 放大后轻压时采样窗口拿到的点太稀，湿度/沉积注入不起来，效果
+    // 远弱于关压感直接设小 size。水彩固定按 brushSize 生成，保证纹理密度与用户预期一致。
+    const isWatercolor = type === 'brush' && currentBrush.type === 'watercolor';
+    const canvasSize = isWatercolor ? brushSize : brushSize * pressureSizeCeil;
     currentStroke = {
         type: type,
         points: [],
@@ -1855,6 +1971,9 @@ function endStroke() {
         updateHistoryButtons();
         saveCanvasToStorage();
     }
+    // notify 必须无条件调：即使 points=0（pointercancel 掐断极短触点）也要复位
+    // _strokeActive，否则 idle 备份会被永久闸住
+    if (painter?.notifyStrokeEnd) painter.notifyStrokeEnd();
 }
 
 /**

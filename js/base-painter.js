@@ -47,6 +47,11 @@ class BaseWebGLPainter {
         // 待处理的 idle 任务 Map<frameId, handle>
         this._pendingIdle = new Map();
 
+        // 笔画状态闸门：连续绘制时暂停 idle 备份，避免与笔画帧挤占主线程
+        this._strokeActive = false;
+        this._quietDelayHandle = null;  // setTimeout handle，静默到期触发真正 rIC
+        this._backupDeferred = false;   // 有帧等着备份但被闸门挡住，静默到期需要 flush
+
         // 历史压缩 Worker（惰性创建）
         this._historyWorker = null;
         this._workerMsgId = 0;
@@ -1120,6 +1125,52 @@ class BaseWebGLPainter {
         }
     }
 
+    /**
+     * idle 备份快路径：直接 GPU → readPixels(raw) → transfer 给 worker 做 Y 翻转+压缩。
+     * 相比 _syncReadFrameToCPU + _compressFrame 的两步走，省去主线程的：
+     *   1) Y 翻转 for-loop（大画布 ~5-10ms）
+     *   2) cpuPixels.buffer.slice(0) 的 12MB 拷贝（~3-5ms）
+     * 成功后 frame 直接进入 cpuBlob 状态，跳过 cpuReady/cpuPixels 中间态。
+     * @returns {boolean} 是否成功发起（false 表示需走老路径兜底）
+     */
+    _idleBackupFrameDirect(frame) {
+        if (frame.cpuReady || !frame.gpuSlot || frame._compressing) return false;
+        const gl = this.gl;
+        const cw = this.canvas.width;
+        const ch = this.canvas.height;
+
+        let raw;
+        try {
+            gl.bindFramebuffer(gl.FRAMEBUFFER, frame.gpuSlot.fb);
+            raw = new Uint8Array(cw * ch * 4);
+            gl.readPixels(0, 0, cw, ch, gl.RGBA, gl.UNSIGNED_BYTE, raw);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        } catch (e) {
+            console.error('BaseWebGLPainter: idle readPixels 失败', e);
+            return false;
+        }
+
+        frame._compressing = true;
+        const buf = raw.buffer; // 直接 transfer，主线程不再持有
+        this._workerRequest(
+            { type: 'compress', pixels: buf, w: cw, h: ch, flipY: true },
+            [buf]
+        ).then((blob) => {
+            if (!this._history.includes(frame)) return;
+            frame.cpuBlob = blob;
+            frame.cpuBlobW = cw;
+            frame.cpuBlobH = ch;
+            frame.cpuReady = true; // 有 blob 即视为 CPU 备份就绪
+        }).catch((e) => {
+            // 失败：清掉 compressing 标记，下一次 idle 会走老路径兜底
+            console.warn('BaseWebGLPainter: idle 压缩失败', e);
+        }).finally(() => {
+            frame._compressing = false;
+            this._pendingIdle.delete(frame.id);
+        });
+        return true;
+    }
+
     /** 从 blob 解压回 Uint8ClampedArray（带缓存） */
     async _decompressFrame(frame) {
         if (frame.cpuPixels) return frame.cpuPixels;
@@ -1196,6 +1247,38 @@ class BaseWebGLPainter {
     // ─────────────────────────────────────────────
 
     /**
+     * app 侧在 beginStroke 里调：标记正在绘制，暂停 idle 备份调度。
+     * 同时取消尚未到期的静默延迟：用户又画了，备份继续押后。
+     */
+    notifyStrokeStart() {
+        this._strokeActive = true;
+        if (this._quietDelayHandle !== null) {
+            clearTimeout(this._quietDelayHandle);
+            this._quietDelayHandle = null;
+        }
+    }
+
+    /**
+     * app 侧在 endStroke 里调：笔画结束，但不立即 schedule，
+     * 等 STROKE_QUIET_DELAY_MS 内确认没有新笔画再真正发起 idle 备份。
+     */
+    notifyStrokeEnd() {
+        this._strokeActive = false;
+        if (this._quietDelayHandle !== null) clearTimeout(this._quietDelayHandle);
+        this._quietDelayHandle = setTimeout(() => {
+            this._quietDelayHandle = null;
+            if (this._disposed) return;
+            if (this._strokeActive) return;     // 期间又落笔了，放弃这次
+            if (!this._backupDeferred) return;  // 没有待处理备份（正常 idle 已消化）
+            this._backupDeferred = false;
+            // 挑最新的帧代入 schedule（函数内部本就会扫描整个 history 找最需要处理的）
+            if (this._history.length > 0) {
+                this._scheduleIdleBackup(this._history[this._history.length - 1]);
+            }
+        }, STROKE_QUIET_DELAY_MS);
+    }
+
+    /**
      * 为新帧 schedule idle 备份，但全实例只保留一个 pending 任务。
      * 之前每个 pushHistoryFrame 都会 schedule 一次，用户画 30 笔就有 30 个 idle 回调排队，
      * 每个回调都做全画布 readPixels（~10-30ms）和 _maybeCompressOldFrames 扫全表，主线程压力巨大。
@@ -1210,25 +1293,39 @@ class BaseWebGLPainter {
             this._pendingIdle.set(frame.id, { type: 'shared' });
             return;
         }
+
+        // 笔画闸门：用户还在连续绘制时，Safari 的 rIC 会挤进 RAF 帧间隙造成卡顿。
+        // 只记 shared 标记，等 notifyStrokeEnd 静默期过后再真正发起。
+        if (this._strokeActive) {
+            this._pendingIdle.set(frame.id, { type: 'shared' });
+            this._backupDeferred = true;
+            return;
+        }
+
         this._idleBackupScheduled = true;
 
         const doBackup = () => {
             this._idleBackupScheduled = false;
             if (this._disposed) return;
 
-            // 挑一个最需要读到 CPU 的帧：有 GPU slot、还没 cpuReady、距当前步最远
+            // 挑一个最需要备份的帧：有 GPU slot、还没 cpuReady、距当前步最远
             let readIdx = -1;
             let readDist = -1;
             for (let i = 0; i < this._history.length; i++) {
                 const f = this._history[i];
                 if (!f.gpuSlot || f.cpuReady) continue;
+                if (f._compressing) continue;
                 const d = Math.abs(i - this._historyStep);
                 if (d > readDist) { readDist = d; readIdx = i; }
             }
             if (readIdx >= 0) {
                 const f = this._history[readIdx];
-                this._syncReadFrameToCPU(f);
-                this._pendingIdle.delete(f.id);
+                // 直接走 worker 快路径：主线程只做 readPixels，Y 翻转+压缩都在 worker。
+                if (!this._idleBackupFrameDirect(f)) {
+                    // 快路径起不来（极罕见），退回老路径：同步 readPixels + 翻转到 cpuPixels，再后续 _maybeCompressOldFrames 压缩
+                    this._syncReadFrameToCPU(f);
+                    this._pendingIdle.delete(f.id);
+                }
             }
 
             // 清掉已经不需要备份的 shared 表项（处理过后仍挂在表里会无意义地延长排队）
@@ -1238,12 +1335,12 @@ class BaseWebGLPainter {
                 if (!f || f.cpuReady) this._pendingIdle.delete(id);
             }
 
-            // 压缩一个最远的未压缩帧
+            // 压缩遗留的 cpuPixels 帧（例如 _readCanvasToCPU 保底路径产生的）
             this._maybeCompressOldFrames();
 
-            // 如果还有待处理的（未 cpuReady 或 有 cpuPixels 未压缩），排下一次 idle
+            // 如果还有待处理的，排下一次 idle
             const hasMore = this._history.some(f =>
-                (f.gpuSlot && !f.cpuReady) ||
+                (f.gpuSlot && !f.cpuReady && !f._compressing) ||
                 (f.cpuReady && f.cpuPixels && !f.cpuBlob && !f._compressing)
             );
             if (hasMore && !this._disposed) {
