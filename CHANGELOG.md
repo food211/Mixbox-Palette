@@ -1,5 +1,26 @@
 # 更新日志 / Changelog
 
+== V1.5.2 ==
+[ZH]
+### 新增
+- **吸管增加颜色预览** — 选中吸管工具后，光标旁边会跟随一个小方块实时显示即将拾取的颜色；靠近画布边缘时会自动翻到另一侧，不会跑出画布
+
+### 优化
+- **小笔刷下的 iPad 流畅度改善** — 小尺寸笔刷（特别是 10px 以下）在 iPad 上连续绘制时卡顿减轻；大笔刷手感保持不变
+
+### 修复
+- **按 Alt 不再激活浏览器菜单** — 之前按 Alt 临时切换吸管时，会顺便激活浏览器右上角三点按钮的选中状态，现已屏蔽
+
+[EN]
+### New
+- **Eyedropper color preview** — When the eyedropper is active, a small swatch follows the cursor showing the color that would be picked; it flips to the other side near canvas edges so it never gets clipped
+
+### Improvements
+- **Smoother small brushes on iPad** — Continuous drawing with small brushes (especially below 10px) is noticeably less janky on iPad; large brushes feel the same as before
+
+### Fix
+- **Alt no longer activates browser menu** — Pressing Alt to temporarily switch to the eyedropper used to also focus the browser's top-right menu button; that default behavior is now suppressed
+
 == V1.5.1 ==
 [ZH]
 ### 修复
