@@ -19,21 +19,23 @@ class KMWebGLPainter extends BaseWebGLPainter {
 
     async init() {
         await super.init();
-        console.log('✅ KMWebGLPainter 初始化完成（38波长光谱KM，WebGL1，32³LUT）');
+        console.log('✅ KMWebGLPainter 初始化完成（38波长光谱KM，WebGL2 + 3D LUT 32×32×320）');
     }
 
     // ─── 片段着色器 ───────────────────────────────
 
     _buildFragmentShader() {
-        return `
+        return `#version 300 es
         precision highp float;
+        precision highp sampler3D;
 
-        varying vec2 v_texCoord;
-        varying vec2 v_canvasCoord;
+        in vec2 v_texCoord;
+        in vec2 v_canvasCoord;
+        out vec4 outColor;
 
         uniform sampler2D u_canvasTexture;
         uniform sampler2D u_brushTexture;
-        uniform sampler2D u_lut;
+        uniform sampler3D u_lut;
         uniform vec4 u_brushColor;
         uniform vec2 u_resolution;
         uniform vec2 u_currentPosition;
@@ -74,7 +76,7 @@ class KMWebGLPainter extends BaseWebGLPainter {
 
             vec2 uv0 = center / u_resolution;
             uv0.y = 1.0 - uv0.y;
-            vec3 s0 = texture2D(u_canvasTexture, uv0).rgb;
+            vec3 s0 = texture(u_canvasTexture, uv0).rgb;
             float w0 = 0.4 * colorness(s0);
             col += s0 * w0; totalW += w0;
 
@@ -85,7 +87,7 @@ class KMWebGLPainter extends BaseWebGLPainter {
                 vec2 uv = (center + offset) / u_resolution;
                 uv.y = 1.0 - uv.y;
                 uv = clamp(uv, 0.0, 1.0);
-                vec3 s = texture2D(u_canvasTexture, uv).rgb;
+                vec3 s = texture(u_canvasTexture, uv).rgb;
                 float w = 0.1 * colorness(s);
                 col += s * w; totalW += w;
             }
@@ -96,7 +98,7 @@ class KMWebGLPainter extends BaseWebGLPainter {
                 vec2 uv = (center + offset) / u_resolution;
                 uv.y = 1.0 - uv.y;
                 uv = clamp(uv, 0.0, 1.0);
-                vec3 s = texture2D(u_canvasTexture, uv).rgb;
+                vec3 s = texture(u_canvasTexture, uv).rgb;
                 float w = 0.025 * colorness(s);
                 col += s * w; totalW += w;
             }
@@ -151,19 +153,20 @@ class KMWebGLPainter extends BaseWebGLPainter {
             return x > 0.0031308 ? 1.055 * pow(x, 1.0/2.4) - 0.055 : x * 12.92;
         }
 
+        // 3D LUT 布局：32(R) × 32(G) × 320(B 方向，含 10 个 band × 32 切片)
+        // XY 方向硬件 bilinear；Z 方向跨 band 边界的污染与旧 2D-tiled 实现等价（baking 系统性误差，观感一致）
         void sampleLUT(vec3 c,
             out vec4 R0, out vec4 R1, out vec4 R2, out vec4 R3, out vec4 R4,
             out vec4 R5, out vec4 R6, out vec4 R7, out vec4 R8, out vec4 R9)
         {
-            vec3 f = clamp(c, 0.0, 1.0) * 31.0;
-            float g0 = floor(f.g); float g1 = min(g0+1.0, 31.0); float gf = f.g - g0;
-            float u0 = (g0 * 32.0 + f.r + 0.5) / 1024.0;
-            float u1 = (g1 * 32.0 + f.r + 0.5) / 1024.0;
+            vec3 cc = clamp(c, 0.0, 1.0);
+            // f.r / f.g 走硬件 bilinear（给 texel 中心留 0.5 偏移）
+            float u = (cc.r * 31.0 + 0.5) / 32.0;
+            float v = (cc.g * 31.0 + 0.5) / 32.0;
+            float fb = cc.b * 31.0;
 
-            #define SAMPLE_BAND(band) mix( \
-                texture2D(u_lut, vec2(u0, (float(band)*32.0 + f.b + 0.5) / 320.0)), \
-                texture2D(u_lut, vec2(u1, (float(band)*32.0 + f.b + 0.5) / 320.0)), \
-                gf)
+            #define SAMPLE_BAND(band) \
+                texture(u_lut, vec3(u, v, (float(band) * 32.0 + fb + 0.5) / 320.0))
 
             R0 = SAMPLE_BAND(0); R0 *= R0;
             R1 = SAMPLE_BAND(1); R1 *= R1;
@@ -237,7 +240,7 @@ class KMWebGLPainter extends BaseWebGLPainter {
                 brushUV = vec2(c * centered.x - s * centered.y,
                                s * centered.x + c * centered.y) + 0.5;
             }
-            vec4 brushSample = texture2D(u_brushTexture, brushUV);
+            vec4 brushSample = texture(u_brushTexture, brushUV);
             float brushAlpha = u_useFalloff < 0.5
                 ? step(0.5, brushSample.a)
                 : brushSample.a;
@@ -246,7 +249,7 @@ class KMWebGLPainter extends BaseWebGLPainter {
 
             vec2 canvasUV = v_canvasCoord / u_resolution;
             canvasUV.y = 1.0 - canvasUV.y;
-            vec4 canvasColor = texture2D(u_canvasTexture, canvasUV);
+            vec4 canvasColor = texture(u_canvasTexture, canvasUV);
 
             float distToCenter = length(v_canvasCoord - u_currentPosition);
             float radialFalloff = (u_useFalloff > 0.5 && u_useFalloff < 1.5)
@@ -265,7 +268,7 @@ class KMWebGLPainter extends BaseWebGLPainter {
             if (u_isSmudge > 0.5) {
                 vec2 heatUV = v_canvasCoord / u_resolution;
                 heatUV.y = 1.0 - heatUV.y;
-                float heat = texture2D(u_smudgeHeatmap, heatUV).r;
+                float heat = texture(u_smudgeHeatmap, heatUV).r;
                 // 水彩 smudge pass：冷区涂抹强、热区涂抹弱（颜料已湿润，不需要推）
                 // 普通涂抹工具：热区强、冷区弱
                 if (u_isWatercolor > 0.5) {
@@ -278,7 +281,7 @@ class KMWebGLPainter extends BaseWebGLPainter {
             // 水彩笔：读取湿纸热度，派生三个蒙版
             vec2 wetUV = v_canvasCoord / u_resolution;
             wetUV.y = 1.0 - wetUV.y;
-            float wetness = (u_isWatercolor > 0.5) ? texture2D(u_wetHeatmap, wetUV).r : 0.0;
+            float wetness = (u_isWatercolor > 0.5) ? texture(u_wetHeatmap, wetUV).r : 0.0;
 
             // 同向绘制时限制湿度上限为0.25，避免浓度过高
             const float maxWetnessLimit = 0.25;
@@ -288,7 +291,7 @@ class KMWebGLPainter extends BaseWebGLPainter {
             float maskCold    = 1.0 - smoothstep(0.0, 0.4, wetness);
 
             float depositThresh = 0.5;
-            float depositRaw = (u_isWatercolor > 0.5) ? texture2D(u_depositHeatmap, wetUV).r : 0.0;
+            float depositRaw = (u_isWatercolor > 0.5) ? texture(u_depositHeatmap, wetUV).r : 0.0;
             float maskDeposit = smoothstep(depositThresh, depositThresh + depositWidth, depositRaw);
 
             // 使用depositRaw来计算热区蒙版，但限制最大值，避免同一笔内过度累积
@@ -324,7 +327,7 @@ class KMWebGLPainter extends BaseWebGLPainter {
                 vec2 smearUV = (v_canvasCoord - u_smearDir * smearReach) / u_resolution;
                 smearUV.y = 1.0 - smearUV.y;
                 smearUV = clamp(smearUV, 0.0, 1.0);
-                vec4 smearSample = texture2D(u_canvasTexture, smearUV);
+                vec4 smearSample = texture(u_canvasTexture, smearUV);
 
                 vec3 safeCanvasRGB = (canvasColor.a > 0.1) ? canvasColor.rgb : activeColor;
                 vec3 safeSmearRGB  = (smearSample.a > 0.1) ? smearSample.rgb : safeCanvasRGB;
@@ -346,7 +349,7 @@ class KMWebGLPainter extends BaseWebGLPainter {
                 }
             }
 
-            gl_FragColor = vec4(clamp(finalColor, 0.0, 1.0), 1.0);
+            outColor = vec4(clamp(finalColor, 0.0, 1.0), 1.0);
         }
         `;
     }
@@ -395,16 +398,18 @@ class KMWebGLPainter extends BaseWebGLPainter {
     }
 
     _uploadLUTPixels(width, height, pixels) {
+        // PNG 尺寸 1024×320，row-major。内存布局与 32×32×320 的 3D 纹理
+        // (x=r, y=g, z=band*32+b) 完全一致（详见 sampleLUT 注释），直接当 3D 数据上传。
         const gl = this.gl;
         const tex = gl.createTexture();
-        gl.bindTexture(gl.TEXTURE_2D, tex);
-        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        gl.bindTexture(gl.TEXTURE_2D, null);
+        gl.bindTexture(gl.TEXTURE_3D, tex);
+        gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA, 32, 32, 320, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
+        gl.bindTexture(gl.TEXTURE_3D, null);
         // 释放旧纹理，避免重试时泄漏
         if (this.textures.lut) gl.deleteTexture(this.textures.lut);
         this.textures.lut = tex;
@@ -421,7 +426,7 @@ class KMWebGLPainter extends BaseWebGLPainter {
         gl.uniform1i(this.locations.u_brushTexture, 1);
 
         gl.activeTexture(gl.TEXTURE2);
-        gl.bindTexture(gl.TEXTURE_2D, this.textures.lut);
+        gl.bindTexture(gl.TEXTURE_3D, this.textures.lut);
         gl.uniform1i(this.locations.u_lut, 2);
     }
 

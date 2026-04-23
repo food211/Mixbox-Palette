@@ -103,12 +103,12 @@ function _initHeatmapProgram() {
     }
     const gl = this.gl;
 
-    const vs = this.createShader(gl.VERTEX_SHADER, `
-        attribute vec2 a_position;
-        attribute vec2 a_texCoord;
+    const vs = this.createShader(gl.VERTEX_SHADER, `#version 300 es
+        in vec2 a_position;
+        in vec2 a_texCoord;
         uniform vec2 u_resolution;
-        varying vec2 v_texCoord;
-        varying vec2 v_canvasCoord;
+        out vec2 v_texCoord;
+        out vec2 v_canvasCoord;
         void main() {
             vec2 clipSpace = (a_position / u_resolution) * 2.0 - 1.0;
             gl_Position = vec4(clipSpace * vec2(1, -1), 0, 1);
@@ -116,10 +116,10 @@ function _initHeatmapProgram() {
             v_canvasCoord = a_position;
         }
     `);
-    const fs = this.createShader(gl.FRAGMENT_SHADER, `
+    const fs = this.createShader(gl.FRAGMENT_SHADER, `#version 300 es
         precision highp float;
-        varying vec2 v_texCoord;
-        varying vec2 v_canvasCoord;
+        in vec2 v_texCoord;
+        in vec2 v_canvasCoord;
         uniform sampler2D u_brushTexture;
         uniform sampler2D u_heatmapTexture;
         uniform vec2 u_resolution;
@@ -129,9 +129,10 @@ function _initHeatmapProgram() {
         uniform float u_heatStep;
         uniform float u_heatMax;
         uniform float u_useMaxMode;  // 0 = 累加（min(cap, prev + step*alpha)）；1 = MAX（max(prev, alpha*cap)）
+        out vec4 outColor;
 
         void main() {
-            vec4 brushSample = texture2D(u_brushTexture, v_texCoord);
+            vec4 brushSample = texture(u_brushTexture, v_texCoord);
             float brushAlpha = u_useFalloff < 0.5
                 ? step(0.5, brushSample.a)
                 : brushSample.a;
@@ -146,11 +147,11 @@ function _initHeatmapProgram() {
 
             vec2 uv = v_canvasCoord / u_resolution;
             uv.y = 1.0 - uv.y;
-            float prevHeat = texture2D(u_heatmapTexture, uv).r;
+            float prevHeat = texture(u_heatmapTexture, uv).r;
             float addHeat = min(u_heatMax, prevHeat + aBrush * u_heatStep);
             float maxHeat = max(prevHeat, aBrush * u_heatMax);
             float newHeat = mix(addHeat, maxHeat, u_useMaxMode);
-            gl_FragColor = vec4(newHeat, 0.0, 0.0, 1.0);
+            outColor = vec4(newHeat, 0.0, 0.0, 1.0);
         }
     `);
 
@@ -327,9 +328,9 @@ function debugHeatmap(enable) {
         const gl = this.gl;
 
         const vs = gl.createShader(gl.VERTEX_SHADER);
-        gl.shaderSource(vs, `
-            attribute vec2 a_pos;
-            varying vec2 v_uv;
+        gl.shaderSource(vs, `#version 300 es
+            in vec2 a_pos;
+            out vec2 v_uv;
             void main() {
                 v_uv = vec2(a_pos.x * 0.5 + 0.5, a_pos.y * 0.5 + 0.5);
                 gl_Position = vec4(a_pos, 0.0, 1.0);
@@ -338,11 +339,12 @@ function debugHeatmap(enable) {
         gl.compileShader(vs);
 
         const fs = gl.createShader(gl.FRAGMENT_SHADER);
-        gl.shaderSource(fs, `
+        gl.shaderSource(fs, `#version 300 es
             precision mediump float;
             uniform sampler2D u_heatmap;
             uniform float u_opacity;
-            varying vec2 v_uv;
+            in vec2 v_uv;
+            out vec4 outColor;
 
             // 热成像色阶：蓝→青→绿→黄→红→白
             vec3 heatColor(float t) {
@@ -361,10 +363,10 @@ function debugHeatmap(enable) {
             }
 
             void main() {
-                float heat = texture2D(u_heatmap, v_uv).r;
+                float heat = texture(u_heatmap, v_uv).r;
                 if (heat < 0.01) discard;
                 float alpha = pow(heat, 0.5) * 0.75 * u_opacity;
-                gl_FragColor = vec4(heatColor(heat), alpha);
+                outColor = vec4(heatColor(heat), alpha);
             }
         `);
         gl.compileShader(fs);
@@ -451,22 +453,23 @@ function _initHeatDecayProgram() {
     }
     const gl = this.gl;
 
-    const vs = this.createShader(gl.VERTEX_SHADER, `
-        attribute vec2 a_pos;
-        varying vec2 v_uv;
+    const vs = this.createShader(gl.VERTEX_SHADER, `#version 300 es
+        in vec2 a_pos;
+        out vec2 v_uv;
         void main() {
             v_uv = vec2(a_pos.x * 0.5 + 0.5, a_pos.y * 0.5 + 0.5);
             gl_Position = vec4(a_pos, 0.0, 1.0);
         }
     `);
-    const fs = this.createShader(gl.FRAGMENT_SHADER, `
+    const fs = this.createShader(gl.FRAGMENT_SHADER, `#version 300 es
         precision mediump float;
         uniform sampler2D u_heatmap;
         uniform float u_step;
-        varying vec2 v_uv;
+        in vec2 v_uv;
+        out vec4 outColor;
         void main() {
-            float heat = texture2D(u_heatmap, v_uv).r;
-            gl_FragColor = vec4(max(heat - u_step, 0.0), 0.0, 0.0, 1.0);
+            float heat = texture(u_heatmap, v_uv).r;
+            outColor = vec4(max(heat - u_step, 0.0), 0.0, 0.0, 1.0);
         }
     `);
 
@@ -565,9 +568,9 @@ function debugDepositHeatmap(enable) {
         const gl = this.gl;
 
         const vs = gl.createShader(gl.VERTEX_SHADER);
-        gl.shaderSource(vs, `
-            attribute vec2 a_pos;
-            varying vec2 v_uv;
+        gl.shaderSource(vs, `#version 300 es
+            in vec2 a_pos;
+            out vec2 v_uv;
             void main() {
                 v_uv = vec2(a_pos.x * 0.5 + 0.5, a_pos.y * 0.5 + 0.5);
                 gl_Position = vec4(a_pos, 0.0, 1.0);
@@ -576,11 +579,12 @@ function debugDepositHeatmap(enable) {
         gl.compileShader(vs);
 
         const fs = gl.createShader(gl.FRAGMENT_SHADER);
-        gl.shaderSource(fs, `
+        gl.shaderSource(fs, `#version 300 es
             precision mediump float;
             uniform sampler2D u_heatmap;
             uniform float u_opacity;
-            varying vec2 v_uv;
+            in vec2 v_uv;
+            out vec4 outColor;
 
             // 热成像色阶：蓝→青→绿→黄→红→白
             vec3 heatColor(float t) {
@@ -599,10 +603,10 @@ function debugDepositHeatmap(enable) {
             }
 
             void main() {
-                float heat = texture2D(u_heatmap, v_uv).r;
+                float heat = texture(u_heatmap, v_uv).r;
                 if (heat < 0.01) discard;
                 float alpha = pow(heat, 0.5) * 0.75 * u_opacity;
-                gl_FragColor = vec4(heatColor(heat), alpha);
+                outColor = vec4(heatColor(heat), alpha);
             }
         `);
         gl.compileShader(fs);

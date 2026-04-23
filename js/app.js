@@ -1146,26 +1146,44 @@ function bindEvents() {
     let strokeStarted = false;
     let lastX = 0;
     let lastY = 0;
-    // pointermove 合批：只记录最新目标位置，由 scheduler 每帧消费
-    let _pendingStroke = null;
+    // 笔尖防抖（stabilizer）：每帧笔尖按 α lerp 朝 pointer 目标移动，
+    // 笔触沿笔尖平滑轨迹画——代价是笔尾有可感知的滞后，好处是快画无折线、单帧 steps 自然被上限控制。
+    // _targetX/Y：pointer 最后报告的目标位置（pointermove 持续更新）
+    // _hasTarget：笔画活跃期间为 true；false 时 flush 不做任何事
+    // _tipX/Y：笔尖当前位置，每帧朝 target lerp
+    let _targetX = 0, _targetY = 0;
+    let _targetRawPressure = null;
+    let _hasTarget = false;
+    let _tipX = 0, _tipY = 0;
+    // α 越大越跟手越易折线，越小越平滑越滞后。0.35 类似主流软件默认防抖档。
+    const STROKE_SMOOTHING_ALPHA = 0.35;
+    // 笔尖抵达目标的收敛阈值（CSS px）：tip 与 target 距离小于此就视为追上，停止绘制
+    const TIP_SETTLE_EPSILON = 0.5;
+
     // pen pressure EMA 平滑：pencil 每帧压力读数有天然抖动（±0.03）
     // 在软档位 gamma<1 下斜率巨大会被放大为肉眼可见的粗细抖动，需要低通滤波。
-    // α 越小越平滑越延迟，0.35 在"跟手"和"稳定"之间
     let _smoothedPressure = 0;
     const PRESSURE_EMA_ALPHA = 0.35;
-    // 单帧最多 draw 次数（超过则剩余距离留到下一帧）。
-    // DeviceProfile 设备自适应：桌面 120（几乎不触发）、触控 15（性能兜底）
+    // 单帧最多 draw 次数（防御性上限，正常不触发——α 平滑已经限制了每帧追赶量）
+    // 极端情况（target 跳变很远）兜底用
     const MAX_STEPS_PER_FRAME = (typeof DeviceProfile !== 'undefined' && DeviceProfile.MAX_STEPS_PER_FRAME) || 15;
 
     function _flushPendingStroke() {
-        if (!_pendingStroke || !isDrawing) return;
-        const { x, y, rawPressure } = _pendingStroke;
-        _pendingStroke = null;
+        if (!isDrawing || !_hasTarget) return;
 
-        // 压力 EMA 平滑（每帧按 α 更新一次；pointermove 事件只喂 rawPressure，不在事件回调里算）
+        // 笔尖 lerp 朝 target 前进；已经贴近 target 就不画了
+        const toTargetDX = _targetX - _tipX;
+        const toTargetDY = _targetY - _tipY;
+        const toTargetDist = Math.sqrt(toTargetDX * toTargetDX + toTargetDY * toTargetDY);
+        if (toTargetDist < TIP_SETTLE_EPSILON) return;
+
+        const stepX = _tipX + toTargetDX * STROKE_SMOOTHING_ALPHA;
+        const stepY = _tipY + toTargetDY * STROKE_SMOOTHING_ALPHA;
+
+        // 压力 EMA 平滑（每帧按 α 更新一次）
         let pressure;
-        if (rawPressure != null) {
-            _smoothedPressure = _smoothedPressure * (1 - PRESSURE_EMA_ALPHA) + rawPressure * PRESSURE_EMA_ALPHA;
+        if (_targetRawPressure != null) {
+            _smoothedPressure = _smoothedPressure * (1 - PRESSURE_EMA_ALPHA) + _targetRawPressure * PRESSURE_EMA_ALPHA;
             const PRESSURE_NORM = 0.8;
             pressure = Math.pow(Math.min(1.0, _smoothedPressure / PRESSURE_NORM), pressureGamma);
         } else {
@@ -1173,7 +1191,7 @@ function bindEvents() {
         }
 
         if (currentTool === 'brush') {
-            const distance = Math.sqrt(Math.pow(x - lastX, 2) + Math.pow(y - lastY, 2));
+            const distance = Math.sqrt(Math.pow(stepX - lastX, 2) + Math.pow(stepY - lastY, 2));
             const activeColor = currentStroke ? currentStroke.color : currentBrushColor;
 
             const brushType = currentBrush.type;
@@ -1187,18 +1205,17 @@ function bindEvents() {
             // 下限跟笔刷大小挂钩：
             //   - 大笔刷（size ≥ 50）：brushSize * 0.05 占优，保持原来手感
             //   - 小笔刷（size < 50）：min(2.5, size*0.3) 抬高下限，避免过密导致单帧 draw 次数暴涨
-            // 例：size=5→1.5, size=10→2.5, size=40→2.5, size=80→4.0
             const smallBrushFloor = Math.min(2.5, brushSize * 0.3);
             const sizeBasedFloor = Math.max(brushSize * 0.05, smallBrushFloor);
             const effectiveMinDist = Math.max(1, sizeBasedFloor, baseSpacing * spacingRatio);
 
             if (distance >= effectiveMinDist) {
                 const rawSteps = Math.floor(distance / effectiveMinDist);
+                // 防御性上限（正常 α 平滑已限流；target 跳变极远时才截断）
                 const steps = Math.min(rawSteps, MAX_STEPS_PER_FRAME);
-                // 超预算时只画前 steps 段，末尾剩余下一帧继续
                 const reachedRatio = steps / rawSteps;
-                const endX = lastX + (x - lastX) * reachedRatio;
-                const endY = lastY + (y - lastY) * reachedRatio;
+                const endX = lastX + (stepX - lastX) * reachedRatio;
+                const endY = lastY + (stepY - lastY) * reachedRatio;
 
                 if (steps > 1) {
                     let prevIX = lastX, prevIY = lastY;
@@ -1217,15 +1234,12 @@ function bindEvents() {
 
                 lastX = endX;
                 lastY = endY;
+                _tipX = endX;
+                _tipY = endY;
                 if (painter) painter.flush();
-
-                if (rawSteps > MAX_STEPS_PER_FRAME) {
-                    // 留尾巴到下一帧消费；rawPressure 存回原始值，下一帧继续 EMA
-                    _pendingStroke = { x, y, rawPressure };
-                }
             }
         } else if (currentTool === 'smudge') {
-            const distance = Math.sqrt(Math.pow(x - lastX, 2) + Math.pow(y - lastY, 2));
+            const distance = Math.sqrt(Math.pow(stepX - lastX, 2) + Math.pow(stepY - lastY, 2));
             const smudgeBaseSpacing = currentBrush.type === 'dry'
                 ? brushSize * 0.15
                 : currentBrush.type === 'splatter'
@@ -1237,21 +1251,31 @@ function bindEvents() {
                 const rawSteps = Math.max(1, Math.floor(distance / smudgeMinDist));
                 const steps = Math.min(rawSteps, MAX_STEPS_PER_FRAME);
                 const reachedRatio = steps / rawSteps;
-                const endX = lastX + (x - lastX) * reachedRatio;
-                const endY = lastY + (y - lastY) * reachedRatio;
+                const endX = lastX + (stepX - lastX) * reachedRatio;
+                const endY = lastY + (stepY - lastY) * reachedRatio;
 
                 addStrokePoint(endX, endY);
                 smudgeAlongPath(lastX, lastY, endX, endY, pressure);
                 lastX = endX;
                 lastY = endY;
+                _tipX = endX;
+                _tipY = endY;
                 if (painter) painter.flush();
-
-                if (rawSteps > MAX_STEPS_PER_FRAME) {
-                    // 留尾巴到下一帧消费；rawPressure 存回原始值，下一帧继续 EMA
-                    _pendingStroke = { x, y, rawPressure };
-                }
             }
         }
+    }
+
+    /**
+     * 笔尾补齐：抬笔前把笔尖从滞后位置跳到 target 并把剩余距离一次画完，
+     * 避免防抖导致笔尾离 pointer 一段距离。跳跃不走 α 平滑。
+     */
+    function _finalizeStrokeTail() {
+        // 抬笔即停：不再把 tip→target 的滞后段补画出来。
+        // Why: 快画时 tip 可能落后 target 几十到上百像素，补画会出现"松手后突然一条直线"的违和感。
+        // 保留 flush 确保最后一次 drawBrush 的结果刷上屏。
+        if (!isDrawing) { _hasTarget = false; return; }
+        if (painter) painter.flush();
+        _hasTarget = false;
     }
 
     let _activePointerId = null;  // 锁定第一指的 pointerId，忽略多指干扰
@@ -1289,7 +1313,10 @@ function bindEvents() {
             // 笔刷工具模式
             isDrawing = true;
             strokeStarted = true;
-            _pendingStroke = null;
+            _targetX = x; _targetY = y;
+            _targetRawPressure = null;
+            _hasTarget = true;
+            _tipX = x; _tipY = y;
             FrameScheduler.register('stroke-draw', _flushPendingStroke, 10);
 
             // 左键用前景色，右键用背景色
@@ -1337,7 +1364,10 @@ function bindEvents() {
             // 涂抹工具模式
             isDrawing = true;
             strokeStarted = true;
-            _pendingStroke = null;
+            _targetX = x; _targetY = y;
+            _targetRawPressure = null;
+            _hasTarget = true;
+            _tipX = x; _tipY = y;
             FrameScheduler.register('stroke-draw', _flushPendingStroke, 10);
 
             // 开始新涂抹笔画，落笔时采样一次颜色，整笔复用
@@ -1361,8 +1391,10 @@ function bindEvents() {
             // EMA 平滑 + 归一化 + gamma 映射统一在 scheduler tick 的 _flushPendingStroke 里做，
             // 确保 α 的时间常数按帧而非事件（pencil 120Hz 事件会让 α 的"帧权重"失真）。
             const rawPressure = (pressureEnabled && e.pointerType === 'pen') ? e.pressure : null;
-            // 只记录最新目标位置，实际绘制由 scheduler 'stroke-draw' 任务每帧消费
-            _pendingStroke = { x, y, rawPressure };
+            // 只更新 target；笔尖每帧按 α 追赶，绘制由 scheduler 'stroke-draw' 任务每帧消费
+            _targetX = x; _targetY = y;
+            _targetRawPressure = rawPressure;
+            _hasTarget = true;
         }
 
         // 笔刷光标跟随（无论是否在绘制）——UI 必须即时响应，不走 scheduler
@@ -1416,7 +1448,7 @@ function bindEvents() {
         // 笔刷/涂抹模式：结束笔画
         if (isDrawing && strokeStarted) {
             // 消费最后一帧残留的 pending，防止笔触尾部缺失
-            if (_pendingStroke) _flushPendingStroke();
+            _finalizeStrokeTail();
             isDrawing = false;
             strokeStarted = false;
             _smoothedPressure = 0;
@@ -1430,7 +1462,7 @@ function bindEvents() {
 
     mixCanvas.addEventListener('pointerleave', () => {
         if (isDrawing && strokeStarted) {
-            if (_pendingStroke) _flushPendingStroke();
+            _finalizeStrokeTail();
             isDrawing = false;
             strokeStarted = false;
             _smoothedPressure = 0;
@@ -1446,7 +1478,7 @@ function bindEvents() {
     // pointercancel：系统中断笔画（如手势冲突、应用切换）时 pointerup 不会触发，要单独处理
     mixCanvas.addEventListener('pointercancel', (e) => {
         if (isDrawing && strokeStarted) {
-            if (_pendingStroke) _flushPendingStroke();
+            _finalizeStrokeTail();
             isDrawing = false;
             strokeStarted = false;
             _smoothedPressure = 0;

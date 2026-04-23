@@ -114,13 +114,13 @@ class BaseWebGLPainter {
     }
 
     initWebGL() {
-        this.gl = this.canvas.getContext('webgl', {
+        this.gl = this.canvas.getContext('webgl2', {
             alpha: false,
             premultipliedAlpha: false,
             preserveDrawingBuffer: true,
         });
 
-        if (!this.gl) throw new Error('WebGL 不支持');
+        if (!this.gl) throw new Error('WebGL2 不支持');
 
         const gl = this.gl;
         gl.disable(gl.BLEND);
@@ -154,12 +154,12 @@ class BaseWebGLPainter {
             return;
         }
 
-        const vsSource = `
-        attribute vec2 a_position;
-        attribute vec2 a_texCoord;
+        const vsSource = `#version 300 es
+        in vec2 a_position;
+        in vec2 a_texCoord;
 
-        varying vec2 v_texCoord;
-        varying vec2 v_canvasCoord;
+        out vec2 v_texCoord;
+        out vec2 v_canvasCoord;
 
         uniform vec2 u_resolution;
         uniform float u_smudgeAlpha;
@@ -351,17 +351,18 @@ class BaseWebGLPainter {
         }
         const gl = this.gl;
 
-        const vs = this.createShader(gl.VERTEX_SHADER, `
-            attribute vec2 a_clipPos;
+        const vs = this.createShader(gl.VERTEX_SHADER, `#version 300 es
+            in vec2 a_clipPos;
             void main() { gl_Position = vec4(a_clipPos, 0, 1); }
         `);
-        const fs = this.createShader(gl.FRAGMENT_SHADER, `
+        const fs = this.createShader(gl.FRAGMENT_SHADER, `#version 300 es
             precision mediump float;
             uniform sampler2D u_src;
             uniform vec2 u_resolution;
+            out vec4 outColor;
             void main() {
                 vec2 uv = gl_FragCoord.xy / u_resolution;
-                gl_FragColor = texture2D(u_src, uv);
+                outColor = texture(u_src, uv);
             }
         `);
         this._blitProgram = this.createProgram(vs, fs);
@@ -1046,6 +1047,22 @@ class BaseWebGLPainter {
         }
         this._history = [];
         this._historyStep = -1;
+
+        // 打断飞行中的压缩任务：reject 所有 pending、terminate worker、清解压缓存。
+        // Why: _cancelIdleBackup 只能取消 requestIdleCallback 队列里还没触发的任务；
+        // 已经进入 worker 的 compress/decompress 会继续跑完才停，iPad 上 clear 后仍会吃 CPU。
+        if (this._workerPending && this._workerPending.size > 0) {
+            for (const { reject } of this._workerPending.values()) {
+                reject(new Error('clearHistory: worker terminated'));
+            }
+            this._workerPending.clear();
+        }
+        if (this._historyWorker) {
+            try { this._historyWorker.terminate(); } catch (_) {}
+            this._historyWorker = null;
+        }
+        if (this._decompressCache) this._decompressCache.clear();
+        if (this._pendingIdle) this._pendingIdle.clear();
     }
 
     /** 历史记录总帧数 */
