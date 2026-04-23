@@ -15,11 +15,12 @@ class MixboxWebGLPainter extends BaseWebGLPainter {
     // ─── 片段着色器 ───────────────────────────────
 
     _buildFragmentShader() {
-        return `
+        return `#version 300 es
         precision highp float;
 
-        varying vec2 v_texCoord;
-        varying vec2 v_canvasCoord;
+        in vec2 v_texCoord;
+        in vec2 v_canvasCoord;
+        out vec4 outColor;
 
         uniform sampler2D u_canvasTexture;
         uniform sampler2D u_brushTexture;
@@ -67,7 +68,7 @@ class MixboxWebGLPainter extends BaseWebGLPainter {
             // 中心点，权重 0.4
             vec2 uv0 = center / u_resolution;
             uv0.y = 1.0 - uv0.y;
-            vec3 s0 = texture2D(u_canvasTexture, uv0).rgb;
+            vec3 s0 = texture(u_canvasTexture, uv0).rgb;
             float w0 = 0.4 * colorness(s0);
             col += s0 * w0; totalW += w0;
 
@@ -79,7 +80,7 @@ class MixboxWebGLPainter extends BaseWebGLPainter {
                 vec2 uv = (center + offset) / u_resolution;
                 uv.y = 1.0 - uv.y;
                 uv = clamp(uv, 0.0, 1.0);
-                vec3 s = texture2D(u_canvasTexture, uv).rgb;
+                vec3 s = texture(u_canvasTexture, uv).rgb;
                 float w = 0.1 * colorness(s);
                 col += s * w; totalW += w;
             }
@@ -91,7 +92,7 @@ class MixboxWebGLPainter extends BaseWebGLPainter {
                 vec2 uv = (center + offset) / u_resolution;
                 uv.y = 1.0 - uv.y;
                 uv = clamp(uv, 0.0, 1.0);
-                vec3 s = texture2D(u_canvasTexture, uv).rgb;
+                vec3 s = texture(u_canvasTexture, uv).rgb;
                 float w = 0.025 * colorness(s);
                 col += s * w; totalW += w;
             }
@@ -110,7 +111,7 @@ class MixboxWebGLPainter extends BaseWebGLPainter {
                 brushUV = vec2(c * centered.x - s * centered.y,
                                s * centered.x + c * centered.y) + 0.5;
             }
-            vec4 brushSample = texture2D(u_brushTexture, brushUV);
+            vec4 brushSample = texture(u_brushTexture, brushUV);
             float brushAlpha = u_useFalloff < 0.5
                 ? step(0.5, brushSample.a)
                 : brushSample.a;
@@ -119,7 +120,7 @@ class MixboxWebGLPainter extends BaseWebGLPainter {
 
             vec2 canvasUV = v_canvasCoord / u_resolution;
             canvasUV.y = 1.0 - canvasUV.y;
-            vec4 canvasColor = texture2D(u_canvasTexture, canvasUV);
+            vec4 canvasColor = texture(u_canvasTexture, canvasUV);
 
             float distToCenter = length(v_canvasCoord - u_currentPosition);
             float radialFalloff = (u_useFalloff > 0.5 && u_useFalloff < 1.5)
@@ -138,7 +139,7 @@ class MixboxWebGLPainter extends BaseWebGLPainter {
             if (u_isSmudge > 0.5) {
                 vec2 heatUV = v_canvasCoord / u_resolution;
                 heatUV.y = 1.0 - heatUV.y;
-                float heat = texture2D(u_smudgeHeatmap, heatUV).r;
+                float heat = texture(u_smudgeHeatmap, heatUV).r;
                 // 水彩 smudge pass：冷区涂抹强、热区涂抹弱（颜料已湿润，不需要推）
                 // 普通涂抹工具：热区强、冷区弱
                 if (u_isWatercolor > 0.5) {
@@ -151,7 +152,7 @@ class MixboxWebGLPainter extends BaseWebGLPainter {
             // 水彩笔：读取湿纸热度，派生三个蒙版
             vec2 wetUV = v_canvasCoord / u_resolution;
             wetUV.y = 1.0 - wetUV.y;
-            float wetness = (u_isWatercolor > 0.5) ? texture2D(u_wetHeatmap, wetUV).r : 0.0;
+            float wetness = (u_isWatercolor > 0.5) ? texture(u_wetHeatmap, wetUV).r : 0.0;
 
             // 同向绘制时限制湿度上限为0.25，避免浓度过高
             const float maxWetnessLimit = 0.25;
@@ -161,7 +162,7 @@ class MixboxWebGLPainter extends BaseWebGLPainter {
             float maskCold    = 1.0 - smoothstep(0.0, 0.4, wetness);
 
             float depositThresh = 0.5;
-            float depositRaw = (u_isWatercolor > 0.5) ? texture2D(u_depositHeatmap, wetUV).r : 0.0;
+            float depositRaw = (u_isWatercolor > 0.5) ? texture(u_depositHeatmap, wetUV).r : 0.0;
             float maskDeposit = smoothstep(depositThresh, depositThresh + depositWidth, depositRaw);
 
             // 使用depositRaw来计算热区蒙版，但限制最大值，避免同一笔内过度累积
@@ -199,7 +200,7 @@ class MixboxWebGLPainter extends BaseWebGLPainter {
                 vec2 smearUV = (v_canvasCoord - u_smearDir * smearReach) / u_resolution;
                 smearUV.y = 1.0 - smearUV.y;
                 smearUV = clamp(smearUV, 0.0, 1.0);
-                vec4 smearSample = texture2D(u_canvasTexture, smearUV);
+                vec4 smearSample = texture(u_canvasTexture, smearUV);
 
                 vec3 safeCanvasRGB = (canvasColor.a > 0.1) ? canvasColor.rgb : activeColor;
                 vec3 safeSmearRGB  = (smearSample.a > 0.1) ? smearSample.rgb : safeCanvasRGB;
@@ -223,7 +224,7 @@ class MixboxWebGLPainter extends BaseWebGLPainter {
                 }
             }
 
-            gl_FragColor = vec4(outRGB, 1.0);
+            outColor = vec4(outRGB, 1.0);
         }
         `;
     }

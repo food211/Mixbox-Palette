@@ -47,40 +47,41 @@ function _initWetSpreadProgram() {
     }
     const gl = this.gl;
 
-    const vs = this.createShader(gl.VERTEX_SHADER, `
-        attribute vec2 a_pos;
-        varying vec2 v_uv;
+    const vs = this.createShader(gl.VERTEX_SHADER, `#version 300 es
+        in vec2 a_pos;
+        out vec2 v_uv;
         void main() {
             v_uv = vec2(a_pos.x * 0.5 + 0.5, a_pos.y * 0.5 + 0.5);
             gl_Position = vec4(a_pos, 0.0, 1.0);
         }
     `);
 
-    const fs = this.createShader(gl.FRAGMENT_SHADER, `
+    const fs = this.createShader(gl.FRAGMENT_SHADER, `#version 300 es
         precision highp float;
         uniform sampler2D u_heatmap;
         uniform vec2 u_resolution;
         uniform float u_radius;    // 采样半径（像素，由湿度决定 → 控制扩散速度）
         uniform float u_falloff;   // 外扩衰减系数（<1，让远处自然渐淡）
-        varying vec2 v_uv;
+        in vec2 v_uv;
+        out vec4 outColor;
 
         void main() {
             vec2 px = 1.0 / u_resolution;
-            float center = texture2D(u_heatmap, v_uv).r;
+            float center = texture(u_heatmap, v_uv).r;
 
-            float n  = texture2D(u_heatmap, v_uv + vec2( 0.0,  px.y * u_radius)).r;
-            float s  = texture2D(u_heatmap, v_uv + vec2( 0.0, -px.y * u_radius)).r;
-            float e  = texture2D(u_heatmap, v_uv + vec2( px.x * u_radius,  0.0)).r;
-            float w  = texture2D(u_heatmap, v_uv + vec2(-px.x * u_radius,  0.0)).r;
-            float ne = texture2D(u_heatmap, v_uv + vec2( px.x * u_radius * 0.707,  px.y * u_radius * 0.707)).r;
-            float nw = texture2D(u_heatmap, v_uv + vec2(-px.x * u_radius * 0.707,  px.y * u_radius * 0.707)).r;
-            float se = texture2D(u_heatmap, v_uv + vec2( px.x * u_radius * 0.707, -px.y * u_radius * 0.707)).r;
-            float sw = texture2D(u_heatmap, v_uv + vec2(-px.x * u_radius * 0.707, -px.y * u_radius * 0.707)).r;
+            float n  = texture(u_heatmap, v_uv + vec2( 0.0,  px.y * u_radius)).r;
+            float s  = texture(u_heatmap, v_uv + vec2( 0.0, -px.y * u_radius)).r;
+            float e  = texture(u_heatmap, v_uv + vec2( px.x * u_radius,  0.0)).r;
+            float w  = texture(u_heatmap, v_uv + vec2(-px.x * u_radius,  0.0)).r;
+            float ne = texture(u_heatmap, v_uv + vec2( px.x * u_radius * 0.707,  px.y * u_radius * 0.707)).r;
+            float nw = texture(u_heatmap, v_uv + vec2(-px.x * u_radius * 0.707,  px.y * u_radius * 0.707)).r;
+            float se = texture(u_heatmap, v_uv + vec2( px.x * u_radius * 0.707, -px.y * u_radius * 0.707)).r;
+            float sw = texture(u_heatmap, v_uv + vec2(-px.x * u_radius * 0.707, -px.y * u_radius * 0.707)).r;
 
             float maxN = max(max(max(n, s), max(e, w)),
                              max(max(ne, nw), max(se, sw)));
             float inherited = maxN * u_falloff;
-            gl_FragColor = vec4(max(center, inherited), 0.0, 0.0, 1.0);
+            outColor = vec4(max(center, inherited), 0.0, 0.0, 1.0);
         }
     `);
 
@@ -204,9 +205,9 @@ function _initDepositSpreadProgram() {
         return;
     }
     const gl = this.gl;
-    const vs = this.createShader(gl.VERTEX_SHADER, `
-        attribute vec2 a_pos;
-        varying vec2 v_uv;
+    const vs = this.createShader(gl.VERTEX_SHADER, `#version 300 es
+        in vec2 a_pos;
+        out vec2 v_uv;
         void main() {
             v_uv = vec2(a_pos.x * 0.5 + 0.5, a_pos.y * 0.5 + 0.5);
             gl_Position = vec4(a_pos, 0.0, 1.0);
@@ -214,29 +215,30 @@ function _initDepositSpreadProgram() {
     `);
     // max 策略：取邻居最大值，再乘以一个小于 1 的 falloff，让外围自然衰减
     // 这样能稳定向外爬边界，但距离中心越远热度越低
-    const fs = this.createShader(gl.FRAGMENT_SHADER, `
+    const fs = this.createShader(gl.FRAGMENT_SHADER, `#version 300 es
         precision highp float;
         uniform sampler2D u_heatmap;
         uniform vec2 u_resolution;
         uniform float u_radius;
         uniform float u_falloff;   // 0~1，每次传播衰减系数
-        varying vec2 v_uv;
+        in vec2 v_uv;
+        out vec4 outColor;
         void main() {
             vec2 px = 1.0 / u_resolution;
-            float center = texture2D(u_heatmap, v_uv).r;
-            float n = texture2D(u_heatmap, v_uv + vec2( 0.0,  px.y * u_radius)).r;
-            float s = texture2D(u_heatmap, v_uv + vec2( 0.0, -px.y * u_radius)).r;
-            float e = texture2D(u_heatmap, v_uv + vec2( px.x * u_radius,  0.0)).r;
-            float w = texture2D(u_heatmap, v_uv + vec2(-px.x * u_radius,  0.0)).r;
-            float ne = texture2D(u_heatmap, v_uv + vec2( px.x * u_radius * 0.707,  px.y * u_radius * 0.707)).r;
-            float nw = texture2D(u_heatmap, v_uv + vec2(-px.x * u_radius * 0.707,  px.y * u_radius * 0.707)).r;
-            float se = texture2D(u_heatmap, v_uv + vec2( px.x * u_radius * 0.707, -px.y * u_radius * 0.707)).r;
-            float sw = texture2D(u_heatmap, v_uv + vec2(-px.x * u_radius * 0.707, -px.y * u_radius * 0.707)).r;
+            float center = texture(u_heatmap, v_uv).r;
+            float n = texture(u_heatmap, v_uv + vec2( 0.0,  px.y * u_radius)).r;
+            float s = texture(u_heatmap, v_uv + vec2( 0.0, -px.y * u_radius)).r;
+            float e = texture(u_heatmap, v_uv + vec2( px.x * u_radius,  0.0)).r;
+            float w = texture(u_heatmap, v_uv + vec2(-px.x * u_radius,  0.0)).r;
+            float ne = texture(u_heatmap, v_uv + vec2( px.x * u_radius * 0.707,  px.y * u_radius * 0.707)).r;
+            float nw = texture(u_heatmap, v_uv + vec2(-px.x * u_radius * 0.707,  px.y * u_radius * 0.707)).r;
+            float se = texture(u_heatmap, v_uv + vec2( px.x * u_radius * 0.707, -px.y * u_radius * 0.707)).r;
+            float sw = texture(u_heatmap, v_uv + vec2(-px.x * u_radius * 0.707, -px.y * u_radius * 0.707)).r;
             float maxN = max(max(max(n, s), max(e, w)), max(max(ne, nw), max(se, sw)));
             // 从邻居继承最大值，但乘以 falloff 让外围渐淡
             float inherited = maxN * u_falloff;
             // 自己的值和继承值取大：保留核心、同时允许外围生长
-            gl_FragColor = vec4(max(center, inherited), 0.0, 0.0, 1.0);
+            outColor = vec4(max(center, inherited), 0.0, 0.0, 1.0);
         }
     `);
     const prog = this.createProgram(vs, fs);
@@ -500,16 +502,16 @@ function _initWetColorProgram() {
     }
     const gl = this.gl;
 
-    const vs = this.createShader(gl.VERTEX_SHADER, `
-        attribute vec2 a_pos;
-        varying vec2 v_uv;
+    const vs = this.createShader(gl.VERTEX_SHADER, `#version 300 es
+        in vec2 a_pos;
+        out vec2 v_uv;
         void main() {
             v_uv = vec2(a_pos.x * 0.5 + 0.5, a_pos.y * 0.5 + 0.5);
             gl_Position = vec4(a_pos, 0.0, 1.0);
         }
     `);
 
-    const fs = this.createShader(gl.FRAGMENT_SHADER, `
+    const fs = this.createShader(gl.FRAGMENT_SHADER, `#version 300 es
         precision highp float;
 
         uniform sampler2D u_canvas;       // 当前画布
@@ -525,24 +527,25 @@ function _initWetColorProgram() {
         uniform float u_depositGradMax;   // 沉积 smoothstep 上限
         uniform float u_diluteGradSuppress; // 稀释梯度抑制上限
 
-        varying vec2 v_uv;
+        in vec2 v_uv;
+        out vec4 outColor;
 
         void main() {
             vec2 px = 1.0 / u_resolution;
-            float heat = texture2D(u_wetHeatmap, v_uv).r;
-            float mask = (u_wetMaskEnabled > 0.5) ? texture2D(u_wetMask, v_uv).r : 1.0;
+            float heat = texture(u_wetHeatmap, v_uv).r;
+            float mask = (u_wetMaskEnabled > 0.5) ? texture(u_wetMask, v_uv).r : 1.0;
 
             // 区域 mask 为 0 直接丢弃（两图取交集）；mask 关闭时恒为 1
             if (mask < 0.001) discard;
 
-            // ── 梯度计算（4邻居，WebGL1 无 dFdx）──
-            float r  = texture2D(u_wetHeatmap, v_uv + vec2( px.x * u_gradRadius, 0.0)).r;
-            float l  = texture2D(u_wetHeatmap, v_uv + vec2(-px.x * u_gradRadius, 0.0)).r;
-            float up = texture2D(u_wetHeatmap, v_uv + vec2(0.0,  px.y * u_gradRadius)).r;
-            float dn = texture2D(u_wetHeatmap, v_uv + vec2(0.0, -px.y * u_gradRadius)).r;
+            // ── 梯度计算（4邻居）──
+            float r  = texture(u_wetHeatmap, v_uv + vec2( px.x * u_gradRadius, 0.0)).r;
+            float l  = texture(u_wetHeatmap, v_uv + vec2(-px.x * u_gradRadius, 0.0)).r;
+            float up = texture(u_wetHeatmap, v_uv + vec2(0.0,  px.y * u_gradRadius)).r;
+            float dn = texture(u_wetHeatmap, v_uv + vec2(0.0, -px.y * u_gradRadius)).r;
             float grad = length(vec2(r - l, up - dn)) * 0.5; // 归一化到 0~1
 
-            vec4 canvas = texture2D(u_canvas, v_uv);
+            vec4 canvas = texture(u_canvas, v_uv);
 
             // ── 效果1：梯度区颜料沉积（强度全权由 u_depositStr 控制）──
             float depositMask = smoothstep(u_depositGradMin, u_depositGradMax, grad);
@@ -559,7 +562,7 @@ function _initWetColorProgram() {
             float anyEffect = max(depositAmt, diluteAmt);
             if (anyEffect < 0.001) discard;
 
-            gl_FragColor = vec4(outRGB, 1.0);
+            outColor = vec4(outRGB, 1.0);
         }
     `);
 
@@ -765,9 +768,9 @@ function _initWetBleedProgram() {
     }
     const gl = this.gl;
 
-    const vs = this.createShader(gl.VERTEX_SHADER, `
-        attribute vec2 a_pos;
-        varying vec2 v_uv;
+    const vs = this.createShader(gl.VERTEX_SHADER, `#version 300 es
+        in vec2 a_pos;
+        out vec2 v_uv;
         void main() {
             v_uv = vec2(a_pos.x * 0.5 + 0.5, a_pos.y * 0.5 + 0.5);
             gl_Position = vec4(a_pos, 0.0, 1.0);
@@ -776,7 +779,7 @@ function _initWetBleedProgram() {
 
     // 8 方向采样，比较邻居 depositRaw：邻居浓度高于自己则吸取其颜色。
     // 结果是颜色从高浓度区缓慢向低浓度区扩散，形状由 depositHeatmap 决定。
-    const fs = this.createShader(gl.FRAGMENT_SHADER, `
+    const fs = this.createShader(gl.FRAGMENT_SHADER, `#version 300 es
         precision highp float;
         uniform sampler2D u_canvas;
         uniform sampler2D u_deposit;
@@ -788,7 +791,8 @@ function _initWetBleedProgram() {
         uniform float u_noiseAmount;     // 噪声扰动量（0~1）
         uniform float u_noiseScale;      // 噪声网格尺寸倍率：1.0=原始（1px/3px 聚簇），随 brushSize 放大
         uniform float u_wetGateMin;      // wetness 低于此值完全停止扩散（已干）
-        varying vec2 v_uv;
+        in vec2 v_uv;
+        out vec4 outColor;
 
         // 像素级 hash 噪声：同一像素恒定值，不同像素随机
         float hash(vec2 p) {
@@ -797,20 +801,20 @@ function _initWetBleedProgram() {
 
         void main() {
             vec2 px = 1.0 / u_resolution;
-            float myDeposit = texture2D(u_deposit, v_uv).r;
-            vec4 myColor = texture2D(u_canvas, v_uv);
+            float myDeposit = texture(u_deposit, v_uv).r;
+            vec4 myColor = texture(u_canvas, v_uv);
 
             if (myDeposit < u_depositMin) {
-                gl_FragColor = myColor;
+                outColor = myColor;
                 return;
             }
 
             // 湿度 gate：综合 wetHeatmap（会衰减）和 myDeposit（扩张区域）
             // wetHeatmap 控制"时间维度"——笔触结束后一段时间整体停止扩散
             // myDeposit 控制"空间维度"——未触及的区域不扩散
-            float wetness = texture2D(u_wetHeatmap, v_uv).r;
+            float wetness = texture(u_wetHeatmap, v_uv).r;
             if (wetness < u_wetGateMin) {
-                gl_FragColor = myColor;
+                outColor = myColor;
                 return;
             }
             // wetGate 综合两者：wetHeatmap 决定全局活跃度、myDeposit 决定局部活跃度
@@ -857,17 +861,17 @@ function _initWetBleedProgram() {
                 ) * u_noiseAmount * effectiveRadius;
                 vec2 sampleUV = v_uv + (dirs[i] * effectiveRadius + perDirJitter) * px;
 
-                float nDeposit = texture2D(u_deposit, sampleUV).r;
+                float nDeposit = texture(u_deposit, sampleUV).r;
                 float dh = nDeposit - myDeposit;
                 if (dh > 0.0) {
-                    vec3 nColor = texture2D(u_canvas, sampleUV).rgb;
+                    vec3 nColor = texture(u_canvas, sampleUV).rgb;
                     weightedColor += nColor * dh;
                     totalWeight += dh;
                 }
             }
 
             if (totalWeight < 0.001) {
-                gl_FragColor = myColor;
+                outColor = myColor;
                 return;
             }
 
@@ -878,7 +882,7 @@ function _initWetBleedProgram() {
             float mixAmt = u_strength * totalWeight * absorbJitter * wetGate * resist;
             vec3 outRGB = mix(myColor.rgb, avgNeighbor, mixAmt);
 
-            gl_FragColor = vec4(outRGB, myColor.a);
+            outColor = vec4(outRGB, myColor.a);
         }
     `);
 
@@ -1133,20 +1137,21 @@ function _initWetMaskIntersectProgram() {
     }
     const gl = this.gl;
 
-    const vs = this.createShader(gl.VERTEX_SHADER, `
-        attribute vec2 a_pos;
-        varying vec2 v_uv;
+    const vs = this.createShader(gl.VERTEX_SHADER, `#version 300 es
+        in vec2 a_pos;
+        out vec2 v_uv;
         void main() {
             v_uv = vec2(a_pos.x * 0.5 + 0.5, a_pos.y * 0.5 + 0.5);
             gl_Position = vec4(a_pos, 0.0, 1.0);
         }
     `);
-    const fs = this.createShader(gl.FRAGMENT_SHADER, `
+    const fs = this.createShader(gl.FRAGMENT_SHADER, `#version 300 es
         precision mediump float;
         uniform sampler2D u_mask;
         uniform sampler2D u_wet;
         uniform float u_opacity;
-        varying vec2 v_uv;
+        in vec2 v_uv;
+        out vec4 outColor;
 
         vec3 heatColor(float t) {
             vec3 c0 = vec3(0.0, 0.0, 1.0);
@@ -1163,12 +1168,12 @@ function _initWetMaskIntersectProgram() {
         }
 
         void main() {
-            float m = texture2D(u_mask, v_uv).r;
-            float w = texture2D(u_wet,  v_uv).r;
+            float m = texture(u_mask, v_uv).r;
+            float w = texture(u_wet,  v_uv).r;
             float t = min(m, w);   // 交集 = 两边都有热度的区域
             if (t < 0.01) discard;
             float alpha = pow(t, 0.5) * 0.75 * u_opacity;
-            gl_FragColor = vec4(heatColor(t), alpha);
+            outColor = vec4(heatColor(t), alpha);
         }
     `);
 
