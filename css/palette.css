@@ -22,8 +22,10 @@
     box-shadow: 0 0 3px rgba(0, 0, 0, 0.3);
 }
 
-.color-circle:hover {
-    transform: scale(1.1);
+@media (hover: hover) {
+    .color-circle:hover {
+        transform: scale(1.1);
+    }
 }
 
 .color-circle.selected-bg {
@@ -52,7 +54,9 @@
     pointer-events: none;
 }
 
-.color-circle:hover .color-name-tooltip {
-    opacity: 1;
-    visibility: visible;
+@media (hover: hover) {
+    .color-circle:hover .color-name-tooltip {
+        opacity: 1;
+        visibility: visible;
+    }
 }

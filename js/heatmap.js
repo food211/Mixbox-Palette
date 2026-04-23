@@ -218,12 +218,11 @@ function updateSmudgeHeatmap(x, y, size, brushCanvas, useFalloff, heatStep = HEA
     gl.uniform1f(this._heatmapLocations.u_heatMax,  this._wetHeatCap ?? WET_HEAT_CAP_STEP);
     gl.uniform1f(this._heatmapLocations.u_useMaxMode, 0.0);
 
-    const positions = new Float32Array([
-        x - halfSize, y - halfSize,
-        x + halfSize, y - halfSize,
-        x - halfSize, y + halfSize,
-        x + halfSize, y + halfSize,
-    ]);
+    const positions = this._quadPos;
+    positions[0] = x - halfSize; positions[1] = y - halfSize;
+    positions[2] = x + halfSize; positions[3] = y - halfSize;
+    positions[4] = x - halfSize; positions[5] = y + halfSize;
+    positions[6] = x + halfSize; positions[7] = y + halfSize;
     this._disableAllVertexAttribs();
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.position);
     gl.bufferData(gl.ARRAY_BUFFER, positions, gl.DYNAMIC_DRAW);
@@ -274,12 +273,11 @@ function updateDepositHeatmap(x, y, size, useFalloff, heatStep = DEPOSITE_HEAT_A
     gl.uniform1f(this._heatmapLocations.u_heatMax,  this._wetHeatCap ?? WET_HEAT_CAP_STEP);
     gl.uniform1f(this._heatmapLocations.u_useMaxMode, 0.0);
 
-    const positions = new Float32Array([
-        x - halfSize, y - halfSize,
-        x + halfSize, y - halfSize,
-        x - halfSize, y + halfSize,
-        x + halfSize, y + halfSize,
-    ]);
+    const positions = this._quadPos;
+    positions[0] = x - halfSize; positions[1] = y - halfSize;
+    positions[2] = x + halfSize; positions[3] = y - halfSize;
+    positions[4] = x - halfSize; positions[5] = y + halfSize;
+    positions[6] = x + halfSize; positions[7] = y + halfSize;
     this._disableAllVertexAttribs();
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.position);
     gl.bufferData(gl.ARRAY_BUFFER, positions, gl.DYNAMIC_DRAW);

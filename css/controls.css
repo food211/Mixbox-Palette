@@ -27,8 +27,10 @@
     box-sizing: border-box;
 }
 
-.clear:hover {
-    background-color: #d32f2f;
+@media (hover: hover) {
+    .clear:hover {
+        background-color: #d32f2f;
+    }
 }
 
 #brushSizeValue, #brushMixStrength, #brushSpacingValue {
@@ -117,8 +119,10 @@
     transition: background 0.1s, transform 0.1s;
 }
 
-.custom-range:hover::after {
-    background: #fff;
+@media (hover: hover) {
+    .custom-range:hover::after {
+        background: #fff;
+    }
 }
 
 .custom-range.dragging::after {
@@ -179,8 +183,10 @@
     border: 1px solid #4c4c4c;
 }
 
-.brush-preview-btn:hover {
-    background-color: #4c4c4c;
+@media (hover: hover) {
+    .brush-preview-btn:hover {
+        background-color: #4c4c4c;
+    }
 }
 
 .brush-preview-btn.smudge-active {
@@ -209,8 +215,10 @@
     cursor: not-allowed;
 }
 
-.history-buttons button:hover:not(:disabled) {
-    background-color: #4c4c4c;
+@media (hover: hover) {
+    .history-buttons button:hover:not(:disabled) {
+        background-color: #4c4c4c;
+    }
 }
 
 .tool-buttons {
@@ -234,9 +242,11 @@
     padding: 0;
 }
 
-.tool-btn:hover {
-    background-color: #4c4c4c;
-    color: #e0e0e0;
+@media (hover: hover) {
+    .tool-btn:hover {
+        background-color: #4c4c4c;
+        color: #e0e0e0;
+    }
 }
 
 .tool-btn.active {
@@ -279,8 +289,10 @@
 .pressure-sens-btn .dot-md { width: 8px;  height: 8px;  }
 .pressure-sens-btn .dot-sm { width: 5px;  height: 5px;  }
 
-.pressure-sens-btn:hover {
-    background-color: #4c4c4c;
+@media (hover: hover) {
+    .pressure-sens-btn:hover {
+        background-color: #4c4c4c;
+    }
 }
 
 /* 选中态：背景切换到对应的亮绿→亮蓝 */

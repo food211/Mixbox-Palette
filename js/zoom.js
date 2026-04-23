@@ -68,14 +68,17 @@ function initResizeHandle() {
         pendingWidth = newWidth;
     }
 
-    function _onPointerUp() {
+    function _onPointerUp(e) {
         if (!dragSide) return;
+        const handle = dragSide === 'left' ? handleLeft : handleRight;
         handleLeft.classList.remove('dragging');
         handleRight.classList.remove('dragging');
         container.classList.remove('glow-dragging');
         dragSide = null;
-        document.removeEventListener('pointermove', _onPointerMove);
-        document.removeEventListener('pointerup', _onPointerUp);
+        handle.removeEventListener('pointermove', _onPointerMove);
+        handle.removeEventListener('pointerup', _onPointerUp);
+        handle.removeEventListener('pointercancel', _onPointerUp);
+        try { if (e) handle.releasePointerCapture(e.pointerId); } catch (_) {}
 
         if (pendingWidth === _containerMaxWidth) return; // 没变化
 
@@ -107,12 +110,16 @@ function initResizeHandle() {
         dragStartX = e.clientX;
         dragStartWidth = _containerMaxWidth;
         pendingWidth = _containerMaxWidth;
+        const handle = side === 'left' ? handleLeft : handleRight;
+        // 锁定 pointer 到 handle：iPad Safari 不会再把横向拖动仲裁给系统侧边手势
+        try { handle.setPointerCapture(e.pointerId); } catch (_) {}
+        handle.addEventListener('pointermove', _onPointerMove);
+        handle.addEventListener('pointerup', _onPointerUp);
+        handle.addEventListener('pointercancel', _onPointerUp);
         if (side === 'left')  handleLeft.classList.add('dragging');
         if (side === 'right') handleRight.classList.add('dragging');
         container.classList.remove('glow-left', 'glow-right');
         container.classList.add('glow-dragging');
-        document.addEventListener('pointermove', _onPointerMove);
-        document.addEventListener('pointerup', _onPointerUp);
         _startDragRaf();
     }
 

@@ -255,6 +255,11 @@ const IDLE_BACKUP_TIMEOUT_MS = 5000;
 /** setTimeout 回退延迟（ms）：不支持 requestIdleCallback 时的 CPU 历史备份 */
 const IDLE_BACKUP_FALLBACK_MS = 200;
 
+/** 笔画结束后至少这么久没新笔画才启动 idle 备份（ms）。
+ *  iOS Safari 的 requestIdleCallback 会在连续绘制的帧间隙里硬挤，导致偶发卡顿；
+ *  在 painter 层自己加一道闸门：连续绘制时只挂 pending，等真正静默了再 rIC。 */
+const STROKE_QUIET_DELAY_MS = 250;
+
 /** requestIdleCallback 强制超时（ms）：画布 idle 保存任务 */
 const IDLE_SAVE_TIMEOUT_MS = 3000;
 

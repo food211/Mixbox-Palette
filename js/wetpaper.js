@@ -415,12 +415,11 @@ function updateWetHeatmap(x, y, size, brushCanvas, useFalloff, heatStep = HEAT_A
     gl.uniform1f(this._heatmapLocations.u_heatMax, heatMax);
     gl.uniform1f(this._heatmapLocations.u_useMaxMode, 0.0); // 默认累加模式（draw1/2 用）
 
-    const positions = new Float32Array([
-        x - halfSize, y - halfSize,
-        x + halfSize, y - halfSize,
-        x - halfSize, y + halfSize,
-        x + halfSize, y + halfSize,
-    ]);
+    const positions = this._quadPos;
+    positions[0] = x - halfSize; positions[1] = y - halfSize;
+    positions[2] = x + halfSize; positions[3] = y - halfSize;
+    positions[4] = x - halfSize; positions[5] = y + halfSize;
+    positions[6] = x + halfSize; positions[7] = y + halfSize;
     this._disableAllVertexAttribs();
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.position);
     gl.bufferData(gl.ARRAY_BUFFER, positions, gl.DYNAMIC_DRAW);
@@ -456,13 +455,12 @@ function updateWetHeatmap(x, y, size, brushCanvas, useFalloff, heatStep = HEAT_A
     gl.bindTexture(gl.TEXTURE_2D, this.textures.wetMaskHeatTemp);
     gl.uniform1i(this._heatmapLocations.u_heatmapTexture, 1);
 
-    // 重写 quad（2×）和半径，配 mask 专属步长
-    const maskQuad = new Float32Array([
-        x - maskHalf, y - maskHalf,
-        x + maskHalf, y - maskHalf,
-        x - maskHalf, y + maskHalf,
-        x + maskHalf, y + maskHalf,
-    ]);
+    // 重写 quad（2×）和半径，配 mask 专属步长。复用 _quadPos（前一次 bufferData 已把旧数据拷到 GPU）
+    const maskQuad = this._quadPos;
+    maskQuad[0] = x - maskHalf; maskQuad[1] = y - maskHalf;
+    maskQuad[2] = x + maskHalf; maskQuad[3] = y - maskHalf;
+    maskQuad[4] = x - maskHalf; maskQuad[5] = y + maskHalf;
+    maskQuad[6] = x + maskHalf; maskQuad[7] = y + maskHalf;
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.position);
     gl.bufferData(gl.ARRAY_BUFFER, maskQuad, gl.DYNAMIC_DRAW);
     gl.uniform1f(this._heatmapLocations.u_brushRadius, maskHalf);
