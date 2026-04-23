@@ -1262,6 +1262,10 @@ function bindEvents() {
 
         _activePointerId = e.pointerId;
 
+        // 锁定 pointer 到 canvas：绕过 iPad Safari 的手势仲裁窗口，
+        // 避免刚点过 UI 后第一笔 pointermove 被系统延迟派发（表现为第一笔画不出/卡一下）
+        try { mixCanvas.setPointerCapture(e.pointerId); } catch (_) {}
+
         if (currentTool === 'brush') {
             // 笔刷工具模式
             isDrawing = true;
@@ -1391,6 +1395,7 @@ function bindEvents() {
 
             endStroke();
         }
+        try { mixCanvas.releasePointerCapture(e.pointerId); } catch (_) {}
     });
 
     mixCanvas.addEventListener('pointerleave', () => {
@@ -1408,7 +1413,7 @@ function bindEvents() {
     });
 
     // pointercancel：系统中断笔画（如手势冲突、应用切换）时 pointerup 不会触发，要单独处理
-    mixCanvas.addEventListener('pointercancel', () => {
+    mixCanvas.addEventListener('pointercancel', (e) => {
         if (isDrawing && strokeStarted) {
             if (_pendingStroke) _flushPendingStroke();
             isDrawing = false;
@@ -1418,6 +1423,7 @@ function bindEvents() {
             FrameScheduler.unregister('stroke-draw');
             endStroke();
         }
+        try { mixCanvas.releasePointerCapture(e.pointerId); } catch (_) {}
     });
 
     // ── 笔刷光标 ──────────────────────────────────────
@@ -2117,8 +2123,8 @@ function smudgeAlongPath(x1, y1, x2, y2, pressure = 1.0) {
  * 在指定点执行涂抹：复用笔刷 smear 逻辑，把移动方向后方的颜色带到当前位置。
  * density=0（baseMixStrength=0）→ 纯 smear，不混入新颜料，不会反复混浊。
  *
- * 压感映射与 brush 工具一致：size 范围 [floor, ceil]，strength 范围 [mixFloor, 1]。
- * 为避免连续压力值导致 brushCanvas cache key 爆炸，size 量化到 2px 网格。
+ * 涂抹工具不响应压感（size/strength 固定按用户滑条设置），避免 Pencil 压力抖动导致
+ * 画笔粗细/力度忽大忽小，影响涂抹连贯性。
  */
 function smudgeAtPoint(x, y, dx, dy, pressure = 1.0) {
     if (!painter) return;
@@ -2127,9 +2133,9 @@ function smudgeAtPoint(x, y, dx, dy, pressure = 1.0) {
     const dirX = len > 0 ? dx / len : 0;
     const dirY = len > 0 ? dy / len : 0;
 
-    // 压感：size 下限/上限、strength 下限（strength 上限固定 1.0，避免 smudgeMix 超范围）
-    const sizeScale = pressureSizeFloor + (pressureSizeCeil - pressureSizeFloor) * pressure;
-    const strengthScale = pressureMixFloor + (1 - pressureMixFloor) * pressure;
+    // 涂抹屏蔽压感：size/strength 固定使用用户设置值
+    const sizeScale = 1.0;
+    const strengthScale = 1.0;
     const effectiveSize = brushSize * sizeScale;
     const effectiveStrength = smudgeStrength * strengthScale;
 

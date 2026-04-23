@@ -232,6 +232,8 @@
     border-top-color: rgba(30, 30, 30, 0.9);
 }
 
-.value-ruler-marker:hover .vr-tooltip {
-    opacity: 1;
+@media (hover: hover) {
+    .value-ruler-marker:hover .vr-tooltip {
+        opacity: 1;
+    }
 }

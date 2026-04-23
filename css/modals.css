@@ -68,8 +68,10 @@
     transition: background-color 0.2s;
 }
 
-.brush-option:hover {
-    background-color: #3c3c3c;
+@media (hover: hover) {
+    .brush-option:hover {
+        background-color: #3c3c3c;
+    }
 }
 
 .brush-option.selected {
@@ -116,8 +118,10 @@
     display: inline-block;
 }
 
-.upload-btn:hover {
-    background-color: #1976D2;
+@media (hover: hover) {
+    .upload-btn:hover {
+        background-color: #1976D2;
+    }
 }
 
 /* ============ 更新提示弹窗 ============ */
@@ -153,9 +157,11 @@
     white-space: nowrap;
     transition: border-color 0.15s, color 0.15s;
 }
-.update-copy-btn:hover {
-    border-color: #aaa;
-    color: #fff;
+@media (hover: hover) {
+    .update-copy-btn:hover {
+        border-color: #aaa;
+        color: #fff;
+    }
 }
 
 .update-version-tag {
@@ -223,8 +229,10 @@
     margin-bottom: 14px;
 }
 
-.update-changelog-link:hover {
-    text-decoration: underline;
+@media (hover: hover) {
+    .update-changelog-link:hover {
+        text-decoration: underline;
+    }
 }
 
 .update-modal-actions {
@@ -244,9 +252,11 @@
     font-size: 13px;
 }
 
-.update-btn-later:hover,
-.update-btn-dismiss:hover {
-    background-color: #3c3c3c;
+@media (hover: hover) {
+    .update-btn-later:hover,
+    .update-btn-dismiss:hover {
+        background-color: #3c3c3c;
+    }
 }
 
 .update-btn-refresh {
@@ -259,8 +269,10 @@
     font-size: 13px;
 }
 
-.update-btn-refresh:hover:not(:disabled) {
-    background-color: #1976D2;
+@media (hover: hover) {
+    .update-btn-refresh:hover:not(:disabled) {
+        background-color: #1976D2;
+    }
 }
 
 .update-btn-refresh:disabled {
@@ -292,8 +304,10 @@
     font-size: 13px;
 }
 
-.alert-ok-btn:hover {
-    background-color: #1976D2;
+@media (hover: hover) {
+    .alert-ok-btn:hover {
+        background-color: #1976D2;
+    }
 }
 
 /* ============ 公告弹窗 ============ */
@@ -326,8 +340,10 @@
     cursor: pointer;
 }
 
-.announcement-link:hover {
-    text-decoration: underline;
+@media (hover: hover) {
+    .announcement-link:hover {
+        text-decoration: underline;
+    }
 }
 
 .announcement-btn-ok {
@@ -340,6 +356,8 @@
     font-size: 13px;
 }
 
-.announcement-btn-ok:hover {
-    background-color: #3c3c3c;
+@media (hover: hover) {
+    .announcement-btn-ok:hover {
+        background-color: #3c3c3c;
+    }
 }

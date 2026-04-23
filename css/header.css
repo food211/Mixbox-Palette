@@ -25,8 +25,10 @@
     transition: color 0.2s;
 }
 
-.github-link a:hover {
-    color: #64B5F6;
+@media (hover: hover) {
+    .github-link a:hover {
+        color: #64B5F6;
+    }
 }
 
 .version-link {
@@ -38,14 +40,16 @@
     opacity: 0.6;
 }
 
-.version-link:hover {
-    background-color: #505050;
-    color: #64B5F6 !important;
-    opacity: 1;
-}
+@media (hover: hover) {
+    .version-link:hover {
+        background-color: #505050;
+        color: #64B5F6 !important;
+        opacity: 1;
+    }
 
-.discord-link:hover {
-    color: #5865F2 !important;
+    .discord-link:hover {
+        color: #5865F2 !important;
+    }
 }
 
 .icon-github,
@@ -95,8 +99,10 @@
     box-sizing: border-box;
 }
 
-.palette-btn:hover {
-    background-color: #1976D2;
+@media (hover: hover) {
+    .palette-btn:hover {
+        background-color: #1976D2;
+    }
 }
 
 .palette-btn::after {
@@ -132,8 +138,10 @@
     color: #e0e0e0;
 }
 
-.palette-option:hover {
-    background-color: #3c3c3c;
+@media (hover: hover) {
+    .palette-option:hover {
+        background-color: #3c3c3c;
+    }
 }
 
 .palette-option.active {
@@ -196,9 +204,11 @@
     box-sizing: border-box;
 }
 
-.lang-btn:hover, .engine-btn:hover {
-    background-color: #505050;
-    opacity: 1;
+@media (hover: hover) {
+    .lang-btn:hover, .engine-btn:hover {
+        background-color: #505050;
+        opacity: 1;
+    }
 }
 
 .engine-btn.active {
@@ -233,9 +243,11 @@
     transition: opacity 0.2s, background-color 0.2s;
 }
 
-.zoom-btn:hover {
-    background-color: #505050;
-    opacity: 1;
+@media (hover: hover) {
+    .zoom-btn:hover {
+        background-color: #505050;
+        opacity: 1;
+    }
 }
 
 .zoom-btn::after {
@@ -271,8 +283,10 @@
     text-align: center;
 }
 
-.zoom-option:hover {
-    background-color: #3c3c3c;
+@media (hover: hover) {
+    .zoom-option:hover {
+        background-color: #3c3c3c;
+    }
 }
 
 .zoom-option.active {

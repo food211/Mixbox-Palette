@@ -6,6 +6,7 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     -webkit-user-select: none;
     user-select: none;
+    -webkit-tap-highlight-color: transparent;
 }
 
 body {
@@ -56,6 +57,7 @@ body {
     z-index: 500;
     background: transparent;
     transition: background 0.15s;
+    touch-action: none;
 }
 
 /* 扩大点击/触控热区（向容器外侧延伸 30px），视觉宽度仍 6px 不变。
@@ -78,9 +80,14 @@ body {
     right: -30px;
 }
 
-.resize-handle:hover,
 .resize-handle.dragging {
     background: rgba(255, 255, 255, 0.15);
+}
+
+@media (hover: hover) {
+    .resize-handle:hover {
+        background: rgba(255, 255, 255, 0.15);
+    }
 }
 
 .container.glow-left,
