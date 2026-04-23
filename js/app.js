@@ -1270,64 +1270,11 @@ function bindEvents() {
      * 避免防抖导致笔尾离 pointer 一段距离。跳跃不走 α 平滑。
      */
     function _finalizeStrokeTail() {
-        if (!isDrawing || !_hasTarget) return;
-        // 强制让笔尖 = target，后续逻辑复用 _flushPendingStroke 的绘制路径
-        _tipX = _targetX;
-        _tipY = _targetY;
-        // 用 α=1 的等效：让 _flushPendingStroke 画 lastX→target 的整段
-        // 最干脆：直接调一次 _flushPendingStroke，但它会再走 α lerp。
-        // 干脆在这里就地画：
-        const pressure = (_targetRawPressure != null)
-            ? Math.pow(Math.min(1.0, _smoothedPressure / 0.8), pressureGamma)
-            : 1.0;
-        const dx = _targetX - lastX;
-        const dy = _targetY - lastY;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        if (distance < 0.5) { _hasTarget = false; return; }
-
-        if (currentTool === 'brush') {
-            const activeColor = currentStroke ? currentStroke.color : currentBrushColor;
-            const brushType = currentBrush.type;
-            const baseSpacing = brushType === 'dry'
-                ? brushSize * 0.15
-                : brushType === 'splatter'
-                ? brushSize * 0.3
-                : brushSize * 0.25;
-            const spacingRatio = brushType === 'watercolor' ? 0.35 : brushSpacingRatio;
-            const smallBrushFloor = Math.min(2.5, brushSize * 0.3);
-            const sizeBasedFloor = Math.max(brushSize * 0.05, smallBrushFloor);
-            const effectiveMinDist = Math.max(1, sizeBasedFloor, baseSpacing * spacingRatio);
-
-            if (distance >= effectiveMinDist) {
-                const rawSteps = Math.floor(distance / effectiveMinDist);
-                // 收尾阶段不限 MAX_STEPS：必须画到 pointer 位置
-                const steps = rawSteps;
-                let prevIX = lastX, prevIY = lastY;
-                for (let i = 1; i <= steps; i++) {
-                    const ratio = i / steps;
-                    const interpX = lastX + dx * ratio;
-                    const interpY = lastY + dy * ratio;
-                    drawBrush(interpX, interpY, activeColor, prevIX, prevIY, pressure);
-                    addStrokePoint(interpX, interpY);
-                    prevIX = interpX; prevIY = interpY;
-                }
-                lastX = _targetX; lastY = _targetY;
-                if (painter) painter.flush();
-            }
-        } else if (currentTool === 'smudge') {
-            const smudgeBaseSpacing = currentBrush.type === 'dry'
-                ? brushSize * 0.15
-                : currentBrush.type === 'splatter'
-                ? brushSize * 0.3
-                : brushSize * 0.25;
-            const smudgeMinDist = Math.max(1, brushSize * 0.05, smudgeBaseSpacing * smudgeSpacingRatio);
-            if (distance >= smudgeMinDist) {
-                addStrokePoint(_targetX, _targetY);
-                smudgeAlongPath(lastX, lastY, _targetX, _targetY, pressure);
-                lastX = _targetX; lastY = _targetY;
-                if (painter) painter.flush();
-            }
-        }
+        // 抬笔即停：不再把 tip→target 的滞后段补画出来。
+        // Why: 快画时 tip 可能落后 target 几十到上百像素，补画会出现"松手后突然一条直线"的违和感。
+        // 保留 flush 确保最后一次 drawBrush 的结果刷上屏。
+        if (!isDrawing) { _hasTarget = false; return; }
+        if (painter) painter.flush();
         _hasTarget = false;
     }
 
