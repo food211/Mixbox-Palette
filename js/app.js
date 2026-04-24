@@ -51,19 +51,22 @@ function reportAnalyticsEnv() {
         const deviceType = isUXP ? 'desktop' : (isTouch ? 'mobile' : 'desktop');
         const appVersion = (typeof Updater !== 'undefined' && Updater.CURRENT_VERSION) || 'unknown';
         const hostVersion = isUXP ? (new URLSearchParams(window.location.search).get('host') || 'unknown') : 'n/a';
+        const hostname = (location.hostname || 'unknown').toLowerCase();
         window.gtag('set', 'user_properties', {
             app_env: isUXP ? 'uxp_plugin' : 'web_browser',
             device_os: os,
             device_type: deviceType,
             app_version: appVersion,
-            host_version: hostVersion
+            host_version: hostVersion,
+            hostname: hostname
         });
         track('app_env', {
             env: isUXP ? 'uxp_plugin' : 'web_browser',
             device_os: os,
             device_type: deviceType,
             app_version: appVersion,
-            host_version: hostVersion
+            host_version: hostVersion,
+            hostname: hostname
         });
     } catch (_) {}
 }
