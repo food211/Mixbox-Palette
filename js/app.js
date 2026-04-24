@@ -87,9 +87,9 @@ let rectSelectStart = null;  // { x, y }
 // 工具状态模型（重构后单一数据源）
 // mode = 'brush' | 'watercolor' | 'smudge'，由 currentTool + 当前笔型推导
 const TOOL_STATE_DEFAULTS = {
-    brush:      { size: 15, mixStrength: 77, spacingRatio: 0.05, brushType: 'dry' },
+    brush:      { size: 15, mixStrength: 77, spacingRatio: 0.05, brushType: 'watercolor' },
     watercolor: { size: 15, mixStrength: 77, wetness: 50 },
-    smudge:     { size: 15, strength: 50, spacingRatio: 0.05, brushType: 'dry' },
+    smudge:     { size: 15, strength: 50, spacingRatio: 0.05, brushType: 'watercolor' },
 };
 const toolStates = {
     brush:      { ...TOOL_STATE_DEFAULTS.brush },
@@ -105,7 +105,7 @@ let pressureMixFloor = 0.5;   // 最小压力时的浓度比例
 let smudgeSnapshotCache = null;
 
 // 当前笔刷类型（笔刷工具下决定走 brush 还是 watercolor state）
-let currentBrush = { type: 'dry', image: null };
+let currentBrush = { type: 'watercolor', image: null };
 
 function getCurrentMode() {
     if (currentTool === 'smudge') return 'smudge';
