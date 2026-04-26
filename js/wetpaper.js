@@ -963,7 +963,7 @@ function _applyWetBleed() {
     gl.uniform1f(this._wetBleedLoc.u_strength,    strength);
     gl.uniform1f(this._wetBleedLoc.u_depositMin,  WET_CANVAS_BLEED_DEPOSIT_MIN);
     gl.uniform1f(this._wetBleedLoc.u_noiseAmount, WET_CANVAS_BLEED_NOISE);
-    gl.uniform1f(this._wetBleedLoc.u_noiseScale,  sizeScale);
+    gl.uniform1f(this._wetBleedLoc.u_noiseScale,  Math.pow(sizeScale, WET_CANVAS_BLEED_NOISE_SCALE_EXP));
     gl.uniform1f(this._wetBleedLoc.u_wetGateMin,  WET_CANVAS_BLEED_WET_GATE_MIN);
 
     this._disableAllVertexAttribs();

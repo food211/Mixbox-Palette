@@ -90,9 +90,9 @@ let rectSelectStart = null;  // { x, y }
 // 工具状态模型（重构后单一数据源）
 // mode = 'brush' | 'watercolor' | 'smudge'，由 currentTool + 当前笔型推导
 const TOOL_STATE_DEFAULTS = {
-    brush:      { size: 15, mixStrength: 77, spacingRatio: 0.05, brushType: 'watercolor' },
-    watercolor: { size: 15, mixStrength: 77, wetness: 50 },
-    smudge:     { size: 15, strength: 50, spacingRatio: 0.05, brushType: 'watercolor' },
+    brush:      { size: 40, mixStrength: 77, spacingRatio: 0.05, brushType: 'watercolor' },
+    watercolor: { mixStrength: 77, wetness: 50, brushType: 'watercolor' },
+    smudge:     { size: 40, strength: 50, spacingRatio: 0.05, brushType: 'watercolor' },
 };
 const toolStates = {
     brush:      { ...TOOL_STATE_DEFAULTS.brush },
@@ -123,11 +123,12 @@ function getCurrentState() {
 // 绘制管线代码量大且只读这些值，临时保留访问语义，避免一次性大改
 const _brushSizeAccessor = {
     get brushSize() {
-        return currentTool === 'smudge'
-            ? toolStates.smudge.size
-            : (currentBrush.type === 'watercolor' ? toolStates.watercolor.size : toolStates.brush.size);
+        return currentTool === 'smudge' ? toolStates.smudge.size : toolStates.brush.size;
     },
-    set brushSize(v) { getCurrentState().size = v; },
+    set brushSize(v) {
+        if (currentTool === 'smudge') toolStates.smudge.size = v;
+        else toolStates.brush.size = v;
+    },
     get smudgeBrushSize() { return toolStates.smudge.size; },
     set smudgeBrushSize(v) { toolStates.smudge.size = v; },
     get smudgeStrength() { return toolStates.smudge.strength; },
@@ -263,50 +264,17 @@ const brushSpacingSlider = document.getElementById('brushSpacing');
 const brushSpacingValue = document.getElementById('brushSpacingValue');
 
 /**
- * 加载三个工具的 state；不存在时尝试从旧 key 一次性迁移，否则用默认值。
- * TODO(2026-Q3 后删除)：迁移代码 mixbox_brush_settings / mixbox_app_settings → mb_tool_*
+ * 加载三个工具的 state；不存在时用默认值。
  */
 function loadToolStatesFromStorage() {
     const modes = ['brush', 'watercolor', 'smudge'];
-    let anyLoaded = false;
     for (const m of modes) {
         const saved = paletteStorage.loadToolState(m);
-        if (saved) {
-            Object.assign(toolStates[m], saved);
-            anyLoaded = true;
+        if (!saved) continue;
+        // 只复制默认 state 里存在的字段，过滤旧存档残留（如旧的 watercolor.size）
+        for (const k of Object.keys(TOOL_STATE_DEFAULTS[m])) {
+            if (k in saved) toolStates[m][k] = saved[k];
         }
-    }
-    if (anyLoaded) {
-        console.log('✅ 已加载 toolStates');
-        return;
-    }
-    // 一次性迁移
-    const oldBrush = paletteStorage.loadBrushSettings();
-    const oldApp = paletteStorage.loadAppSettings();
-    if (oldBrush) {
-        if (oldBrush.brushType === 'watercolor') {
-            toolStates.watercolor.brushType = 'watercolor';
-            if (oldBrush.brushSize) toolStates.watercolor.size = oldBrush.brushSize;
-            if (oldBrush.mixStrength != null) toolStates.watercolor.mixStrength = oldBrush.mixStrength;
-            if (oldBrush.watercolorWetness != null) toolStates.watercolor.wetness = oldBrush.watercolorWetness;
-        } else {
-            if (oldBrush.brushType) toolStates.brush.brushType = oldBrush.brushType;
-            if (oldBrush.brushSize) toolStates.brush.size = oldBrush.brushSize;
-            if (oldBrush.mixStrength != null) toolStates.brush.mixStrength = oldBrush.mixStrength;
-            if (oldBrush.brushSpacing != null) toolStates.brush.spacingRatio = oldBrush.brushSpacing / 100;
-        }
-        // 即使当前是水彩用户，也尝试恢复 watercolor.wetness（旧字段可能两边都有）
-        if (oldBrush.watercolorWetness != null) toolStates.watercolor.wetness = oldBrush.watercolorWetness;
-    }
-    if (oldApp) {
-        if (oldApp.smudgeBrushSize != null) toolStates.smudge.size = oldApp.smudgeBrushSize;
-        if (oldApp.smudgeStrength != null) toolStates.smudge.strength = oldApp.smudgeStrength;
-        if (oldApp.smudgeBrushType) toolStates.smudge.brushType = oldApp.smudgeBrushType;
-        if (oldApp.smudgeSpacing != null) toolStates.smudge.spacingRatio = oldApp.smudgeSpacing / 100;
-    }
-    if (oldBrush || oldApp) {
-        console.log('🔄 已从旧存储迁移到 toolStates');
-        modes.forEach(m => paletteStorage.saveToolState(m, toolStates[m]));
     }
 }
 
@@ -594,7 +562,7 @@ const SLIDER_BINDINGS = {
         spacing: { read: s => Math.round(s.spacingRatio * 100), write: (s, v) => { s.spacingRatio = v / 100; }, label: { i18n: 'brushSpacing', titleI18n: 'brushSpacingTitle' } },
     },
     watercolor: {
-        size:    { read: s => s.size,                     write: (s, v) => { s.size = v; }, label: null },
+        size:    { read: () => toolStates.brush.size,     write: (s, v) => { toolStates.brush.size = v; }, label: null },
         mix:     { read: s => s.mixStrength,              write: (s, v) => { s.mixStrength = v; }, label: { i18n: 'paintConcentration', titleI18n: 'paintConcentrationTitle' } },
         spacing: { read: s => s.wetness,                  write: (s, v) => { s.wetness = v; }, label: { i18n: 'brushWetness', titleI18n: 'brushWetnessTitle' } },
     },
@@ -706,7 +674,9 @@ function bindEvents() {
         const mode = getCurrentMode();
         SLIDER_BINDINGS[mode].size.write(toolStates[mode], value);
         brushSizeValue.textContent = value;
-        persistCurrentState();
+        // size 在 brush/watercolor 共用 toolStates.brush，统一保存到 brush（smudge 自己存自己）
+        const sizeOwner = mode === 'smudge' ? 'smudge' : 'brush';
+        paletteStorage.saveToolState(sizeOwner, toolStates[sizeOwner]);
     });
 
     brushMixSlider.addEventListener('input', (e) => {
