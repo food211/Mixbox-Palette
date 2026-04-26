@@ -133,8 +133,8 @@ const palettePresets = {
             { hex: '#7A5C3A', name: 'Raw Umber',            nameCN: '生棕土' },
             { hex: '#4A2E1A', name: 'Sepia',                nameCN: '墨褐' },  
             // 冷色系
-            { hex: '#003CA0', name: 'Primary Blue',         nameCN: '原色蓝' },
-            { hex: '#0064A0', name: 'Cerulean Blue',        nameCN: '天蓝' },
+            { hex: '#0800a0', name: 'Primary Blue',         nameCN: '原色蓝' },
+            { hex: '#3B7FA8', name: 'Cerulean Blue',        nameCN: '天蓝' },
             { hex: '#005544', name: 'Winsor Green',         nameCN: '温莎绿' },
             // 中性色
             { hex: '#8C8C8C', name: 'Neutral Grey',         nameCN: '中性灰' },
