@@ -118,7 +118,7 @@ const palettePresets = {
             { hex: '#F2607D', name: 'Permanent Rose',       nameCN: '永固玫瑰红' },
             { hex: '#F4364C', name: 'Primary Red',          nameCN: '原色红' },
             { hex: '#D02670', name: 'Magenta',              nameCN: '品红' },
-            { hex: '#E8341C', name: 'Flame Red',            nameCN: '火焰红' },
+            { hex: '#DC3214', name: 'Flame Red',            nameCN: '火焰红' },
             // 紫色系
             { hex: '#C084C8', name: 'Light Purple',         nameCN: '浅紫' },
             { hex: '#7B4FA6', name: 'Brilliant Violet',     nameCN: '亮紫罗兰' },
@@ -133,9 +133,9 @@ const palettePresets = {
             { hex: '#7A5C3A', name: 'Raw Umber',            nameCN: '生棕土' },
             { hex: '#4A2E1A', name: 'Sepia',                nameCN: '墨褐' },  
             // 冷色系
-            { hex: '#1B4F9C', name: 'Primary Blue',  nameCN: '原色蓝' },
-            { hex: '#2E86C1', name: 'Cerulean Blue', nameCN: '天蓝' },
-            { hex: '#005544', name: 'Winsor Green',  nameCN: '温莎绿' },
+            { hex: '#003CA0', name: 'Primary Blue',         nameCN: '原色蓝' },
+            { hex: '#0064A0', name: 'Cerulean Blue',        nameCN: '天蓝' },
+            { hex: '#005544', name: 'Winsor Green',         nameCN: '温莎绿' },
             // 中性色
             { hex: '#8C8C8C', name: 'Neutral Grey',         nameCN: '中性灰' },
             { hex: '#F5F5F0', name: 'Zinc White',           nameCN: '锌白' },
