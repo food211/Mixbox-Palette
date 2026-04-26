@@ -70,8 +70,8 @@ const WET_SPREAD_RADIUS = 2;
 /** 扩散/噪点半径随 brushSize 线性缩放的基准尺寸。size=40 时 scale=1，size=80 时 scale=2 */
 const WET_SIZE_SCALE_BASE = 40;
 /** scale 的夹逼范围：太小会让扩散步长缩到亚像素，太大单帧爬得太远 */
-const WET_SIZE_SCALE_MIN = 0.5;
-const WET_SIZE_SCALE_MAX = 3.0;
+const WET_SIZE_SCALE_MIN = 0.25;
+const WET_SIZE_SCALE_MAX = 1.0;
 
 // ─── 1.3 wetMaskHeatmap（水彩区域 mask）──────────────────────────────────────
 
@@ -198,6 +198,10 @@ const WET_CANVAS_BLEED_DILUTE = 0.6;
 
 /** 扩散噪声强度（0~1）：模拟纸张纤维不规则性，让边缘不规则 */
 const WET_CANVAS_BLEED_NOISE = 0.3;
+
+/** 噪声网格随 brushSize 缩放的指数。1=与扩散半径同步线性放大；<1 让大笔刷颗粒不那么粗，
+ *  保持细节在不同尺寸下接近一致。0.4 时 size=80 颗粒约 1.32×（而非 2×） */
+const WET_CANVAS_BLEED_NOISE_SCALE_EXP = 0.4;
 
 /** 湿度 gate 下限：wetHeatmap 低于此值的像素停止扩散（表示已干、定型） */
 const WET_CANVAS_BLEED_WET_GATE_MIN = 0.02;
