@@ -1,5 +1,24 @@
 # 更新日志 / Changelog
 
+== V1.5.3 ==
+[ZH]
+### 优化
+- **水彩笔与其他笔刷共用尺寸** — 之前在水彩笔和其他笔刷间来回切换，size 滑条会各记各的、跳来跳去；现在统一了，切笔刷时尺寸不再变化
+- **大笔刷水彩颗粒更细腻** — size 调到 60-80px 时，水彩晕染的纸纤维噪点不会再变得太粗，颗粒细节在不同尺寸下保持接近一致
+- **默认笔刷尺寸调到 40px** — 新用户首次打开时滑条从 15 变成 40，更接近常用绘画尺寸
+
+### 修复
+- **按住 Shift 不再让按钮带焦点框** — 之前按住 Shift 时点过的按钮会出现一个浅色边框，现已去掉
+
+[EN]
+### Improvements
+- **Watercolor brush shares size with other brushes** — Previously the size slider remembered separate values for the watercolor brush vs. other brushes and would jump when you switched; now it stays put
+- **Finer watercolor texture on large brushes** — At size 60-80px, the paper-fiber noise in watercolor diffusion no longer looks too coarse; grain detail stays roughly consistent across sizes
+- **Default brush size raised to 40px** — First-time users now start with the slider at 40 instead of 15, closer to a typical painting size
+
+### Fix
+- **Shift no longer leaves focus rings on buttons** — Holding Shift used to cause a faint outline to appear on previously-clicked buttons; that's now suppressed
+
 == V1.5.2 ==
 [ZH]
 ### 新增
