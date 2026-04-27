@@ -87,7 +87,9 @@ let isRectSelectMode = false;
 let isRectSelecting = false;
 let rectSelectStart = null;  // { x, y }
 let rectSelectIntent = 'export'; // 'export' | 'import'
-let importTargetRegion = null;  // { sx, sy, sw, sh }
+let importTargetRegion = null;   // { sx, sy, sw, sh } 当前导入中的目标区域
+let lastImportRegion = null;     // { sx, sy, sw, sh, canvasW, canvasH } 最近一次导入的画布区域
+let lastImportPsBounds = null;   // { top, left, bottom, right } 最近一次导入时的 PS 选区坐标
 
 // 工具状态模型（重构后单一数据源）
 // mode = 'brush' | 'watercolor' | 'smudge'，由 currentTool + 当前笔型推导
@@ -855,16 +857,12 @@ function bindEvents() {
 
         rectSelectBtn.addEventListener('click', () => {
             if (!isRectSelectMode) {
-                isRectSelectMode = true;
-                rectSelectBtn.classList.add('active');
-                selectOverlay.style.display = 'block';
-                selectOverlay.style.pointerEvents = 'auto';
-                mixCanvas.classList.remove('brush');
-                mixCanvas.classList.add('rect-select');
-                updateStatus('rect-select');
-                overlayCtx.clearRect(0, 0, selectOverlay.width, selectOverlay.height);
-                overlayCtx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-                overlayCtx.fillRect(0, 0, selectOverlay.width, selectOverlay.height);
+                // 有导入记录且在 UXP 中：先查 PS 选区，看能否复用
+                if (lastImportRegion && isInWebView()) {
+                    window.uxpHost.postMessage({ type: "getSelection" });
+                    return;
+                }
+                enterRectSelectExportMode();
             } else {
                 exitRectSelectMode();
             }
@@ -1852,6 +1850,24 @@ function updateColorDisplay() {
     }
 }
 
+function enterRectSelectExportMode() {
+    const rectSelectBtn = document.getElementById('rectSelectBtn');
+    const selectOverlay = document.getElementById('selectOverlay');
+    if (!selectOverlay) return;
+    isRectSelectMode = true;
+    rectSelectIntent = 'export';
+    if (rectSelectBtn) rectSelectBtn.classList.add('active');
+    selectOverlay.style.display = 'block';
+    selectOverlay.style.pointerEvents = 'auto';
+    mixCanvas.classList.remove('brush');
+    mixCanvas.classList.add('rect-select');
+    updateStatus('rect-select');
+    const overlayCtx = selectOverlay.getContext('2d');
+    overlayCtx.clearRect(0, 0, selectOverlay.width, selectOverlay.height);
+    overlayCtx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    overlayCtx.fillRect(0, 0, selectOverlay.width, selectOverlay.height);
+}
+
 /**
  * 退出矩形选取模式
  */
@@ -2430,6 +2446,23 @@ window.addEventListener("message", (e) => {
     lastSyncedBgColor = backgroundColor;
     updateColorDisplay();
     if (paletteStorage) paletteStorage.saveAppSettings({ foregroundColor, backgroundColor });
+  } else if (type === "getSelectionResult") {
+    const cur = e.data.bounds;
+    const last = lastImportPsBounds;
+    const canMatch = cur && last &&
+        cur.top === last.top && cur.left === last.left &&
+        cur.bottom === last.bottom && cur.right === last.right &&
+        lastImportRegion &&
+        lastImportRegion.canvasW === mixCanvas.width &&
+        lastImportRegion.canvasH === mixCanvas.height;
+    if (canMatch) {
+        // PS 选区未变，直接用导入时的区域导出
+        const { sx, sy, sw, sh } = lastImportRegion;
+        extractAndSendPixels(sx, sy, sw, sh);
+    } else {
+        // 选区已变或不存在，进入框选模式让用户重新选
+        enterRectSelectExportMode();
+    }
   } else if (type === "pastePixelsResult") {
     if (e.data.success) {
       console.log('[rectSelect] Transfer success');
@@ -2473,6 +2506,8 @@ window.addEventListener("message", (e) => {
     if (region) {
         ctx2d.drawImage(srcCanvas, region.sx, region.sy, region.sw, region.sh);
         importTargetRegion = null;
+        lastImportRegion = { ...region, canvasW: cw, canvasH: ch };
+        lastImportPsBounds = e.data.psBounds || null;
     } else {
         // 无目标区域时居中（兜底）
         const scale = Math.min(1, cw / width, ch / height);

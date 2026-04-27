@@ -502,7 +502,8 @@ async function handleImportPixels() {
       success: true,
       width,
       height,
-      pixels: base64
+      pixels: base64,
+      psBounds: selBounds
     }, "*");
 
     console.log(`✅ Import pixels: ${width}x${height}`);
@@ -556,6 +557,41 @@ window.addEventListener("message", async (e) => {
 
   if (type === "importPixels") {
     await handleImportPixels();
+  }
+
+  if (type === "getSelection") {
+    let selBounds = null;
+    try {
+      const app = require("photoshop").app;
+      const doc = app.activeDocument;
+      if (doc) {
+        await core.executeAsModal(async () => {
+          try {
+            const result = await action.batchPlay([{
+              _obj: "get",
+              _target: [
+                { _property: "selection" },
+                { _ref: "document", _enum: "ordinal", _value: "targetEnum" }
+              ]
+            }], {});
+            const sel = result[0]?.selection;
+            if (sel && sel.top !== undefined) {
+              selBounds = {
+                top: Math.round(sel.top._value ?? sel.top),
+                left: Math.round(sel.left._value ?? sel.left),
+                bottom: Math.round(sel.bottom._value ?? sel.bottom),
+                right: Math.round(sel.right._value ?? sel.right)
+              };
+            }
+          } catch (err) {
+            console.log("No selection:", err.message);
+          }
+        }, { commandName: "Get Selection" });
+      }
+    } catch (err) {
+      console.error("❌ getSelection failed:", err.message || err);
+    }
+    webview.postMessage({ type: "getSelectionResult", bounds: selBounds }, "*");
   }
 });
 
