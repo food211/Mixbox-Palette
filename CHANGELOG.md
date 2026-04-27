@@ -1,5 +1,14 @@
 # 更新日志 / Changelog
 
+== V1.5.4 ==
+[ZH]
+### 新功能
+- **从 PS 导入像素** — 在 Photoshop 中框选区域，点插件导入按钮，在混色画布上框选目标位置，即可将选区像素导入画布
+
+[EN]
+### New Features
+- **Import pixels from PS** — Select an area in Photoshop, click the import button in the plugin, draw a target region on the mixing canvas, and the selected pixels will be imported
+
 == V1.5.3 ==
 [ZH]
 ### 优化

@@ -282,6 +282,9 @@ const Announcer = {
 
         titleEl.textContent = t('updateNewVersionTitle', { version: data.latest });
         bodyEl.innerHTML = this._renderVersionsHtml(data);
+        if (typeof window.uxpHost !== 'undefined') {
+            bodyEl.innerHTML += `<p class="update-host-notice">${t('updateHostUpgradeNotice')}</p>`;
+        }
         changelogLink.textContent = t('updateViewChangelog');
         changelogLink.href = Updater.CHANGELOG_PAGE;
         laterBtn.textContent  = t('updateBtnLater');

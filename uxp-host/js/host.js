@@ -5,8 +5,9 @@ const { action, core } = require("photoshop");
 const shell = require("uxp").shell;
 
 // ============ Global Variables ============
-const HOST_VERSION = "1.1.1";
+const HOST_VERSION = "1.2.0";
 const SOURCES = [
+  "http://localhost:5173/app.html",
   "https://mixbox-palette.pages.dev/",
   "https://food211.github.io/Mixbox-Palette/"
 ].map(url => url + '?host=' + HOST_VERSION);
@@ -407,10 +408,116 @@ async function handlePastePixels(data) {
   }
 }
 
+// ============ Import Pixels Handler ============
+async function handleImportPixels() {
+  const app = require("photoshop").app;
+  const imaging = require("photoshop").imaging;
+
+  function sendResult(success, error, payload) {
+    webview.postMessage({ type: "importPixelsResult", success, error, ...payload }, "*");
+  }
+
+  try {
+    const doc = app.activeDocument;
+    if (!doc) {
+      sendResult(false, "importNoDocument", {});
+      return;
+    }
+
+    let selBounds = null;
+    await core.executeAsModal(async () => {
+      try {
+        const result = await action.batchPlay([{
+          _obj: "get",
+          _target: [
+            { _property: "selection" },
+            { _ref: "document", _enum: "ordinal", _value: "targetEnum" }
+          ]
+        }], {});
+        const sel = result[0]?.selection;
+        if (sel && sel.top !== undefined) {
+          selBounds = {
+            top: Math.round(sel.top._value ?? sel.top),
+            left: Math.round(sel.left._value ?? sel.left),
+            bottom: Math.round(sel.bottom._value ?? sel.bottom),
+            right: Math.round(sel.right._value ?? sel.right)
+          };
+        }
+      } catch (err) {
+        console.log("No selection:", err.message);
+      }
+    }, { commandName: "Check Selection for Import" });
+
+    if (!selBounds) {
+      sendResult(false, "importNoSelection", {});
+      return;
+    }
+
+    const width = selBounds.right - selBounds.left;
+    const height = selBounds.bottom - selBounds.top;
+    if (width < 1 || height < 1) {
+      sendResult(false, "importNoSelection", {});
+      return;
+    }
+
+    let rgbaBuffer = null;
+    await core.executeAsModal(async () => {
+      const result = await imaging.getPixels({
+        documentID: doc.id,
+        sourceBounds: { left: selBounds.left, top: selBounds.top, width, height },
+        componentSize: 8,
+        colorSpace: "RGB"
+      });
+      const pixelData = await result.imageData.getData();
+      const components = result.imageData.components; // 通常是 3（RGB）或 4（RGBA）
+
+      // 统一转成 RGBA Uint8ClampedArray
+      const pixelCount = width * height;
+      const rgba = new Uint8ClampedArray(pixelCount * 4);
+      if (components === 4) {
+        rgba.set(pixelData);
+      } else {
+        for (let i = 0; i < pixelCount; i++) {
+          rgba[i * 4]     = pixelData[i * 3];
+          rgba[i * 4 + 1] = pixelData[i * 3 + 1];
+          rgba[i * 4 + 2] = pixelData[i * 3 + 2];
+          rgba[i * 4 + 3] = 255;
+        }
+      }
+      result.imageData.dispose();
+      rgbaBuffer = rgba.buffer;
+    }, { commandName: "Import Pixels from Selection" });
+
+    // 分块 spread 比逐字节拼接快 3-5 倍，避免大 buffer 栈溢出
+    const bytes = new Uint8Array(rgbaBuffer);
+    let binary = '';
+    const chunkSize = 8192;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+    }
+    const base64 = btoa(binary);
+
+    webview.postMessage({
+      type: "importPixelsResult",
+      success: true,
+      width,
+      height,
+      pixels: base64,
+      psBounds: selBounds
+    }, "*");
+
+    console.log(`✅ Import pixels: ${width}x${height}`);
+
+  } catch (err) {
+    console.error("❌ handleImportPixels failed:", err.message || err);
+    sendResult(false, "importFailed", {});
+  }
+}
+
 // ============ Message Listener ============
 window.addEventListener("message", async (e) => {
   console.log('[host] message received, origin:', e.origin, 'data:', JSON.stringify(e.data).slice(0, 200));
-  if (!e.origin.includes("food211.github.io") && !e.origin.includes("mixbox-palette.pages.dev")) {
+  if (!e.origin.includes("food211.github.io") && !e.origin.includes("mixbox-palette.pages.dev") && !e.origin.includes("localhost")) {
     console.log('[host] origin rejected');
     return;
   }
@@ -446,6 +553,45 @@ window.addEventListener("message", async (e) => {
 
   if (type === "pastePixels") {
     await handlePastePixels(e.data);
+  }
+
+  if (type === "importPixels") {
+    await handleImportPixels();
+  }
+
+  if (type === "getSelection") {
+    let selBounds = null;
+    try {
+      const app = require("photoshop").app;
+      const doc = app.activeDocument;
+      if (doc) {
+        await core.executeAsModal(async () => {
+          try {
+            const result = await action.batchPlay([{
+              _obj: "get",
+              _target: [
+                { _property: "selection" },
+                { _ref: "document", _enum: "ordinal", _value: "targetEnum" }
+              ]
+            }], {});
+            const sel = result[0]?.selection;
+            if (sel && sel.top !== undefined) {
+              selBounds = {
+                top: Math.round(sel.top._value ?? sel.top),
+                left: Math.round(sel.left._value ?? sel.left),
+                bottom: Math.round(sel.bottom._value ?? sel.bottom),
+                right: Math.round(sel.right._value ?? sel.right)
+              };
+            }
+          } catch (err) {
+            console.log("No selection:", err.message);
+          }
+        }, { commandName: "Get Selection" });
+      }
+    } catch (err) {
+      console.error("❌ getSelection failed:", err.message || err);
+    }
+    webview.postMessage({ type: "getSelectionResult", bounds: selBounds }, "*");
   }
 });
 
@@ -484,6 +630,8 @@ function init() {
       return;
     }
     console.error(`❌ Load error [${SOURCES[currentSourceIndex]}]:`, e.message || e.code);
+    // localhost 连接失败立即切换，不等超时
+    if (SOURCES[currentSourceIndex].includes('localhost')) stopTimers();
     tryNextSource();
   });
 
@@ -493,6 +641,7 @@ function init() {
       return;
     }
     console.error(`⚠️ Load aborted: ${SOURCES[currentSourceIndex]}`);
+    if (SOURCES[currentSourceIndex].includes('localhost')) stopTimers();
     tryNextSource();
   });
 

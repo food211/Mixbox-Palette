@@ -214,6 +214,8 @@ async function _commitResize(newWidth) {
 
     if (typeof saveState === 'function') saveState();
     if (typeof saveCanvasToStorage === 'function') saveCanvasToStorage();
+    // resize 后导入区域失效
+    if (typeof lastImportRegion !== 'undefined') { lastImportRegion = null; lastImportPsBounds = null; }
     console.log(`✅ 画布已 resize: ${oldW}x${oldH} → ${newCanvasW}x${newCanvasH}`);
 }
 

@@ -86,6 +86,10 @@ let isEyedropperMode = false;
 let isRectSelectMode = false;
 let isRectSelecting = false;
 let rectSelectStart = null;  // { x, y }
+let rectSelectIntent = 'export'; // 'export' | 'import'
+let importTargetRegion = null;   // { sx, sy, sw, sh } 当前导入中的目标区域
+let lastImportRegion = null;     // { sx, sy, sw, sh, canvasW, canvasH } 最近一次导入的画布区域
+let lastImportPsBounds = null;   // { top, left, bottom, right } 最近一次导入时的 PS 选区坐标
 
 // 工具状态模型（重构后单一数据源）
 // mode = 'brush' | 'watercolor' | 'smudge'，由 currentTool + 当前笔型推导
@@ -822,6 +826,7 @@ function bindEvents() {
     });
     
     // 矩形选取按钮（非UXP环境下替换为保存PNG按钮）
+    let selectOverlay = null;
     const rectSelectBtn = document.getElementById('rectSelectBtn');
     if (typeof window.uxpHost === 'undefined' && rectSelectBtn) {
         rectSelectBtn.innerHTML = '<img src="icons/save.svg" width="14" height="14" alt="Save">';
@@ -841,27 +846,23 @@ function bindEvents() {
         });
     } else {
     // 动态创建 overlay canvas，尺寸完全复制 mixCanvas
-    const selectOverlay = document.createElement('canvas');
+    selectOverlay = document.createElement('canvas');
     selectOverlay.id = 'selectOverlay';
     selectOverlay.width = mixCanvas.width;
     selectOverlay.height = mixCanvas.height;
-    selectOverlay.style.cssText = 'position:absolute;top:0;left:0;width:100%;pointer-events:none;visibility:hidden;cursor:crosshair;';
+    selectOverlay.style.cssText = 'position:absolute;top:0;left:0;width:100%;pointer-events:none;display:none;cursor:crosshair;';
     mixCanvas.parentElement.appendChild(selectOverlay);
     if (rectSelectBtn) {
         const overlayCtx = selectOverlay.getContext('2d');
 
         rectSelectBtn.addEventListener('click', () => {
             if (!isRectSelectMode) {
-                isRectSelectMode = true;
-                rectSelectBtn.classList.add('active');
-                selectOverlay.style.visibility = 'visible';
-                selectOverlay.style.pointerEvents = 'auto';
-                mixCanvas.classList.remove('brush');
-                mixCanvas.classList.add('rect-select');
-                updateStatus('rect-select');
-                overlayCtx.clearRect(0, 0, selectOverlay.width, selectOverlay.height);
-                overlayCtx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-                overlayCtx.fillRect(0, 0, selectOverlay.width, selectOverlay.height);
+                // 有导入记录且在 UXP 中：先查 PS 选区，看能否复用
+                if (lastImportRegion && isInWebView()) {
+                    window.uxpHost.postMessage({ type: "getSelection" });
+                    return;
+                }
+                enterRectSelectExportMode();
             } else {
                 exitRectSelectMode();
             }
@@ -882,10 +883,18 @@ function bindEvents() {
             const x = (e.clientX - rect.left) * (mixCanvas.width / rect.width);
             const y = (e.clientY - rect.top) * (mixCanvas.height / rect.height);
 
-            const sx = Math.min(rectSelectStart.x, x);
-            const sy = Math.min(rectSelectStart.y, y);
-            const sw = Math.abs(x - rectSelectStart.x);
-            const sh = Math.abs(y - rectSelectStart.y);
+            let sw = Math.abs(x - rectSelectStart.x);
+            let sh = Math.abs(y - rectSelectStart.y);
+
+            // Shift 约束为正方形
+            if (e.shiftKey) {
+                const side = Math.min(sw, sh);
+                sw = side;
+                sh = side;
+            }
+
+            const sx = rectSelectStart.x + (x >= rectSelectStart.x ? 0 : -sw);
+            const sy = rectSelectStart.y + (y >= rectSelectStart.y ? 0 : -sh);
 
             overlayCtx.clearRect(0, 0, selectOverlay.width, selectOverlay.height);
             // 暗化选区外部
@@ -908,25 +917,87 @@ function bindEvents() {
             const x = (e.clientX - rect.left) * (mixCanvas.width / rect.width);
             const y = (e.clientY - rect.top) * (mixCanvas.height / rect.height);
 
-            const sx = Math.max(0, Math.floor(Math.min(rectSelectStart.x, x)));
-            const sy = Math.max(0, Math.floor(Math.min(rectSelectStart.y, y)));
-            const sw = Math.min(mixCanvas.width - sx, Math.ceil(Math.abs(x - rectSelectStart.x)));
-            const sh = Math.min(mixCanvas.height - sy, Math.ceil(Math.abs(y - rectSelectStart.y)));
+            let rawW = Math.abs(x - rectSelectStart.x);
+            let rawH = Math.abs(y - rectSelectStart.y);
+
+            // Shift 约束为正方形
+            if (e.shiftKey) {
+                const side = Math.min(rawW, rawH);
+                rawW = side;
+                rawH = side;
+            }
+
+            const sx = Math.max(0, Math.floor(rectSelectStart.x + (x >= rectSelectStart.x ? 0 : -rawW)));
+            const sy = Math.max(0, Math.floor(rectSelectStart.y + (y >= rectSelectStart.y ? 0 : -rawH)));
+            const sw = Math.min(mixCanvas.width - sx, Math.ceil(rawW));
+            const sh = Math.min(mixCanvas.height - sy, Math.ceil(rawH));
 
             if (sw < 2 || sh < 2) {
                 overlayCtx.clearRect(0, 0, selectOverlay.width, selectOverlay.height);
                 return;
             }
 
-            extractAndSendPixels(sx, sy, sw, sh);
-            // 短暂显示选区后清除
-            setTimeout(() => {
+            if (rectSelectIntent === 'import') {
+                importTargetRegion = { sx, sy, sw, sh };
+                const importBtn = document.getElementById('importBtn');
+                if (importBtn) importBtn.classList.add('active');
+                // 全屏遮罩 + 传输中文字，pointerEvents 保持 auto 拦截操作
                 overlayCtx.clearRect(0, 0, selectOverlay.width, selectOverlay.height);
-                exitRectSelectMode();
-            }, 500);
+                overlayCtx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                overlayCtx.fillRect(0, 0, selectOverlay.width, selectOverlay.height);
+                const fontSize = Math.max(12, Math.round(selectOverlay.width * 0.04));
+                overlayCtx.font = `${fontSize}px sans-serif`;
+                overlayCtx.textAlign = 'center';
+                overlayCtx.textBaseline = 'middle';
+                const tx = selectOverlay.width / 2, ty = selectOverlay.height / 2;
+                const text = t('importImporting');
+                overlayCtx.strokeStyle = '#444444';
+                overlayCtx.lineWidth = 3;
+                overlayCtx.lineJoin = 'round';
+                overlayCtx.strokeText(text, tx, ty);
+                overlayCtx.fillStyle = '#ffffff';
+                overlayCtx.fillText(text, tx, ty);
+                window.uxpHost.postMessage({ type: "importPixels" });
+                track('import_from_ps', {});
+            } else {
+                extractAndSendPixels(sx, sy, sw, sh);
+                // 短暂显示选区后清除
+                setTimeout(() => {
+                    overlayCtx.clearRect(0, 0, selectOverlay.width, selectOverlay.height);
+                    exitRectSelectMode();
+                }, 500);
+            }
         });
     }
     } // end else (UXP env)
+
+    // 导入按钮（仅 UXP 环境）
+    const importBtn = document.getElementById('importBtn');
+    if (importBtn) {
+        if (typeof window.uxpHost === 'undefined') {
+            importBtn.style.display = 'none';
+        } else {
+            importBtn.addEventListener('click', () => {
+                if (!isRectSelectMode) {
+                    rectSelectIntent = 'import';
+                    isRectSelectMode = true;
+                    importBtn.classList.add('active');
+                    selectOverlay.style.display = 'block';
+                    selectOverlay.style.pointerEvents = 'auto';
+                    mixCanvas.classList.remove('brush');
+                    mixCanvas.classList.add('rect-select');
+                    updateStatus('rect-select');
+                    const overlayCtx = selectOverlay.getContext('2d');
+                    overlayCtx.clearRect(0, 0, selectOverlay.width, selectOverlay.height);
+                    overlayCtx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+                    overlayCtx.fillRect(0, 0, selectOverlay.width, selectOverlay.height);
+                } else {
+                    rectSelectIntent = 'export';
+                    exitRectSelectMode();
+                }
+            });
+        }
+    }
 
     // 引擎切换按钮
     const engineBtn = document.getElementById('engineBtn');
@@ -1060,7 +1131,6 @@ function bindEvents() {
             case 'b': switchToTool('brush'); break;
             case 's': switchToTool('smudge'); break;
             case 'i': switchToTool('eyedropper'); break;
-            case 'm': switchToTool('rectSelect'); break;
             case 'x': // 互换前景/背景色
                 const tmpColor = foregroundColor;
                 foregroundColor = backgroundColor;
@@ -1798,6 +1868,24 @@ function updateColorDisplay() {
     }
 }
 
+function enterRectSelectExportMode() {
+    const rectSelectBtn = document.getElementById('rectSelectBtn');
+    const selectOverlay = document.getElementById('selectOverlay');
+    if (!selectOverlay) return;
+    isRectSelectMode = true;
+    rectSelectIntent = 'export';
+    if (rectSelectBtn) rectSelectBtn.classList.add('active');
+    selectOverlay.style.display = 'block';
+    selectOverlay.style.pointerEvents = 'auto';
+    mixCanvas.classList.remove('brush');
+    mixCanvas.classList.add('rect-select');
+    updateStatus('rect-select');
+    const overlayCtx = selectOverlay.getContext('2d');
+    overlayCtx.clearRect(0, 0, selectOverlay.width, selectOverlay.height);
+    overlayCtx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    overlayCtx.fillRect(0, 0, selectOverlay.width, selectOverlay.height);
+}
+
 /**
  * 退出矩形选取模式
  */
@@ -1805,11 +1893,14 @@ function exitRectSelectMode() {
     isRectSelectMode = false;
     isRectSelecting = false;
     rectSelectStart = null;
+    rectSelectIntent = 'export';
     const rectSelectBtn = document.getElementById('rectSelectBtn');
+    const importBtn = document.getElementById('importBtn');
     const selectOverlay = document.getElementById('selectOverlay');
     if (rectSelectBtn) rectSelectBtn.classList.remove('active');
+    if (importBtn) importBtn.classList.remove('active');
     if (selectOverlay) {
-        selectOverlay.style.visibility = 'hidden';
+        selectOverlay.style.display = 'none';
         selectOverlay.style.pointerEvents = 'none';
         const overlayCtx = selectOverlay.getContext('2d');
         overlayCtx.clearRect(0, 0, selectOverlay.width, selectOverlay.height);
@@ -2373,6 +2464,23 @@ window.addEventListener("message", (e) => {
     lastSyncedBgColor = backgroundColor;
     updateColorDisplay();
     if (paletteStorage) paletteStorage.saveAppSettings({ foregroundColor, backgroundColor });
+  } else if (type === "getSelectionResult") {
+    const cur = e.data.bounds;
+    const last = lastImportPsBounds;
+    const canMatch = cur && last &&
+        cur.top === last.top && cur.left === last.left &&
+        cur.bottom === last.bottom && cur.right === last.right &&
+        lastImportRegion &&
+        lastImportRegion.canvasW === mixCanvas.width &&
+        lastImportRegion.canvasH === mixCanvas.height;
+    if (canMatch) {
+        // PS 选区未变，直接用导入时的区域导出
+        const { sx, sy, sw, sh } = lastImportRegion;
+        extractAndSendPixels(sx, sy, sw, sh);
+    } else {
+        // 选区已变或不存在，进入框选模式让用户重新选
+        enterRectSelectExportMode();
+    }
   } else if (type === "pastePixelsResult") {
     if (e.data.success) {
       console.log('[rectSelect] Transfer success');
@@ -2382,6 +2490,55 @@ window.addEventListener("message", (e) => {
       showAlert(t(errorKey));
       track('send_to_ps_result', { success: false, error: errorKey });
     }
+  } else if (type === "importPixelsResult") {
+    if (!e.data.success) {
+      const errorKey = e.data.error || 'importFailed';
+      exitRectSelectMode();
+      showAlert(t(errorKey));
+      track('import_from_ps_result', { success: false, error: errorKey });
+      importTargetRegion = null;
+      return;
+    }
+    const { width, height, pixels } = e.data;
+    const binary = atob(pixels);
+    const rgba = new Uint8ClampedArray(binary.length);
+    for (let i = 0; i < binary.length; i++) rgba[i] = binary.charCodeAt(i);
+    const importedImageData = new ImageData(rgba, width, height);
+
+    const cw = mixCanvas.width, ch = mixCanvas.height;
+    const existingPixels = painter.readPixelRegion(0, 0, cw, ch);
+
+    const compositeCanvas = document.createElement('canvas');
+    compositeCanvas.width = cw;
+    compositeCanvas.height = ch;
+    const ctx2d = compositeCanvas.getContext('2d');
+    ctx2d.putImageData(new ImageData(existingPixels, cw, ch), 0, 0);
+
+    const srcCanvas = document.createElement('canvas');
+    srcCanvas.width = width;
+    srcCanvas.height = height;
+    srcCanvas.getContext('2d').putImageData(importedImageData, 0, 0);
+
+    // 画到用户框选的目标区域，拉伸填满
+    const region = importTargetRegion;
+    if (region) {
+        ctx2d.drawImage(srcCanvas, region.sx, region.sy, region.sw, region.sh);
+        importTargetRegion = null;
+        lastImportRegion = { ...region, canvasW: cw, canvasH: ch };
+        lastImportPsBounds = e.data.psBounds || null;
+    } else {
+        // 无目标区域时居中（兜底）
+        const scale = Math.min(1, cw / width, ch / height);
+        const dw = Math.round(width * scale), dh = Math.round(height * scale);
+        ctx2d.drawImage(srcCanvas, Math.round((cw - dw) / 2), Math.round((ch - dh) / 2), dw, dh);
+    }
+
+    if (painter?.saveHistory) painter.saveHistory();
+    painter.writeFromPixels(new Uint8ClampedArray(ctx2d.getImageData(0, 0, cw, ch).data), cw, ch);
+    exitRectSelectMode();
+
+    console.log(`[import] ${width}x${height} → region ${JSON.stringify(region)}`);
+    track('import_from_ps_result', { success: true, width, height });
   }
 });
 

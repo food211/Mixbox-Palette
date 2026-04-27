@@ -7,11 +7,8 @@ A UXP plugin for realistic pigment mixing in Adobe Photoshop, with dual mixing e
 ![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg)
 ![Mixbox License](https://img.shields.io/badge/Mixbox-CC%20BY--NC%204.0-lightgrey.svg)
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="icons/Designed_for_Adobe_Photoshop_badge_dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="icons/Designed_for_Adobe_Photoshop_badge_light.svg">
-  <img src="icons/Designed_for_Adobe_Photoshop_badge_dark.svg" height="40">
-</picture>
+<img src="https://raw.githubusercontent.com/food211/Mixbox-Palette/main/icons/Designed_for_Adobe_Photoshop_badge_dark.svg#gh-dark-mode-only" height="40">
+<img src="https://raw.githubusercontent.com/food211/Mixbox-Palette/main/icons/Designed_for_Adobe_Photoshop_badge_light.svg#gh-light-mode-only" height="40">
 
 ## Features
 
@@ -89,7 +86,7 @@ The plugin UI and mixing engine are hosted remotely (Cloudflare Pages, with GitH
 
 ### Transfer Pixels to Photoshop
 1. Select an area on your Photoshop canvas with any selection tool
-2. In the plugin, switch to the rect select tool (`M`)
+2. In the plugin, switch to the rect select tool
 3. Draw a region on the mixing canvas
 4. The selected pixels are automatically transferred to the active layer at the selection bounds
 
@@ -99,7 +96,6 @@ The plugin UI and mixing engine are hosted remotely (Cloudflare Pages, with GitH
 | `B` | Brush tool |
 | `S` | Smudge tool |
 | `I` | Eyedropper tool |
-| `M` | Rectangle select |
 | `X` | Swap foreground/background colors |
 | `Shift` (hold) | Temporary smudge tool |
 | `Alt` (hold) | Temporary eyedropper |
@@ -200,7 +196,6 @@ Adobe Photoshop UXP 调色板插件，内置双混色引擎，模拟真实颜料
 | `B` | 画笔工具 |
 | `S` | 涂抹工具 |
 | `I` | 吸管工具 |
-| `M` | 矩形选取 |
 | `X` | 交换前景/背景色 |
 | `Shift`（按住）| 临时切换为涂抹工具 |
 | `Alt`（按住）| 临时切换为吸管工具 |
@@ -219,7 +214,7 @@ Adobe Photoshop UXP 调色板插件，内置双混色引擎，模拟真实颜料
 
 ### 传输像素到 Photoshop
 1. 在 Photoshop 画布上用任意选区工具选好区域
-2. 在插件中切换到矩形选取工具（`M`）
+2. 在插件中切换到矩形选取工具
 3. 在混色画布上框选要传输的内容
 4. 所选像素自动传输到活跃图层的选区范围内
 

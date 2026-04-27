@@ -221,6 +221,16 @@
     font-style: italic;
 }
 
+.update-modal-body .update-host-notice {
+    margin: 10px 0 0;
+    padding: 8px 10px;
+    background: #3a2a00;
+    border-left: 3px solid #e67e22;
+    color: #f0a040;
+    font-size: 12px;
+    border-radius: 3px;
+}
+
 .update-changelog-link {
     display: block;
     font-size: 12px;

@@ -1,6 +1,11 @@
 {
   "versions": [
     {
+      "version": "V1.5.4",
+      "zh": "### 新功能\r\n- **从 PS 导入像素** — 在 Photoshop 中框选区域，点插件导入按钮，在混色画布上框选目标位置，即可将选区像素导入画布",
+      "en": "### New Features\r\n- **Import pixels from PS** — Select an area in Photoshop, click the import button in the plugin, draw a target region on the mixing canvas, and the selected pixels will be imported"
+    },
+    {
       "version": "V1.5.3",
       "zh": "### 优化\r\n- **水彩笔与其他笔刷共用尺寸** — 之前在水彩笔和其他笔刷间来回切换，size 滑条会各记各的、跳来跳去；现在统一了，切笔刷时尺寸不再变化\r\n- **大笔刷水彩颗粒更细腻** — size 调到 60-80px 时，水彩晕染的纸纤维噪点不会再变得太粗，颗粒细节在不同尺寸下保持接近一致\r\n- **默认笔刷尺寸调到 40px** — 新用户首次打开时滑条从 15 变成 40，更接近常用绘画尺寸\r\n\r\n### 修复\r\n- **按住 Shift 不再让按钮带焦点框** — 之前按住 Shift 时点过的按钮会出现一个浅色边框，现已去掉",
       "en": "### Improvements\r\n- **Watercolor brush shares size with other brushes** — Previously the size slider remembered separate values for the watercolor brush vs. other brushes and would jump when you switched; now it stays put\r\n- **Finer watercolor texture on large brushes** — At size 60-80px, the paper-fiber noise in watercolor diffusion no longer looks too coarse; grain detail stays roughly consistent across sizes\r\n- **Default brush size raised to 40px** — First-time users now start with the slider at 40 instead of 15, closer to a typical painting size\r\n\r\n### Fix\r\n- **Shift no longer leaves focus rings on buttons** — Holding Shift used to cause a faint outline to appear on previously-clicked buttons; that's now suppressed"
@@ -9,12 +14,7 @@
       "version": "V1.5.2",
       "zh": "### 新增\r\n- **吸管增加颜色预览** — 选中吸管工具后，光标旁边会跟随一个小方块实时显示即将拾取的颜色；靠近画布边缘时会自动翻到另一侧，不会跑出画布\r\n\r\n### 优化\r\n- **小笔刷下的 iPad 流畅度改善** — 小尺寸笔刷（特别是 10px 以下）在 iPad 上连续绘制时卡顿减轻；大笔刷手感保持不变\r\n\r\n### 修复\r\n- **按 Alt 不再激活浏览器菜单** — 之前按 Alt 临时切换吸管时，会顺便激活浏览器右上角三点按钮的选中状态，现已屏蔽",
       "en": "### New\r\n- **Eyedropper color preview** — When the eyedropper is active, a small swatch follows the cursor showing the color that would be picked; it flips to the other side near canvas edges so it never gets clipped\r\n\r\n### Improvements\r\n- **Smoother small brushes on iPad** — Continuous drawing with small brushes (especially below 10px) is noticeably less janky on iPad; large brushes feel the same as before\r\n\r\n### Fix\r\n- **Alt no longer activates browser menu** — Pressing Alt to temporarily switch to the eyedropper used to also focus the browser's top-right menu button; that default behavior is now suppressed"
-    },
-    {
-      "version": "V1.5.1",
-      "zh": "### 修复\r\n- **大笔刷水彩晕染更自然** — 笔刷调大到 60-80px 时，水彩的扩散范围和颗粒感不会再\"跟不上\"，整体观感和小笔刷保持一致",
-      "en": "### Fix\r\n- **Large watercolor brushes feel more natural** — When brush size is 60-80px, the watercolor diffusion and texture no longer feel \"behind\" the stroke; the overall look stays consistent with smaller brushes"
     }
   ],
-  "generatedAt": "2026-04-26T04:39:34.545Z"
+  "generatedAt": "2026-04-27T12:42:43.568Z"
 }
