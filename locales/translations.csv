@@ -77,12 +77,18 @@ switchEngine,Switch Mixing Engine (Mixbox / KM),切换混色引擎 (Mixbox / KM)
 focusHint,Hold Space + click PS canvas to return shortcuts,按住空格 + 点击 PS 画布以切回快捷键,スペース + PSキャンバスをクリックでショートカットを戻す
 saveCanvas,Save PNG,保存 PNG,PNG保存
 saveCanvasTitle,Save canvas as PNG image,将画布保存为 PNG 图片,キャンバスをPNG画像として保存
-rectSelectTool,Send to PS (M),传输至PS (M),PSへ送信 (M)
+rectSelectTool,Send to PS,传输至PS,PSへ送信
 rectSelectNoSelection,No active selection in Photoshop. Please create a selection first.,Photoshop 中没有活动选区，请先创建选区。,Photoshopに選択範囲がありません。先に選択範囲を作成してください。
 rectSelectNoDocument,No document open in Photoshop.,Photoshop 中没有打开文档。,Photoshopでドキュメントが開かれていません。
 rectSelectSuccess,Pixels transferred to Photoshop.,像素已传输至 Photoshop。,ピクセルをPhotoshopに転送しました。
 rectSelectFailed,Failed to transfer pixels.,传输失败。,転送に失敗しました。
 rectSelectTransferring,Transferring...,传输中...,転送中...
+importFromPSTool,Import from PS,从 PS 导入,PSから読み込む
+importNoDocument,No document open in Photoshop.,Photoshop 中没有打开文档。,Photoshopでドキュメントが開かれていません。
+importNoSelection,No active selection in Photoshop. Please create a selection first.,Photoshop 中没有活动选区，请先创建选区。,Photoshopに選択範囲がありません。先に選択範囲を作成してください。
+importFailed,Failed to import pixels.,导入失败。,読み込みに失敗しました。
+importSuccess,Pixels imported from Photoshop.,已从 Photoshop 导入像素。,Photoshopからピクセルを読み込みました。
+importImporting,Importing...,导入中...,読み込み中...
 confirm,Confirm,确认,確認
 cancel,Cancel,取消,キャンセル
 resizeGrow,"Canvas width will expand from {from}px to {to}px. Continue?","画布宽度将从 {from}px 扩大到 {to}px，是否继续？","キャンバス幅を {from}px から {to}px に拡大します。続行しますか？"
