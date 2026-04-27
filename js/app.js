@@ -2440,18 +2440,9 @@ window.addEventListener("message", (e) => {
       track('send_to_ps_result', { success: false, error: errorKey });
     }
   } else if (type === "importPixelsResult") {
-    const importBtn = document.getElementById('importBtn');
-    if (importBtn) importBtn.classList.remove('active');
-    // 清除遮罩
-    const selectOverlayEl = document.getElementById('selectOverlay');
-    if (selectOverlayEl) {
-      const ctx = selectOverlayEl.getContext('2d');
-      ctx.clearRect(0, 0, selectOverlayEl.width, selectOverlayEl.height);
-      selectOverlayEl.style.visibility = 'hidden';
-      selectOverlayEl.style.pointerEvents = 'none';
-    }
     if (!e.data.success) {
       const errorKey = e.data.error || 'importFailed';
+      exitRectSelectMode();
       showAlert(t(errorKey));
       track('import_from_ps_result', { success: false, error: errorKey });
       importTargetRegion = null;
@@ -2491,6 +2482,7 @@ window.addEventListener("message", (e) => {
 
     if (painter?.saveHistory) painter.saveHistory();
     painter.writeFromPixels(new Uint8ClampedArray(ctx2d.getImageData(0, 0, cw, ch).data), cw, ch);
+    exitRectSelectMode();
 
     console.log(`[import] ${width}x${height} → region ${JSON.stringify(region)}`);
     track('import_from_ps_result', { success: true, width, height });
