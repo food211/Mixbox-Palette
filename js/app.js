@@ -883,10 +883,18 @@ function bindEvents() {
             const x = (e.clientX - rect.left) * (mixCanvas.width / rect.width);
             const y = (e.clientY - rect.top) * (mixCanvas.height / rect.height);
 
-            const sx = Math.min(rectSelectStart.x, x);
-            const sy = Math.min(rectSelectStart.y, y);
-            const sw = Math.abs(x - rectSelectStart.x);
-            const sh = Math.abs(y - rectSelectStart.y);
+            let sw = Math.abs(x - rectSelectStart.x);
+            let sh = Math.abs(y - rectSelectStart.y);
+
+            // Shift 约束为正方形
+            if (e.shiftKey) {
+                const side = Math.min(sw, sh);
+                sw = side;
+                sh = side;
+            }
+
+            const sx = rectSelectStart.x + (x >= rectSelectStart.x ? 0 : -sw);
+            const sy = rectSelectStart.y + (y >= rectSelectStart.y ? 0 : -sh);
 
             overlayCtx.clearRect(0, 0, selectOverlay.width, selectOverlay.height);
             // 暗化选区外部
@@ -909,10 +917,20 @@ function bindEvents() {
             const x = (e.clientX - rect.left) * (mixCanvas.width / rect.width);
             const y = (e.clientY - rect.top) * (mixCanvas.height / rect.height);
 
-            const sx = Math.max(0, Math.floor(Math.min(rectSelectStart.x, x)));
-            const sy = Math.max(0, Math.floor(Math.min(rectSelectStart.y, y)));
-            const sw = Math.min(mixCanvas.width - sx, Math.ceil(Math.abs(x - rectSelectStart.x)));
-            const sh = Math.min(mixCanvas.height - sy, Math.ceil(Math.abs(y - rectSelectStart.y)));
+            let rawW = Math.abs(x - rectSelectStart.x);
+            let rawH = Math.abs(y - rectSelectStart.y);
+
+            // Shift 约束为正方形
+            if (e.shiftKey) {
+                const side = Math.min(rawW, rawH);
+                rawW = side;
+                rawH = side;
+            }
+
+            const sx = Math.max(0, Math.floor(rectSelectStart.x + (x >= rectSelectStart.x ? 0 : -rawW)));
+            const sy = Math.max(0, Math.floor(rectSelectStart.y + (y >= rectSelectStart.y ? 0 : -rawH)));
+            const sw = Math.min(mixCanvas.width - sx, Math.ceil(rawW));
+            const sh = Math.min(mixCanvas.height - sy, Math.ceil(rawH));
 
             if (sw < 2 || sh < 2) {
                 overlayCtx.clearRect(0, 0, selectOverlay.width, selectOverlay.height);
