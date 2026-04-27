@@ -848,7 +848,7 @@ function bindEvents() {
     selectOverlay.id = 'selectOverlay';
     selectOverlay.width = mixCanvas.width;
     selectOverlay.height = mixCanvas.height;
-    selectOverlay.style.cssText = 'position:absolute;top:0;left:0;width:100%;pointer-events:none;visibility:hidden;cursor:crosshair;';
+    selectOverlay.style.cssText = 'position:absolute;top:0;left:0;width:100%;pointer-events:none;display:none;cursor:crosshair;';
     mixCanvas.parentElement.appendChild(selectOverlay);
     if (rectSelectBtn) {
         const overlayCtx = selectOverlay.getContext('2d');
@@ -857,7 +857,7 @@ function bindEvents() {
             if (!isRectSelectMode) {
                 isRectSelectMode = true;
                 rectSelectBtn.classList.add('active');
-                selectOverlay.style.visibility = 'visible';
+                selectOverlay.style.display = 'block';
                 selectOverlay.style.pointerEvents = 'auto';
                 mixCanvas.classList.remove('brush');
                 mixCanvas.classList.add('rect-select');
@@ -966,7 +966,7 @@ function bindEvents() {
                     rectSelectIntent = 'import';
                     isRectSelectMode = true;
                     importBtn.classList.add('active');
-                    selectOverlay.style.visibility = 'visible';
+                    selectOverlay.style.display = 'block';
                     selectOverlay.style.pointerEvents = 'auto';
                     mixCanvas.classList.remove('brush');
                     mixCanvas.classList.add('rect-select');
@@ -1866,7 +1866,7 @@ function exitRectSelectMode() {
     if (rectSelectBtn) rectSelectBtn.classList.remove('active');
     if (importBtn) importBtn.classList.remove('active');
     if (selectOverlay) {
-        selectOverlay.style.visibility = 'hidden';
+        selectOverlay.style.display = 'none';
         selectOverlay.style.pointerEvents = 'none';
         const overlayCtx = selectOverlay.getContext('2d');
         overlayCtx.clearRect(0, 0, selectOverlay.width, selectOverlay.height);
