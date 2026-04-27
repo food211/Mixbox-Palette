@@ -1,7 +1,7 @@
 /**
  * Service Worker - KM Watercolor Palette 离线缓存
  */
-const CACHE_NAME = 'km-palette-v93';
+const CACHE_NAME = 'km-palette-v94';
 const CACHE_URLS = [
   './app.html',
   './css/base.css',
@@ -34,6 +34,7 @@ const CACHE_URLS = [
   './icons/smudge.svg',
   './icons/eyedropper.svg',
   './icons/rect-select.svg',
+  './icons/import-from-ps.svg',
   './icons/github.svg',
   './icons/discord.svg',
   './icons/eyedropper-cursor.svg'
