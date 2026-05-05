@@ -125,7 +125,10 @@ window.I18N_TRANSLATIONS = {
     "dismissTip": "Don't remind me about this version",
     "refreshTip": "Reload to apply update",
     "announcementOk": "Got it",
-    "resizeHandleTip": "Drag to resize canvas"
+    "resizeHandleTip": "Drag to resize canvas",
+    "onboardingBrush": "Try other brushes",
+    "onboardingPalette": "Switch palette for different pigments",
+    "onboardingEngine": "Compare engines: KM vs Mixbox"
   },
   "zh": {
     "title": "🎨 Mixbox 调色板",
@@ -252,7 +255,10 @@ window.I18N_TRANSLATIONS = {
     "dismissTip": "不再提示此版本",
     "refreshTip": "刷新以应用更新",
     "announcementOk": "知道了",
-    "resizeHandleTip": "拖动调整画布宽度"
+    "resizeHandleTip": "拖动调整画布宽度",
+    "onboardingBrush": "试试别的笔刷",
+    "onboardingPalette": "换个调色板试试别的颜料",
+    "onboardingEngine": "试试切换引擎对比手感"
   },
   "ja": {
     "title": "🎨 Mixbox パレット",
@@ -379,6 +385,9 @@ window.I18N_TRANSLATIONS = {
     "dismissTip": "このバージョンを通知しない",
     "refreshTip": "更新を適用するため再読み込み",
     "announcementOk": "了解",
-    "resizeHandleTip": "ドラッグしてキャンバスサイズを変更"
+    "resizeHandleTip": "ドラッグしてキャンバスサイズを変更",
+    "onboardingBrush": "他のブラシも試してみて",
+    "onboardingPalette": "パレットを切り替えて別の絵具を",
+    "onboardingEngine": "エンジンを切り替えて比べてみて"
   }
 };

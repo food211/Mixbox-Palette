@@ -4,12 +4,16 @@
  * 由 scripts/gen-versions.js 在发布时生成，SW 对这两个文件做 network-only
  * 不操作 DOM，不管理弹窗；弹窗逻辑由 Announcer 负责。
  */
+// 权威源：GitHub Pages 主站，gen-versions.js 跟随 main 分支部署，是唯一事实源
+// 不能用相对路径——UXP 插件 / 本地 dev / 镜像源下相对路径会指向错误位置
+const UPDATE_BASE = 'https://food211.github.io/Mixbox-Palette/';
+
 const Updater = {
-    VERSIONS_URL: 'versions.json',
-    RECENT_URL: 'recent-changelogs.json',
-    CHANGELOG_PAGE: 'https://food211.github.io/Mixbox-Palette/changelog.html',
+    VERSIONS_URL: UPDATE_BASE + 'versions.json',
+    RECENT_URL: UPDATE_BASE + 'recent-changelogs.json',
+    CHANGELOG_PAGE: UPDATE_BASE + 'changelog.html',
     STORAGE_KEY: 'mixbox_dismissed_update',
-    CURRENT_VERSION: 'V1.5.4',
+    CURRENT_VERSION: 'V1.5.5',
 
     /** 将 markdown 列表转为简单 HTML（支持加粗和链接） */
     _mdToHtml(md) {

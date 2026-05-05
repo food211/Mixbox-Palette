@@ -124,3 +124,6 @@ dismissTip,Don't remind me about this version,不再提示此版本,このバー
 refreshTip,Reload to apply update,刷新以应用更新,更新を適用するため再読み込み
 announcementOk,Got it,知道了,了解
 resizeHandleTip,Drag to resize canvas,拖动调整画布宽度,ドラッグしてキャンバスサイズを変更
+onboardingBrush,Try other brushes,试试别的笔刷,他のブラシも試してみて
+onboardingPalette,Switch palette for different pigments,换个调色板试试别的颜料,パレットを切り替えて別の絵具を
+onboardingEngine,Compare engines: KM vs Mixbox,试试切换引擎对比手感,エンジンを切り替えて比べてみて

@@ -25,6 +25,7 @@
     <link rel="stylesheet" href="css/controls.css">
     <link rel="stylesheet" href="css/mix-area.css">
     <link rel="stylesheet" href="css/modals.css">
+    <link rel="stylesheet" href="css/onboarding.css">
     <style>
         /* 启动期间隐藏半成品 UI，显示 loading 覆盖层 */
         body:not(.app-ready) > .container { visibility: hidden; }
@@ -354,6 +355,7 @@
                 loadScript('js/ps-bridge.js'),
                 loadScript('js/palette-presets.js'),
                 loadScript('js/zoom.js'),
+                loadScript('js/onboarding.js'),
             ]);
 
             // Tier 1：依赖 base-painter.js（class 定义 / prototype 挂载）

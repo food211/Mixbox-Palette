@@ -353,7 +353,10 @@ async function initApp() {
     // 10. 初始化语言切换
     initLangToggle();
 
-    // 11. 通知 UXP Host 加载完成
+    // 11. 启动新手引导（老用户自动跳过）
+    if (window.Onboarding) window.Onboarding.init();
+
+    // 12. 通知 UXP Host 加载完成
     if (isInWebView()) {
         let cacheName = 'unknown';
         try {
@@ -495,6 +498,7 @@ function updatePaletteInfo() {
 function switchPalette(paletteKey) {
     if (palettePresets[paletteKey] && paletteKey !== currentPalette) {
         track('palette_preset_change', { from_palette: currentPalette, to_palette: paletteKey });
+        if (window.Onboarding) window.Onboarding.onPaletteSwitch();
         currentPalette = paletteKey;
         colors = palettePresets[paletteKey].colors;
         
@@ -1008,6 +1012,7 @@ function bindEvents() {
         engineBtn.addEventListener('click', () => {
             const nextEngine = currentEngine === 'mixbox' ? 'km' : 'mixbox';
             track('engine_switch', { from_engine: currentEngine, to_engine: nextEngine });
+            if (window.Onboarding) window.Onboarding.onEngineSwitch();
             switchEngine(nextEngine);
         });
     }
@@ -2071,6 +2076,7 @@ function endStroke() {
         currentStroke = null;
         updateHistoryButtons();
         saveCanvasToStorage();
+        if (window.Onboarding) window.Onboarding.onPaintStrokeEnd();
     }
     // notify 必须无条件调：即使 points=0（pointercancel 掐断极短触点）也要复位
     // _strokeActive，否则 idle 备份会被永久闸住

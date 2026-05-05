@@ -1,7 +1,7 @@
 /**
  * Service Worker - KM Watercolor Palette 离线缓存
  */
-const CACHE_NAME = 'km-palette-v94';
+const CACHE_NAME = 'km-palette-v95';
 const CACHE_URLS = [
   './app.html',
   './css/base.css',
@@ -10,12 +10,14 @@ const CACHE_URLS = [
   './css/controls.css',
   './css/mix-area.css',
   './css/modals.css',
+  './css/onboarding.css',
   './js/params.js',
   './js/i18n.js',
   './js/i18n-translations.js',
   './js/ps-bridge.js',
   './js/palette-presets.js',
   './js/zoom.js',
+  './js/onboarding.js',
   './js/app.js',
   './js/mixbox.js',
   './js/device-profile.js',
