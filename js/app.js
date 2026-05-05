@@ -773,6 +773,7 @@ function bindEvents() {
 
     const smudgeBtn = document.getElementById('smudgeBtn');
     smudgeBtn.addEventListener('click', () => {
+        if (window.Onboarding) window.Onboarding.onSmudgeUse();
         const brushPreviewBtn = document.getElementById('brushPreviewBtn');
         if (currentTool === 'brush') {
             currentTool = 'smudge';
