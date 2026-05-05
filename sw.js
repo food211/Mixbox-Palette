@@ -1,6 +1,11 @@
 /**
  * Service Worker - KM Watercolor Palette 离线缓存
+ *
+ * dev 域（localhost / 127.0.0.1）禁用缓存：
+ * 否则 vite 没在跑时 SW 会从缓存返回 app.html，host 误判源探测成功，
+ * 后续相对路径请求（versions.json 等）撞到没在跑的 vite 报 connection refused。
  */
+const IS_DEV_HOST = self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1';
 const CACHE_NAME = 'km-palette-v95';
 const CACHE_URLS = [
   './app.html',
@@ -42,9 +47,14 @@ const CACHE_URLS = [
   './icons/eyedropper-cursor.svg'
 ];
 
-// 安装 - 预缓存资源
+// 安装 - 预缓存资源（dev 域跳过）
 self.addEventListener('install', (event) => {
   console.log('[SW] 安装中...');
+  if (IS_DEV_HOST) {
+    console.log('[SW] dev 域，跳过预缓存');
+    event.waitUntil(self.skipWaiting());
+    return;
+  }
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
@@ -58,7 +68,7 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// 激活 - 清理旧缓存
+// 激活 - 清理旧缓存（dev 域清掉所有历史缓存，避免遗留污染）
 self.addEventListener('activate', (event) => {
   console.log('[SW] 激活中...');
   event.waitUntil(
@@ -66,7 +76,7 @@ self.addEventListener('activate', (event) => {
       .then((cacheNames) => {
         return Promise.all(
           cacheNames
-            .filter((name) => name !== CACHE_NAME)
+            .filter((name) => IS_DEV_HOST || name !== CACHE_NAME)
             .map((name) => {
               console.log('[SW] 删除旧缓存:', name);
               return caches.delete(name);
@@ -85,6 +95,9 @@ const UPDATE_META_PATHS = ['/versions.json', '/recent-changelogs.json'];
 
 // 请求拦截 - 缓存优先，网络回退
 self.addEventListener('fetch', (event) => {
+  // dev 域：完全不拦截，所有请求走真实网络
+  if (IS_DEV_HOST) return;
+
   // 只处理同源请求
   if (!event.request.url.startsWith(self.location.origin)) {
     return;
