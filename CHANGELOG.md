@@ -1,5 +1,20 @@
 # 更新日志 / Changelog
 
+== V1.5.5 ==
+[ZH]
+### 新功能
+- **新手引导** — 第一次画画后会贴心提示可以切换笔刷、调色板和混色引擎，老用户不会被打扰
+
+### 修复
+- **检查更新失败** — 修复在某些情况下点击"检查更新"会报连接失败的问题
+
+[EN]
+### New Features
+- **Onboarding tips** — After your first stroke, friendly bubbles point out the brush, palette, and engine switches; existing users are skipped automatically
+
+### Fix
+- **Update check failure** — Fixed a case where clicking "check for updates" could fail with a connection error
+
 == V1.5.4 ==
 [ZH]
 ### 新功能
