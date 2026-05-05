@@ -128,7 +128,8 @@ window.I18N_TRANSLATIONS = {
     "resizeHandleTip": "Drag to resize canvas",
     "onboardingBrush": "Try other brushes",
     "onboardingPalette": "Switch palette for different pigments",
-    "onboardingEngine": "Compare engines: KM vs Mixbox"
+    "onboardingEngine": "Compare engines: KM vs Mixbox",
+    "onboardingSmudge": "Try the smudge tool — it has its own brushes too"
   },
   "zh": {
     "title": "🎨 Mixbox 调色板",
@@ -258,7 +259,8 @@ window.I18N_TRANSLATIONS = {
     "resizeHandleTip": "拖动调整画布宽度",
     "onboardingBrush": "试试别的笔刷",
     "onboardingPalette": "换个调色板试试别的颜料",
-    "onboardingEngine": "试试切换引擎对比手感"
+    "onboardingEngine": "试试切换引擎对比手感",
+    "onboardingSmudge": "试试涂抹工具，它也能换不同笔刷"
   },
   "ja": {
     "title": "🎨 Mixbox パレット",
@@ -388,6 +390,7 @@ window.I18N_TRANSLATIONS = {
     "resizeHandleTip": "ドラッグしてキャンバスサイズを変更",
     "onboardingBrush": "他のブラシも試してみて",
     "onboardingPalette": "パレットを切り替えて別の絵具を",
-    "onboardingEngine": "エンジンを切り替えて比べてみて"
+    "onboardingEngine": "エンジンを切り替えて比べてみて",
+    "onboardingSmudge": "スマッジツールも試してみて。ブラシも切り替え可能"
   }
 };
