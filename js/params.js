@@ -108,12 +108,12 @@ const WET_DEPOSIT_PEAK = 4.0;
 
 // ─── 2.1 冷区（maskCold：实时稀释混色）────────────────────────────────────────
 
-/** 冷区基础混色强度（相对 baseMixStrength 的比例） */
-const WET_COLD_MIX = 0.25;
-
-/** coldMix 随湿度调制：wet=0 时 MAX 倍，wet=1 时 MIN 倍 */
-const WET_COLD_SCALE_MAX = 1.8;
-const WET_COLD_SCALE_MIN = 0.2;
+/** 冷区基础混色强度（相对 baseMixStrength 的比例）
+ * 注：km-painter 已不再乘此参数（对齐 km-paint），仅 mixbox-painter 使用。
+ * 1.0 = 与 KM 同浓度（mixbox 覆盖力略强）；降低可让多笔累积感更明显。
+ * 已去掉湿度 SCALE 调制，coldMix 在 MB 下恒定 = WET_COLD_MIX。
+ */
+const WET_COLD_MIX = 0.85;
 
 // ─── 2.2 smudge 推色（冷区 smear 已禁用，保留 uniform 以防回滚）────────────
 

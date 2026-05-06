@@ -179,12 +179,17 @@ class MixboxWebGLPainter extends BaseWebGLPainter {
             vec3 outRGB;
             if (u_isWatercolor > 0.5) {
                 // ── 冷区：稀释混色（水彩不做 smudge 推色）──
+                // mixbox_lerp 在 latent 空间是线性插值，中段 t=0.5 时覆盖力比 km_mix 强，
+                // 表现为"和旧像素融合差、单笔覆盖"。对 t 做 pow(_, 1.3) 软化：满浓度 t=1 不变，
+                // 中段被压低（0.5→0.41，0.7→0.62），多笔累积感更明显，更像水彩。
                 float coldPaint = maskCold * u_baseMixStrength * u_wetColdMix;
-                vec3 coldOut = mixbox_lerp(canvasColor.rgb, activeColor, aBrush * coldPaint);
+                float coldT = pow(aBrush * coldPaint, 1.3);
+                vec3 coldOut = mixbox_lerp(canvasColor.rgb, activeColor, coldT);
 
                 // ── 热区：稀释晕染 ──
                 float hotPaint = maskHot * u_baseMixStrength * u_wetBleedMix;
-                vec3 hotOut = mixbox_lerp(canvasColor.rgb, activeColor, aBrush * hotPaint);
+                float hotT = pow(aBrush * hotPaint, 1.3);
+                vec3 hotOut = mixbox_lerp(canvasColor.rgb, activeColor, hotT);
 
                 // ── 两路叠加（沉积区在松开时单独处理）──
                 float totalMask = clamp(maskCold + maskHot, 0.0, 1.0);
