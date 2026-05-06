@@ -281,6 +281,9 @@ class BaseWebGLPainter {
         this.setupHeatmapFramebuffers();
         // wetHeatmap FB 由 heatmap.js 统一建立别名，无需单独创建
 
+        // 启动 wet/wetMask 常驻衰减 task（与水彩 RAF 解耦，抬笔后仍持续衰减）
+        this.startHeatmapDecay();
+
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     }
 
@@ -400,13 +403,13 @@ class BaseWebGLPainter {
 
     /**
      * 设置水彩湿度（0~1）。
-     * 控制每笔热度上限的基础值：1.0 = 最湿，0.0 = 最干（仍保留 WET_HEAT_CAP_STEP 下限）。
+     * 对齐 km-paint：cap 固定为 WET_HEAT_CAP_STEP，湿度只影响衰减/扩散等其他参数，不抬高 wetHeatmap 封顶。
+     * 原映射 0.25+0.75w 在默认 0.5 湿度下让 cap=0.625，wetHeatmap 整体偏红。
      */
     setWetness(wetness) {
         const w = Math.max(0, Math.min(1, wetness));
         this._wetness = w;
-        // 映射到 [WET_HEAT_CAP_STEP, 1.0]，避免完全干燥时失去水彩感
-        this._wetHeatCapBase = WET_HEAT_CAP_STEP + (1.0 - WET_HEAT_CAP_STEP) * w;
+        this._wetHeatCapBase = WET_HEAT_CAP_STEP;
         this._recomputeWetCache(w);
     }
 
@@ -469,19 +472,11 @@ class BaseWebGLPainter {
 
         // 水彩模式：向 wetHeatmap 注热，同时走主混色 pass（mixbox_lerp 负责颜色，RAF 的 _applyWetColor 叠加湿纸效果）
         if (isWatercolor) {
-            // 方向追踪：方向变化超过阈值时提升热度上限
-            const curAngle = Math.atan2(smearDir.y, smearDir.x);
+            // 对齐 km-paint：cap 固定为 _wetHeatCapBase（来自湿度滑条），不再做方向调制。
+            // 原方向 bump 逻辑会让转向时 cap 一路冲到 1.0，导致 wetHeatmap 比 km-paint 积累快 ~4×，
+            // 表现为湿度持续偏高、扩散柔边覆盖噪点。
             if (this._wetHeatCap === undefined) {
                 this._wetHeatCap = this._wetHeatCapBase ?? WET_HEAT_CAP_STEP;
-                this._wetHeatBaseAngle = curAngle;
-            } else if (smearLen > 0) {
-                let angleDiff = Math.abs(curAngle - this._wetHeatBaseAngle);
-                if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
-                const threshRad = WET_HEAT_DIR_THRESHOLD_DEG * Math.PI / 180;
-                if (angleDiff > threshRad) {
-                    this._wetHeatCap = Math.min(1.0, this._wetHeatCap + WET_HEAT_CAP_STEP);
-                    this._wetHeatBaseAngle = curAngle;
-                }
             }
             this.updateWetHeatmap(x, y, size, brushCanvas, useFalloff, HEAT_ACCUMULATE_STEP);
             this._wetSmearDir = smearDir;
@@ -1474,6 +1469,9 @@ class BaseWebGLPainter {
         // 停 RAF
         if (typeof this.stopHeatmapFadeOut === 'function') {
             try { this.stopHeatmapFadeOut(); } catch (_) {}
+        }
+        if (typeof this.stopHeatmapDecay === 'function') {
+            try { this.stopHeatmapDecay(); } catch (_) {}
         }
 
         // 取消挂起的画布保存任务

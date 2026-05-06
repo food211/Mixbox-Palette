@@ -1,6 +1,11 @@
 {
   "versions": [
     {
+      "version": "V1.5.6",
+      "zh": "### 优化\r\n- **水彩笔焕新** — 现在有真实的透明叠色效果，晕染更自然，并且能和画布上已有的像素相互作用、彼此融合，整体表现更接近真实水彩",
+      "en": "### Improvements\r\n- **Watercolor brush revamped** — Real translucent layering, more natural diffusion, and strokes now interact and blend with existing pixels on the canvas — much closer to real watercolor"
+    },
+    {
       "version": "V1.5.5",
       "zh": "### 新功能\r\n- **新手引导** — 第一次画画后会贴心提示可以切换笔刷、调色板和混色引擎，老用户不会被打扰\r\n\r\n### 修复\r\n- **检查更新失败** — 修复在某些情况下点击\"检查更新\"会报连接失败的问题",
       "en": "### New Features\r\n- **Onboarding tips** — After your first stroke, friendly bubbles point out the brush, palette, and engine switches; existing users are skipped automatically\r\n\r\n### Fix\r\n- **Update check failure** — Fixed a case where clicking \"check for updates\" could fail with a connection error"
@@ -9,12 +14,7 @@
       "version": "V1.5.4",
       "zh": "### 新功能\r\n- **从 PS 导入像素** — 在 Photoshop 中框选区域，点插件导入按钮，在混色画布上框选目标位置，即可将选区像素导入画布",
       "en": "### New Features\r\n- **Import pixels from PS** — Select an area in Photoshop, click the import button in the plugin, draw a target region on the mixing canvas, and the selected pixels will be imported"
-    },
-    {
-      "version": "V1.5.3",
-      "zh": "### 优化\r\n- **水彩笔与其他笔刷共用尺寸** — 之前在水彩笔和其他笔刷间来回切换，size 滑条会各记各的、跳来跳去；现在统一了，切笔刷时尺寸不再变化\r\n- **大笔刷水彩颗粒更细腻** — size 调到 60-80px 时，水彩晕染的纸纤维噪点不会再变得太粗，颗粒细节在不同尺寸下保持接近一致\r\n- **默认笔刷尺寸调到 40px** — 新用户首次打开时滑条从 15 变成 40，更接近常用绘画尺寸\r\n\r\n### 修复\r\n- **按住 Shift 不再让按钮带焦点框** — 之前按住 Shift 时点过的按钮会出现一个浅色边框，现已去掉",
-      "en": "### Improvements\r\n- **Watercolor brush shares size with other brushes** — Previously the size slider remembered separate values for the watercolor brush vs. other brushes and would jump when you switched; now it stays put\r\n- **Finer watercolor texture on large brushes** — At size 60-80px, the paper-fiber noise in watercolor diffusion no longer looks too coarse; grain detail stays roughly consistent across sizes\r\n- **Default brush size raised to 40px** — First-time users now start with the slider at 40 instead of 15, closer to a typical painting size\r\n\r\n### Fix\r\n- **Shift no longer leaves focus rings on buttons** — Holding Shift used to cause a faint outline to appear on previously-clicked buttons; that's now suppressed"
     }
   ],
-  "generatedAt": "2026-05-05T16:23:22.836Z"
+  "generatedAt": "2026-05-06T15:07:10.651Z"
 }

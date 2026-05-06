@@ -204,15 +204,33 @@ class KMWebGLPainter extends BaseWebGLPainter {
             return 1.0 + km - sqrt(max(vec4(0.0), km * km + 2.0 * km));
         }
 
+        // 反射率→XYZ 中的 Y（亮度），用于 km_mix 的浓度加权
+        float reflectanceToLuminance(
+            vec4 R0, vec4 R1, vec4 R2, vec4 R3, vec4 R4,
+            vec4 R5, vec4 R6, vec4 R7, vec4 R8, vec4 R9)
+        {
+            return dot(CMF_Y_0,R0)+dot(CMF_Y_1,R1)+dot(CMF_Y_2,R2)+dot(CMF_Y_3,R3)+dot(CMF_Y_4,R4)
+                  +dot(CMF_Y_5,R5)+dot(CMF_Y_6,R6)+dot(CMF_Y_7,R7)+dot(CMF_Y_8,R8)+dot(CMF_Y_9,R9);
+        }
+
         vec3 km_mix(vec3 c1, vec3 c2, float t) {
             vec4 A0,A1,A2,A3,A4,A5,A6,A7,A8,A9;
             vec4 B0,B1,B2,B3,B4,B5,B6,B7,B8,B9;
             sampleLUT(c1, A0,A1,A2,A3,A4,A5,A6,A7,A8,A9);
             sampleLUT(c2, B0,B1,B2,B3,B4,B5,B6,B7,B8,B9);
 
-            float conc1 = 1.0 - t;
-            float conc2 = t;
-            float totalConc = 1.0;
+            // 浓度公式对齐 km-paint 的 spectral_mix：
+            //   conc1 = (1-t)² × luminance1
+            //   conc2 = t²     × luminance2
+            // 其中 t² 让浓度按 KS 模型走（亮色覆盖暗色更需要"叠浓"），
+            // luminance 加权让浓度按色素散射效率（≈感知亮度）算，
+            // 而不是简单按 t 线性走。这是 KM 颜料模型物理正确的浓度形式，
+            // 也是 km-paint 那边水彩"颜料相遇互动"感觉的关键。
+            float lum1 = reflectanceToLuminance(A0,A1,A2,A3,A4,A5,A6,A7,A8,A9);
+            float lum2 = reflectanceToLuminance(B0,B1,B2,B3,B4,B5,B6,B7,B8,B9);
+            float conc1 = (1.0 - t) * (1.0 - t) * lum1;
+            float conc2 = t * t * lum2;
+            float totalConc = max(conc1 + conc2, 1e-6);
 
             vec3 result = reflectanceToRGB(
                 km_band(A0,B0,conc1,conc2,totalConc),
@@ -305,13 +323,30 @@ class KMWebGLPainter extends BaseWebGLPainter {
 
             vec3 finalColor;
             if (u_isWatercolor > 0.5) {
+                // 浓度对齐 km-paint：km-paint 的 u_paintDensity = 0.77 × d^1.5
+                // mixbox 这边 u_baseMixStrength 已在 JS 侧套过 0.85 × s^1.5（mixSliderToStrength），
+                // 数学等价：wcStrength = (0.77/0.85) × u_baseMixStrength ≈ 0.906 × baseMix
+                // FLOOR 对应 km-paint 的 0.77 × 0.3^1.5 ≈ 0.126（低浓度兜底，避免量化偏色）
+                float wcStrength = max(0.906 * u_baseMixStrength, 0.77 * pow(0.3, 1.5));
+
                 // ── 冷区：稀释混色（水彩不做 smudge 推色）──
-                float coldPaint = maskCold * u_baseMixStrength * u_wetColdMix;
-                vec3 coldOut = km_mix(canvasColor.rgb, activeColor, aBrush * coldPaint);
+                // 对齐 km-paint：不再乘 u_wetColdMix（原是白底多笔累积速率系数）。
+                // 浓度因子直接传给 km_mix，不再平方。理由：
+                //   km-paint 用 spectral_mix（KS 反射率混合，覆盖力比 km_mix 强）。
+                //   早期为对齐低浓度（factor=0.127）下 km_mix 覆盖力过强而平方一次，
+                //   但高浓度（factor=0.77）下反而是 spectral_mix 更强，再平方让 km_mix
+                //   的覆盖力萎缩到 0.77²≈0.59，100% 滑条覆盖力不足。
+                //   不平方时 100% 滑条 factor=0.77，与 km-paint 的 mixStrength 同值，
+                //   视觉覆盖力差距来自 km_mix vs spectral_mix 的固有差异（mixbox 这边
+                //   为保持 km 模式的"几何平均"语义，接受这点差距）。
+                float coldPaint = maskCold * wcStrength;
+                float coldT = aBrush * coldPaint;
+                vec3 coldOut = km_mix(canvasColor.rgb, activeColor, coldT);
 
                 // ── 热区：稀释晕染 ──
-                float hotPaint = maskHot * u_baseMixStrength * u_wetBleedMix;
-                vec3 hotOut = km_mix(canvasColor.rgb, activeColor, aBrush * hotPaint);
+                float hotPaint = maskHot * wcStrength * u_wetBleedMix;
+                float hotT = aBrush * hotPaint;
+                vec3 hotOut = km_mix(canvasColor.rgb, activeColor, hotT);
 
                 // ── 两路叠加（沉积区在松开时单独处理）──
                 float totalMask = clamp(maskCold + maskHot, 0.0, 1.0);
