@@ -163,8 +163,8 @@ function _spreadWetHeatmap() {
     const ch = this.canvas.height;
 
     const w = this._wetness ?? 0.5;
-    const sizeScale = this._wetSizeScale ?? 1.0;
-    const radius = (WET_SPREAD_RADIUS_MIN + (WET_SPREAD_RADIUS_MAX - WET_SPREAD_RADIUS_MIN) * w) * sizeScale;
+    // 对齐 km-paint：扩散半径不乘 sizeScale，固定按湿度走 0.8~2.0px
+    const radius = WET_SPREAD_RADIUS_MIN + (WET_SPREAD_RADIUS_MAX - WET_SPREAD_RADIUS_MIN) * w;
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.wetHeatmap);
     gl.bindTexture(gl.TEXTURE_2D, this.textures.wetHeatTemp);
@@ -286,9 +286,9 @@ function _spreadDepositHeatmap() {
     gl.uniform1i(this._depositSpreadLoc.u_heatmap, 0);
     gl.uniform2f(this._depositSpreadLoc.u_resolution, cw, ch);
     const w = this._wetness ?? 0.5;
-    const sizeScale = this._wetSizeScale ?? 1.0;
-    const depositRadius = (WET_DEPOSIT_SPREAD_RADIUS_MIN
-                        + (WET_DEPOSIT_SPREAD_RADIUS_MAX - WET_DEPOSIT_SPREAD_RADIUS_MIN) * w) * sizeScale;
+    // 对齐 km-paint：扩散半径不乘 sizeScale，固定按湿度走 0.3~1.0px
+    const depositRadius = WET_DEPOSIT_SPREAD_RADIUS_MIN
+                        + (WET_DEPOSIT_SPREAD_RADIUS_MAX - WET_DEPOSIT_SPREAD_RADIUS_MIN) * w;
     gl.uniform1f(this._depositSpreadLoc.u_radius,  depositRadius);
     gl.uniform1f(this._depositSpreadLoc.u_falloff, WET_DEPOSIT_SPREAD_FALLOFF);
 
@@ -362,6 +362,9 @@ function _getOrCreateSoftBrushTexture(size) {
 
 function updateWetHeatmap(x, y, size, brushCanvas, useFalloff, heatStep = HEAT_ACCUMULATE_STEP) {
     this.refreshWetHeatLifetime();
+    // 标记本笔有新的注热，让下次 RAF tick 跑一次 spreadDeposit。
+    // 鼠标停下不再注热 → 标记不刷新 → deposit 扩散冻结，与 km-paint 表现对齐。
+    this._wetDepositDirty = true;
 
     // 按 brushSize 缩放的扩散/噪点倍率：让大笔刷的湿度扩散范围相对笔刷本身保持一致
     // （size=40 时 1×，size=80 时 2×）。压感缩放后的 effectiveSize 直接传进来，这里同步更新
@@ -645,7 +648,9 @@ function _applyWetColor(color) {
 
     gl.uniform2f(this._wetColorLoc.u_resolution, cw, ch);
     gl.uniform3f(this._wetColorLoc.u_color, color.r, color.g, color.b);
-    gl.uniform1f(this._wetColorLoc.u_gradRadius,         WET_GRADIENT_RADIUS * sizeScale);
+    // grad 半径不能跟 sizeScale 走：grad 靠 4 邻居 wetHeatmap 差分感知梯度，
+    // 半径放大后跨过整个轮廓带 → grad≈0 → depositMask 失活、wetColor 沉积失效。
+    gl.uniform1f(this._wetColorLoc.u_gradRadius,         WET_GRADIENT_RADIUS);
     gl.uniform1f(this._wetColorLoc.u_depositStr,         depositStr);
     gl.uniform1f(this._wetColorLoc.u_diluteStr,          diluteStr);
     gl.uniform1f(this._wetColorLoc.u_depositGradMin,     WET_DEPOSIT_GRAD_MIN);
@@ -733,10 +738,10 @@ function _applyDepositColorPass(color, depositStr) {
     gl.bindTexture(gl.TEXTURE_2D, this.textures.depositHeatmap);
     gl.uniform1i(this._wetColorLoc.u_wetHeatmap, 1);
 
-    const sizeScale = this._wetSizeScale ?? 1.0;
     gl.uniform2f(this._wetColorLoc.u_resolution, cw, ch);
     gl.uniform3f(this._wetColorLoc.u_color, color.r, color.g, color.b);
-    gl.uniform1f(this._wetColorLoc.u_gradRadius,         WET_GRADIENT_RADIUS * sizeScale);
+    // grad 半径同上：固定不缩放，避免大笔刷下沉积失效
+    gl.uniform1f(this._wetColorLoc.u_gradRadius,         WET_GRADIENT_RADIUS);
     gl.uniform1f(this._wetColorLoc.u_depositStr,         depositStr);
     gl.uniform1f(this._wetColorLoc.u_diluteStr,          0.0);
     gl.uniform1f(this._wetColorLoc.u_depositGradMin,     WET_DEPOSIT_GRAD_MIN);
@@ -822,13 +827,13 @@ function _initWetBleedProgram() {
             float wetGate = smoothstep(u_wetGateMin, 0.2, wetness);
 
             // 像素级纸纤维噪声：扰动半径和吸色强度
-            // 低频噪声（hash 分像素坐标）模拟纤维聚集，让相邻像素有相关性
-            // 网格尺寸随 brushSize 等比放大（u_noiseScale），颗粒相对笔刷保持一致
-            vec2 pixelCoord = floor(v_uv * u_resolution / u_noiseScale);
+            // 噪声网格固定 1px / 3px（不随 brushSize 缩放），对齐 km-paint。
+            // 之前用 u_noiseScale 让网格随 size 放大，结果大笔刷下颗粒变粗、
+            // 扩散纹理细节减少，与 km-paint 那种"细密颗粒"对比更明显。
+            vec2 pixelCoord = floor(v_uv * u_resolution);
             float noise1 = hash(pixelCoord);
             float noise2 = hash(pixelCoord + vec2(3.7, 1.3));
-            // 低频纤维聚集（每 ~3 像素一组 × noiseScale）
-            vec2 clusterCoord = floor(v_uv * u_resolution / (3.0 * u_noiseScale));
+            vec2 clusterCoord = floor(v_uv * u_resolution / 3.0);
             float clusterNoise = hash(clusterCoord);
 
             // 半径扰动：以本像素为单位，让邻居采样距离不规则
@@ -849,8 +854,15 @@ function _initWetBleedProgram() {
             dirs[6] = vec2( 0.707, -0.707);
             dirs[7] = vec2(-0.707, -0.707);
 
-            vec3 weightedColor = vec3(0.0);
-            float totalWeight = 0.0;
+            // 双路并存：
+            //   gradXxx ── 原版"单向梯度吸"（边缘斜坡 dh 大 → 朝中心吸色 → 轮廓扩散质感）
+            //   flatXxx ── 新增"双向平滑"（实心区不分方向加权平均 → 笔内圆点互相融合，
+            //              缝隙靠时间逐帧渗透填补；同时把笔头扫过的旧像素卷进来）
+            vec3 gradColor = vec3(0.0);
+            float gradWeight = 0.0;
+            vec3 flatColor = vec3(0.0);
+            float flatWeight = 0.0;
+            float neighborDepositSum = 0.0;
 
             for (int i = 0; i < 8; i++) {
                 // 每个方向再加独立的小随机偏移，让采样点散开
@@ -862,25 +874,56 @@ function _initWetBleedProgram() {
                 vec2 sampleUV = v_uv + (dirs[i] * effectiveRadius + perDirJitter) * px;
 
                 float nDeposit = texture(u_deposit, sampleUV).r;
+                vec3 nColor = texture(u_canvas, sampleUV).rgb;
+
+                // 路 1：原版梯度吸——只往 deposit 高方向吸，权重 = dh
                 float dh = nDeposit - myDeposit;
                 if (dh > 0.0) {
-                    vec3 nColor = texture(u_canvas, sampleUV).rgb;
-                    weightedColor += nColor * dh;
-                    totalWeight += dh;
+                    gradColor += nColor * dh;
+                    gradWeight += dh;
                 }
+
+                // 路 2：双向平滑——邻居 deposit + 基础权重(0.15)，平原也参与
+                float w = nDeposit + 0.15;
+                flatColor += nColor * w;
+                flatWeight += w;
+                neighborDepositSum += nDeposit;
             }
 
-            if (totalWeight < 0.001) {
+            vec3 outRGB = myColor.rgb;
+
+            // ── 路 1：原版梯度吸（轮廓扩散） ──
+            float resist = 1.0 - smoothstep(0.3, 0.8, myDeposit);
+            if (gradWeight > 0.001) {
+                vec3 gradAvg = gradColor / gradWeight;
+                float gradAmt = u_strength * gradWeight * absorbJitter * wetGate * resist;
+                outRGB = mix(outRGB, gradAvg, clamp(gradAmt, 0.0, 1.0));
+            }
+
+            // ── 路 2：双向平滑（笔内圆点融合 + 笔内白缝填补） ──
+            // 双 gate 取 max：
+            //   neighborGate ── 自己 deposit 低 + 邻居均值高 = 笔内白缝，要被填
+            //   selfGate     ── 自己 deposit 高 = 笔触实心区，要把圆点融成一团
+            // 之前只用 neighborGate，实心区的圆点自身没有"自己 deposit 低"信号，
+            // 融合得很慢，颗粒感明显。加 selfGate 让实心区直接全速融合。
+            float avgNeighborDeposit = neighborDepositSum / 8.0;
+            float neighborGate = smoothstep(0.05, 0.25, avgNeighborDeposit);
+            float selfGate     = smoothstep(0.05, 0.5,  myDeposit);
+            float interiorRaw = max(neighborGate, selfGate);
+            // wet 越湿越倾向流动（真水彩物理）
+            float wetnessFlow = smoothstep(0.1, 0.6, wetness);
+            float interiorGate = interiorRaw * wetnessFlow;
+            float flatAmt = u_strength * 2.5 * absorbJitter * wetGate * interiorGate;
+            if (flatWeight > 0.001 && flatAmt > 0.001) {
+                vec3 flatAvg = flatColor / flatWeight;
+                outRGB = mix(outRGB, flatAvg, clamp(flatAmt, 0.0, 1.0));
+            }
+
+            // 两路都没起作用 = 退回原色
+            if (gradWeight < 0.001 && flatAmt < 0.001) {
                 outColor = myColor;
                 return;
             }
-
-            vec3 avgNeighbor = weightedColor / totalWeight;
-            // 浓区抗扩散：myDeposit 越高扩散越弱（内部颜料稳定不被推动）
-            // 外围 myDeposit 低 → resist≈1 全速扩散；核心高浓度 → resist≈0 基本不变
-            float resist = 1.0 - smoothstep(0.3, 0.8, myDeposit);
-            float mixAmt = u_strength * totalWeight * absorbJitter * wetGate * resist;
-            vec3 outRGB = mix(myColor.rgb, avgNeighbor, mixAmt);
 
             outColor = vec4(outRGB, myColor.a);
         }
@@ -959,7 +1002,10 @@ function _applyWetBleed() {
     const strength = WET_CANVAS_BLEED_STRENGTH * scale;
 
     gl.uniform2f(this._wetBleedLoc.u_resolution,  cw, ch);
-    gl.uniform1f(this._wetBleedLoc.u_radius,      WET_CANVAS_BLEED_RADIUS * sizeScale);
+    // bleed 采样半径不能跟 sizeScale 走：bleed 靠 dh = nDeposit - myDeposit 感知梯度，
+    // 半径放大后 8 邻居跨过整个轮廓带落到平原 → dh≈0 → 轮廓扩散在大笔刷下消失。
+    // 修复：固定半径，让 bleed 始终在轮廓斜坡上感知梯度。
+    gl.uniform1f(this._wetBleedLoc.u_radius,      WET_CANVAS_BLEED_RADIUS);
     gl.uniform1f(this._wetBleedLoc.u_strength,    strength);
     gl.uniform1f(this._wetBleedLoc.u_depositMin,  WET_CANVAS_BLEED_DEPOSIT_MIN);
     gl.uniform1f(this._wetBleedLoc.u_noiseAmount, WET_CANVAS_BLEED_NOISE);

@@ -240,60 +240,6 @@ function updateSmudgeHeatmap(x, y, size, brushCanvas, useFalloff, heatStep = HEA
 
 
 /**
- * 向沉积热度图注热（与 wetHeatmap 同步调用，不衰减，松开时清空）
- */
-function updateDepositHeatmap(x, y, size, useFalloff, heatStep = DEPOSITE_HEAT_ACCUMULATE_STEP) {
-    const gl = this.gl;
-    const cw = this.canvas.width;
-    const ch = this.canvas.height;
-    const halfSize = size / 2;
-
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.depositHeatmap);
-    gl.bindTexture(gl.TEXTURE_2D, this.textures.depositHeatTemp);
-    gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, cw, ch);
-    gl.bindTexture(gl.TEXTURE_2D, null);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-    gl.useProgram(this._heatmapProgram);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.depositHeatmap);
-    gl.viewport(0, 0, cw, ch);
-
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, this.currentBrushTexture);
-    gl.uniform1i(this._heatmapLocations.u_brushTexture, 0);
-
-    gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_2D, this.textures.depositHeatTemp);
-    gl.uniform1i(this._heatmapLocations.u_heatmapTexture, 1);
-
-    gl.uniform2f(this._heatmapLocations.u_resolution, cw, ch);
-    gl.uniform2f(this._heatmapLocations.u_currentPosition, x, y);
-    gl.uniform1f(this._heatmapLocations.u_brushRadius, size / 2);
-    gl.uniform1f(this._heatmapLocations.u_useFalloff, +useFalloff);
-    gl.uniform1f(this._heatmapLocations.u_heatStep, heatStep);
-    gl.uniform1f(this._heatmapLocations.u_heatMax,  this._wetHeatCap ?? WET_HEAT_CAP_STEP);
-    gl.uniform1f(this._heatmapLocations.u_useMaxMode, 0.0);
-
-    const positions = this._quadPos;
-    positions[0] = x - halfSize; positions[1] = y - halfSize;
-    positions[2] = x + halfSize; positions[3] = y - halfSize;
-    positions[4] = x - halfSize; positions[5] = y + halfSize;
-    positions[6] = x + halfSize; positions[7] = y + halfSize;
-    this._disableAllVertexAttribs();
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.position);
-    gl.bufferData(gl.ARRAY_BUFFER, positions, gl.DYNAMIC_DRAW);
-    gl.enableVertexAttribArray(this._heatmapLocations.a_position);
-    gl.vertexAttribPointer(this._heatmapLocations.a_position, 2, gl.FLOAT, false, 0, 0);
-
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.texCoord);
-    gl.enableVertexAttribArray(this._heatmapLocations.a_texCoord);
-    gl.vertexAttribPointer(this._heatmapLocations.a_texCoord, 2, gl.FLOAT, false, 0, 0);
-
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-}
-
-/**
  * 清空沉积热度图（每笔松开时调用）
  */
 function clearDepositHeatmap() {
@@ -678,9 +624,10 @@ function startHeatmapFadeOut() {
             FrameScheduler.unregister(taskName);
             return;
         }
-        // 热度衰减（始终运行，让已有热度自然消退）
+        // 热度衰减（smudge：始终运行，让已有热度自然消退）
         // 湿度滑条调制：湿度高→水多干得慢；湿度低→水少干得快
         // w=0 时 MAX 倍（干得快）、w=1 时 MIN 倍（干得慢）
+        // 注：wet/wetMask 衰减已拆到独立 task `heatmap-decay-`（startHeatmapDecay）。
         const w = painter._wetness ?? 0.5;
         const decayScale = HEAT_DECAY_SCALE_MAX
                          + (HEAT_DECAY_SCALE_MIN - HEAT_DECAY_SCALE_MAX) * w;
@@ -692,7 +639,10 @@ function startHeatmapFadeOut() {
 
             // JS 侧每帧更新颜色写入累加器（时间线精确）
             if (painter._wetIsDrawing && painter._wetColor) {
-                const c = painter.baseMixStrength ?? 1.0;
+                // 对齐 km-paint：浓度写死 1.0，让 _applyWetColor 每帧都触发。
+                // 原本用 baseMixStrength 节流颜色注入，会让默认浓度下注入频率仅约 1/3.5 帧，
+                // 造成 mb 这边水彩颜料堆积明显比 km-paint 慢。
+                const c = 1.0;
                 const cNorm = Math.min(1.0, c / 0.85);
                 const interval = WET_HEAT_INTERVAL_LOW + (WET_HEAT_INTERVAL_HIGH - WET_HEAT_INTERVAL_LOW) * cNorm;
                 const p = 1 / Math.max(1, interval);
@@ -704,18 +654,10 @@ function startHeatmapFadeOut() {
             }
 
             // GPU 同步帧：每 WET_PASS_STRIDE tick 一次，把攒下的工作一次性 flush
+            // 注：wet/wetMask 衰减已提到外层每帧执行，这里只跑扩散和颜色 pass
             wetFrameCounter++;
             if (wetFrameCounter >= WET_PASS_STRIDE) {
                 wetFrameCounter = 0;
-
-                // wetHeatmap / wetMaskHeatmap 衰减：step × STRIDE 补偿频率减半
-                const wetDecayScale = WET_HEAT_DECAY_SCALE_MAX
-                                    + (WET_HEAT_DECAY_SCALE_MIN - WET_HEAT_DECAY_SCALE_MAX) * w;
-                painter._decayWetHeatmap(WET_HEAT_DECAY_STEP * wetDecayScale * WET_PASS_STRIDE);
-
-                const wetMaskDecayScale = WET_MASK_HEAT_DECAY_SCALE_MAX
-                                        + (WET_MASK_HEAT_DECAY_SCALE_MIN - WET_MASK_HEAT_DECAY_SCALE_MAX) * w;
-                painter._decayWetMaskHeatmap(WET_MASK_HEAT_DECAY_STEP * wetMaskDecayScale * WET_PASS_STRIDE);
 
                 painter._spreadWetHeatmap();
 
@@ -726,10 +668,18 @@ function startHeatmapFadeOut() {
                     pendingApplyWetColorCount = 0;
                 }
 
-                // depositHeatmap 扩散 + 画布颜色扩散：
-                // 不要求 _wetIsDrawing，松开鼠标后也继续（让颜料"流完"直到 _wetHeatFrames 归零）
-                if (painter._wetColor) {
+                // depositHeatmap 扩散：仅在本笔有新注热时跑一次，跑完清标记。
+                // 鼠标停下不再调 updateWetHeatmap → _wetDepositDirty 不刷新 → deposit 扩散冻结。
+                // 与 km-paint 的"鼠标停下 deposit 冻结"对齐。
+                if (painter._wetColor && painter._wetDepositDirty) {
                     painter._spreadDepositHeatmap();
+                    painter._wetDepositDirty = false;
+                }
+
+                // _applyWetBleed：每帧都跑（鼠标停下也继续）。
+                // bleed 的 flat 路径靠多帧累积才能把笔内圆点缝填平——若跟 deposit 一起冻结，
+                // 鼠标停下时融合中断，会留下未填的缝。km-paint 的 bleed 同样无 drawing gate。
+                if (painter._wetColor) {
                     painter._applyWetBleed();
                     painter.flush();
                 }
@@ -759,6 +709,41 @@ function _resetHeatmapFade() {
  */
 function stopHeatmapFadeOut() {
     FrameScheduler.unregister('heatmap-fade-' + this._instanceId);
+}
+
+/**
+ * 启动 wet/wetMask 热度图常驻衰减 task（对齐 km-paint HeatmapSystem.startDecay）。
+ * 与 startHeatmapFadeOut（水彩 RAF：扩散/颜色 pass）解耦——后者只在 _wetPaperActive
+ * 期间跑，会让抬笔后 wetHeatmap 不再衰减；此 task 一旦注册就持续，直到 painter dispose。
+ * 幂等注册，重复调用安全。
+ */
+function startHeatmapDecay() {
+    const taskName = 'heatmap-decay-' + this._instanceId;
+    if (FrameScheduler.has(taskName)) return;
+
+    const painter = this;
+    function tick() {
+        if (painter._disposed) {
+            FrameScheduler.unregister(taskName);
+            return;
+        }
+        const w = painter._wetness ?? 0.5;
+        const wetDecayScale = WET_HEAT_DECAY_SCALE_MAX
+                            + (WET_HEAT_DECAY_SCALE_MIN - WET_HEAT_DECAY_SCALE_MAX) * w;
+        painter._decayWetHeatmap(WET_HEAT_DECAY_STEP * wetDecayScale);
+
+        const wetMaskDecayScale = WET_MASK_HEAT_DECAY_SCALE_MAX
+                                + (WET_MASK_HEAT_DECAY_SCALE_MIN - WET_MASK_HEAT_DECAY_SCALE_MAX) * w;
+        painter._decayWetMaskHeatmap(WET_MASK_HEAT_DECAY_STEP * wetMaskDecayScale);
+    }
+    FrameScheduler.register(taskName, tick, 40);
+}
+
+/**
+ * 停止 wet/wetMask 衰减 task。切换引擎或销毁 painter 时调用。
+ */
+function stopHeatmapDecay() {
+    FrameScheduler.unregister('heatmap-decay-' + this._instanceId);
 }
 
 
@@ -792,7 +777,6 @@ Object.assign(BaseWebGLPainter.prototype, {
     _initHeatmapProgram,
     _initHeatDecayProgram,
     updateSmudgeHeatmap,
-    updateDepositHeatmap,
     clearDepositHeatmap,
     _decayHeatmap,
     _decayHeatmapGeneric,
@@ -805,6 +789,8 @@ Object.assign(BaseWebGLPainter.prototype, {
     setHeatmapDecayActive,
     startHeatmapFadeOut,
     stopHeatmapFadeOut,
+    startHeatmapDecay,
+    stopHeatmapDecay,
     _resetHeatmapFade,
 });
 

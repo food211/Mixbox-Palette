@@ -85,9 +85,8 @@ const WET_MASK_HEAT_DECAY_SCALE_MIN = 0.5;
 const WET_MASK_HEAT_DECAY_SCALE_MAX = 2.0;
 
 // ─── 1.4 depositHeatmap（咖啡环累积区域）──────────────────────────────────────
-
-/** 每次 drawcall 叠加的热度量，控制咖啡环触发速度 */
-const DEPOSITE_HEAT_ACCUMULATE_STEP = 0.12;
+// 注热步长沿用 wetHeatmap 的 HEAT_ACCUMULATE_STEP（updateWetHeatmap 内一次 drawcall
+// 同时写 wet/deposit/wetMask 三张）。
 
 /** 扩散半径（像素），随湿度调制：wet=0 时 MIN、wet=1 时 MAX */
 const WET_DEPOSIT_SPREAD_RADIUS_MIN = 0.3;

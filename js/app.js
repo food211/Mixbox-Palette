@@ -1254,9 +1254,12 @@ function bindEvents() {
             // 下限跟笔刷大小挂钩：
             //   - 大笔刷（size ≥ 50）：brushSize * 0.05 占优，保持原来手感
             //   - 小笔刷（size < 50）：min(2.5, size*0.3) 抬高下限，避免过密导致单帧 draw 次数暴涨
+            // 大笔刷下间距随 size 衰减（对齐 km-paint）：size=20 时不变；size=100 时 ×0.2；size=200 时 ×0.1
+            // 避免大尺寸下能看出"一颗一颗"的笔刷散点印
+            const sizeFalloff = brushType === 'watercolor' ? 20 / Math.max(20, brushSize) : 1.0;
             const smallBrushFloor = Math.min(2.5, brushSize * 0.3);
-            const sizeBasedFloor = Math.max(brushSize * 0.05, smallBrushFloor);
-            const effectiveMinDist = Math.max(1, sizeBasedFloor, baseSpacing * spacingRatio);
+            const sizeBasedFloor = Math.max(brushSize * 0.05 * sizeFalloff, smallBrushFloor);
+            const effectiveMinDist = Math.max(1, sizeBasedFloor, baseSpacing * spacingRatio * sizeFalloff);
 
             if (distance >= effectiveMinDist) {
                 const rawSteps = Math.floor(distance / effectiveMinDist);
