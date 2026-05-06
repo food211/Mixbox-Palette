@@ -1,5 +1,14 @@
 # 更新日志 / Changelog
 
+== V1.5.6 ==
+[ZH]
+### 优化
+- **水彩笔焕新** — 现在有真实的透明叠色效果，晕染更自然，并且能和画布上已有的像素相互作用、彼此融合，整体表现更接近真实水彩
+
+[EN]
+### Improvements
+- **Watercolor brush revamped** — Real translucent layering, more natural diffusion, and strokes now interact and blend with existing pixels on the canvas — much closer to real watercolor
+
 == V1.5.5 ==
 [ZH]
 ### 新功能
