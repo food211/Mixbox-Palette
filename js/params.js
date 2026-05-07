@@ -205,31 +205,56 @@ const WET_CANVAS_BLEED_NOISE_SCALE_EXP = 0.4;
 /** 湿度 gate 下限：wetHeatmap 低于此值的像素停止扩散（表示已干、定型） */
 const WET_CANVAS_BLEED_WET_GATE_MIN = 0.02;
 
-// ─── 3.4 drip（湿区往下流动）────────────────────────────────────────────────
-// 基于 wetMaskHeatmap 边缘渗出 + 重力向下传播，写到独立 dripHeatmap，
-// 再在 _applyWetColor shader 里把 mask 项替换为 max(wetMask, drip)。
-// 全管线由 painter._dripEnabled / DeviceProfile.DRIP_ENABLED / PerfWatchdog 三层门控。
+// ─── 3.4 drip（颜料水滴往下流挂 — CPU 粒子系统）────────────────────────────
+// 模型：水彩笔触绘制时按笔触距离闸门触发"水滴生成"，沿用水彩笔刷的
+//   35 颗粒分布（极坐标 sqrt 半径）随机抽 1~2 个当起点。
+//   每个粒子是 CPU 维护的对象，每帧 RAF 更新位置 + 半径脉动 + alpha 衰减；
+//   用 painter.drawBrush 软圆渲染。
+//   寿命/重力随当前湿度（_wetness 0~1）线性映射；湿度=0 直接跳过。
 
-/** 每帧每像素从 wetMask 渗出到 drip 的概率（hash 稀疏化，越大流挂越密） */
-const DRIP_CHANCE_PER_FRAME = 0.04;
+/** 笔触上每走过这么多像素触发一次水滴生成（基础值 + (1-wet)*range，湿度低更稀疏）。
+ *  现在间隔拉远，配合"一簇 1-3 滴"获得稀疏成簇的视觉。 */
+const DRIP_SPAWN_INTERVAL_PX_BASE  = 160;
+const DRIP_SPAWN_INTERVAL_PX_RANGE = 240;
 
-/** wetMask 低于此值不渗出（保证只在真正湿的区域生效） */
-const DRIP_SEED_MASK_GATE = 0.15;
+/** 一簇粒子数：每次触发抽 [MIN, MAX] 范围内随机数量 */
+const DRIP_CLUSTER_MIN = 1;
+const DRIP_CLUSTER_MAX = 2;
 
-/** 每帧向下推进的像素数（重力速度） */
-const DRIP_GRAVITY_PX = 1.6;
+/** 单帧最大活跃粒子数（超过则停止生成新粒子；走完整水彩管线，必须严控）。
+ *  实际数量随湿度浮动：湿度 0→MIN，湿度 1→MAX。 */
+const DRIP_MAX_PARTICLES_MIN = 5;
+const DRIP_MAX_PARTICLES_MAX = 10;
 
-/** 横向抖动幅度（像素，hash 噪声驱动），0=直流，1+=蛇形 */
-const DRIP_JITTER_X_PX = 0.6;
+/** 每帧重力（像素/帧）的湿度映射：wet=0→MIN、wet=1→MAX */
+const DRIP_GRAVITY_MIN = 0.3;
+const DRIP_GRAVITY_MAX = 0.9;
 
-/** 传播衰减（0~1）：每帧 drip 强度保留比例，决定最大流挂长度 */
-const DRIP_DECAY = 0.985;
+/** 水平蛇形扭动：振幅（像素）+ 相位频率（rad/帧） */
+const DRIP_VX_AMP_PX = 1.2;
+const DRIP_VX_OMEGA  = 0.05;
 
-/** wetHeatmap 门控：低于此值停止流动（流到干区自然停） */
-const DRIP_WET_GATE = 0.05;
+/** 粒子半径占笔刷半径的比例（最终半径 = brushRadius × (MIN + rand×RANGE)） */
+const DRIP_PARTICLE_R_MIN   = 0.08;
+const DRIP_PARTICLE_R_RANGE = 0.18;
 
-/** drip 在 _applyWetColor 中作为 mask 项的增益（<1 让流痕比主笔淡） */
-const DRIP_COLOR_GAIN = 0.6;
+/** 半径每帧的随机走步量（让水滴大小有微变化） */
+const DRIP_PARTICLE_R_PULSE = 0.12;
+
+/** 寿命（帧数）的湿度映射：wet 接近 0 短寿命，wet=1 最长寿命。
+ *  60fps 下 240 帧 ≈ 4 秒。 */
+const DRIP_LIFE_MIN = 80;
+const DRIP_LIFE_MAX = 240;
+
+/** 单个粒子渲染强度（占 baseMixStrength 的比例）。
+ *  > 1.0 让水滴比主笔触浓，避免小尺寸下视觉太淡。 */
+const DRIP_DRAW_STRENGTH = 1.6;
+
+/** 粒子沿轨迹打章的间距（相对粒子半径）：
+ *  位移 ≥ r * SPACING_FACTOR 才画下一颗印章。
+ *  >1 让印章稀疏（点状），<1 让印章重叠（连续液柱）。
+ *  0.25 ≈ 印章高度重叠形成连续轨迹，但仍比"每帧画"省得多。 */
+const DRIP_STAMP_SPACING_FACTOR = 0.25;
 
 // ─── 3.3 _applyDepositColor（咖啡环）────────────────────────────────────────
 // 松开画笔时 8 帧渐进沉积，基于 depositHeatmap 的梯度做边缘强调。

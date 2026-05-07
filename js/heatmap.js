@@ -45,8 +45,6 @@ function setupHeatmapTextures(w, h) {
     // 沉积热度图：松开时清空，不衰减，专门驱动咖啡圈效果
     this.textures.depositHeatmap  = this._createR8Texture(w, h);
     this.textures.depositHeatTemp = this._createR8Texture(w, h);
-    // drip：湿区往下流动（仅 _dripCapable 时分配）
-    if (typeof this.setupDripTextures === 'function') this.setupDripTextures(w, h);
 }
 
 /**
@@ -92,9 +90,6 @@ function setupHeatmapFramebuffers() {
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.textures.depositHeatTemp, 0);
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-    // drip FB（仅 _dripCapable 时）
-    if (typeof this.setupDripFramebuffers === 'function') this.setupDripFramebuffers();
 }
 
 // ─── 热度图更新 program ───────────────────────────────────────────────────────
@@ -634,7 +629,7 @@ function startHeatmapFadeOut() {
             warmupMs: 5000,
             onDowngrade: () => {
                 console.warn('[drip] 运行期实测超预算，已自动降级关闭');
-                painter._clearDripHeatmap && painter._clearDripHeatmap();
+                if (painter._dripParticles) painter._dripParticles.length = 0;
             },
         });
     }
@@ -681,20 +676,6 @@ function startHeatmapFadeOut() {
 
                 painter._spreadWetHeatmap();
 
-                // ── drip step（按 stride 节流；PerfWatchdog 实测）──
-                const dripShouldRun = painter._shouldRunDrip && painter._shouldRunDrip();
-                dripFrameCounter++;
-                if (dripShouldRun && dripFrameCounter >= DRIP_STRIDE) {
-                    dripFrameCounter = 0;
-                    const measuringInactive = (typeof PerfWatchdog !== 'undefined')
-                        && PerfWatchdog.isMeasuringInactive('drip');
-                    if (typeof PerfWatchdog !== 'undefined') PerfWatchdog.beginFrame('drip', !measuringInactive);
-                    if (!measuringInactive) {
-                        painter._stepDrip();
-                    }
-                    if (typeof PerfWatchdog !== 'undefined') PerfWatchdog.endFrame('drip');
-                }
-
                 // 把攒下的 _applyWetColor 触发次数合并成一次调用
                 // （多次等频小剂量 vs 一次大剂量 视觉差异在高频下难分辨）
                 if (pendingApplyWetColorCount > 0 && painter._wetColor) {
@@ -720,12 +701,27 @@ function startHeatmapFadeOut() {
             }
         }
 
+        // ── drip 粒子 tick（独立于 wetPaperActive；抬笔后还要继续流） ──
+        if (painter._dripParticles && painter._dripParticles.length > 0) {
+            dripFrameCounter++;
+            if (dripFrameCounter >= DRIP_STRIDE) {
+                dripFrameCounter = 0;
+                const measuringInactive = (typeof PerfWatchdog !== 'undefined')
+                    && PerfWatchdog.isMeasuringInactive('drip');
+                if (typeof PerfWatchdog !== 'undefined') PerfWatchdog.beginFrame('drip', !measuringInactive);
+                if (!measuringInactive) {
+                    painter._stepDripParticles();
+                    painter.flush();
+                }
+                if (typeof PerfWatchdog !== 'undefined') PerfWatchdog.endFrame('drip');
+            }
+        }
+
         // 任一 debug overlay 开启时刷新一次屏幕
         if (painter._debugHeatmapEnabled
             || painter._debugWetPaperEnabled
             || painter._debugDepositHeatmapEnabled
-            || painter._debugWetMaskHeatmapEnabled
-            || painter._debugDripHeatmapEnabled) painter.flush();
+            || painter._debugWetMaskHeatmapEnabled) painter.flush();
     }
 
     FrameScheduler.register(taskName, tick, 40);
@@ -792,8 +788,8 @@ function listDebugCommands() {
         ['debugWetPaper()        (dwp)', '切换 wetHeatmap 可视化（与 debugHeatmap 同源）'],
         ['debugWetMask()         (dwm)', '切换 wetMask × wetHeatmap 交集可视化（_applyWetColor 实际生效区）'],
         ['toggleWetMask(t/f)     (twm)', '启用/关闭 _applyWetColor 取 mask 交集（默认启用）'],
-        ['toggleDrip(t/f/null)   (td) ', '强制开/关/auto 湿区往下流动；auto 模式由设备 + PerfWatchdog 决定'],
-        ['debugDripHeatmap()     (ddrip)', '可视化 dripHeatmap（湿区流挂场）'],
+        ['toggleDrip(t/f/null)   (td) ', '强制开/关/auto 颜料水滴往下流挂；auto 模式由设备 + PerfWatchdog 决定'],
+        ['debugDripHeatmap()     (ddrip)', '打印当前活跃水滴粒子数及前 5 个状态'],
         ['help()                 (h)  ', '列出本清单'],
     ];
     console.log('%c[Painter Debug Commands]', 'color:#6af;font-weight:bold');

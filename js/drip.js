@@ -1,233 +1,29 @@
 /**
- * drip.js — 湿区往下流动效果
+ * drip.js — 颜料水滴往下流挂（CPU 粒子系统）
  *
- * 物理直觉：
- *   wetMaskHeatmap 的边缘 = 当前湿区轮廓
- *   每帧从这些湿像素按概率"渗出"到独立的 dripHeatmap，
- *   dripHeatmap 自身向下传播 + 横向抖动 + 衰减，
- *   被 wetHeatmap 门控（流到干区自然停）。
- *   _applyWetColor 的 mask 取 max(wetMask, drip*gain)，
- *   drip 经过的地方继续注入当前 _wetColor，呈现"颜料沿轮廓往下流"的视觉。
+ * 模型：
+ *   笔触绘制过程中，每走过 DRIP_SPAWN_INTERVAL_PX 像素触发一次"水滴生成"，
+ *   在该位置按水彩笔刷的颗粒分布（极坐标 sqrt 半径）虚拟生成 35 个候选颗粒，
+ *   随机抽 1~2 个当水滴起点。
  *
- * 三层启停门控（任一关闭都跳过整个 drip 管线，零开销）：
- *   1. DeviceProfile.DRIP_ENABLED            — 启动期硬门槛（小屏幕/低核心）
- *   2. PerfWatchdog 'drip' phase != done-fail — 运行期实测降级
- *   3. painter._dripUserPref ∈ {true,false,null} — 用户手动开关，覆盖前两层
+ *   每个水滴是一个 CPU 维护的粒子 {x,y,r,color,vy,vxAmp,vxPhase,life,age}。
+ *   每帧 RAF tick：
+ *     y += vy（重力）
+ *     x += sin(age*omega + phase) * vxAmp  （水平蛇形扭动）
+ *     r 带轻微脉动
+ *     age++; alpha 用 1 - age/life
+ *   渲染：用现有 painter.drawBrush 画一个圆形软笔刷（复用 circle/soft 类型）
  *
- * 计算 _shouldRunDrip()：
- *   if userPref === false → false
- *   if userPref === true  → true
- *   else 看 DeviceProfile.DRIP_ENABLED && PerfWatchdog.shouldRun('drip')
+ *   寿命/重力随当前湿度（_wetness 0~1）线性映射；湿度=0 → 完全跳过。
+ *
+ * 三层启停门控：DeviceProfile.DRIP_ENABLED / PerfWatchdog / painter._dripUserPref
  */
 
 const DRIP_USER_PREF_KEY = 'drip_user_pref_v1';
 
-// ─── 资源创建（由 setupHeatmapTextures/Framebuffers 调用）─────────────────────
-
-function setupDripTextures(w, h) {
-    if (!this._dripCapable) return;
-    this.textures.dripHeatmap  = this._createR8Texture(w, h);
-    this.textures.dripHeatTemp = this._createR8Texture(w, h);
-}
-
-function setupDripFramebuffers() {
-    if (!this._dripCapable) return;
-    const gl = this.gl;
-
-    this.framebuffers.dripHeatmap = gl.createFramebuffer();
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.dripHeatmap);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.textures.dripHeatmap, 0);
-
-    this.framebuffers.dripHeatTemp = gl.createFramebuffer();
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.dripHeatTemp);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.textures.dripHeatTemp, 0);
-
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-}
-
-// ─── shader 初始化 ───────────────────────────────────────────────────────────
-
-/**
- * 单 pass shader：
- *   读 dripPrev (上一帧 drip) + wetMask (种子源) + wetHeatmap (湿度门)
- *   1. 向下偏移采样上一帧 drip → 重力传播 + 横向 hash 抖动
- *   2. 从 wetMask 按 hash 概率渗出新种子
- *   3. 衰减 + wetHeatmap 门控
- */
-function _initDripStepProgram() {
-    const cached = BaseWebGLPainter._programCache.dripStep;
-    if (cached) {
-        this._dripStepProgram = cached.program;
-        this._dripStepLoc     = cached.locations;
-        this._dripStepBuf     = cached.buffer;
-        return;
-    }
-    const gl = this.gl;
-
-    const vs = this.createShader(gl.VERTEX_SHADER, `#version 300 es
-        in vec2 a_pos;
-        out vec2 v_uv;
-        void main() {
-            v_uv = vec2(a_pos.x * 0.5 + 0.5, a_pos.y * 0.5 + 0.5);
-            gl_Position = vec4(a_pos, 0.0, 1.0);
-        }
-    `);
-
-    const fs = this.createShader(gl.FRAGMENT_SHADER, `#version 300 es
-        precision highp float;
-        uniform sampler2D u_dripPrev;
-        uniform sampler2D u_wetMask;
-        uniform sampler2D u_wetHeatmap;
-        uniform vec2  u_resolution;
-        uniform float u_gravityPx;
-        uniform float u_jitterXPx;
-        uniform float u_decay;
-        uniform float u_wetGate;
-        uniform float u_seedChance;
-        uniform float u_seedMaskGate;
-        uniform float u_time;       // 帧累积量，hash 噪声去相关
-        in vec2 v_uv;
-        out vec4 outColor;
-
-        // 廉价 hash（单帧调用 ~2 次）
-        float hash21(vec2 p) {
-            p = fract(p * vec2(123.34, 456.21));
-            p += dot(p, p + 45.32);
-            return fract(p.x * p.y);
-        }
-
-        void main() {
-            vec2 px = 1.0 / u_resolution;
-            vec2 fragCoord = v_uv * u_resolution;
-
-            // ── 1. 重力传播：从"上方某点"采样上一帧的 drip ──
-            //    采样源 = (当前像素正上方 gravityPx + 横向抖动)
-            float jitter = (hash21(fragCoord + u_time) - 0.5) * 2.0 * u_jitterXPx;
-            //  注：v_uv.y 通常 0=底, 1=顶（取决于 FB 朝向），但本管线渲染目标
-            //  的 v_uv 习惯 = 上=1。"向下流动"对显示坐标 = uv.y 减小。
-            //  我们要从"上方"采样 drip：source.y = v_uv.y + gravityPx*px.y
-            vec2 srcUv = v_uv + vec2(jitter * px.x, u_gravityPx * px.y);
-            float dripFromAbove = texture(u_dripPrev, srcUv).r;
-
-            // ── 2. 自身衰减 ──
-            float dripCarried = dripFromAbove * u_decay;
-
-            // ── 3. 种子注入：wetMask 按概率渗出 ──
-            float mask = texture(u_wetMask, v_uv).r;
-            float seed = 0.0;
-            if (mask > u_seedMaskGate) {
-                float h = hash21(fragCoord * 0.13 + u_time * 1.7);
-                if (h < u_seedChance) {
-                    seed = mask;  // 用 mask 强度作为种子幅度，边缘渐变保留
-                }
-            }
-
-            // ── 4. wetHeatmap 门控 ──
-            float wet = texture(u_wetHeatmap, v_uv).r;
-            float gate = step(u_wetGate, wet);
-
-            float drip = max(dripCarried, seed) * gate;
-            outColor = vec4(drip, 0.0, 0.0, 1.0);
-        }
-    `);
-
-    const prog = this.createProgram(vs, fs);
-    this._dripStepProgram = prog;
-
-    const buf = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
-    this._dripStepBuf = buf;
-
-    this._dripStepLoc = {
-        a_pos:           gl.getAttribLocation(prog,  'a_pos'),
-        u_dripPrev:      gl.getUniformLocation(prog, 'u_dripPrev'),
-        u_wetMask:       gl.getUniformLocation(prog, 'u_wetMask'),
-        u_wetHeatmap:    gl.getUniformLocation(prog, 'u_wetHeatmap'),
-        u_resolution:    gl.getUniformLocation(prog, 'u_resolution'),
-        u_gravityPx:     gl.getUniformLocation(prog, 'u_gravityPx'),
-        u_jitterXPx:     gl.getUniformLocation(prog, 'u_jitterXPx'),
-        u_decay:         gl.getUniformLocation(prog, 'u_decay'),
-        u_wetGate:       gl.getUniformLocation(prog, 'u_wetGate'),
-        u_seedChance:    gl.getUniformLocation(prog, 'u_seedChance'),
-        u_seedMaskGate:  gl.getUniformLocation(prog, 'u_seedMaskGate'),
-        u_time:          gl.getUniformLocation(prog, 'u_time'),
-    };
-
-    BaseWebGLPainter._programCache.dripStep = {
-        program: prog,
-        locations: this._dripStepLoc,
-        buffer: this._dripStepBuf,
-    };
-}
-
-// ─── 主 step：每帧（按 stride）跑一次 ─────────────────────────────────────────
-
-function _stepDrip() {
-    if (!this._dripCapable) return;
-    if (!this._dripStepProgram) return;
-    const gl = this.gl;
-    const cw = this.canvas.width;
-    const ch = this.canvas.height;
-
-    // copy dripHeatmap → dripHeatTemp（作为只读输入）
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.dripHeatmap);
-    gl.bindTexture(gl.TEXTURE_2D, this.textures.dripHeatTemp);
-    gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, cw, ch);
-    gl.bindTexture(gl.TEXTURE_2D, null);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-    gl.useProgram(this._dripStepProgram);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.dripHeatmap);
-    gl.viewport(0, 0, cw, ch);
-
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, this.textures.dripHeatTemp);
-    gl.uniform1i(this._dripStepLoc.u_dripPrev, 0);
-
-    gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_2D, this.textures.wetMaskHeatmap);
-    gl.uniform1i(this._dripStepLoc.u_wetMask, 1);
-
-    gl.activeTexture(gl.TEXTURE2);
-    gl.bindTexture(gl.TEXTURE_2D, this.textures.wetHeatmap);
-    gl.uniform1i(this._dripStepLoc.u_wetHeatmap, 2);
-
-    gl.uniform2f(this._dripStepLoc.u_resolution, cw, ch);
-    gl.uniform1f(this._dripStepLoc.u_gravityPx,    DRIP_GRAVITY_PX);
-    gl.uniform1f(this._dripStepLoc.u_jitterXPx,    DRIP_JITTER_X_PX);
-    gl.uniform1f(this._dripStepLoc.u_decay,        DRIP_DECAY);
-    gl.uniform1f(this._dripStepLoc.u_wetGate,      DRIP_WET_GATE);
-    gl.uniform1f(this._dripStepLoc.u_seedChance,   DRIP_CHANCE_PER_FRAME);
-    gl.uniform1f(this._dripStepLoc.u_seedMaskGate, DRIP_SEED_MASK_GATE);
-    this._dripTime = (this._dripTime ?? 0) + 1.0;
-    gl.uniform1f(this._dripStepLoc.u_time, this._dripTime);
-
-    this._disableAllVertexAttribs();
-    gl.bindBuffer(gl.ARRAY_BUFFER, this._dripStepBuf);
-    gl.enableVertexAttribArray(this._dripStepLoc.a_pos);
-    gl.vertexAttribPointer(this._dripStepLoc.a_pos, 2, gl.FLOAT, false, 0, 0);
-
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-}
-
-function _clearDripHeatmap() {
-    if (!this._dripCapable) return;
-    const gl = this.gl;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.dripHeatmap);
-    gl.clearColor(0, 0, 0, 1);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.dripHeatTemp);
-    gl.clearColor(0, 0, 0, 1);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-}
-
 // ─── 启停决策 ────────────────────────────────────────────────────────────────
 
 function _initDripCapable() {
-    // 加载期决定本 painter 实例是否分配 drip 资源
     const profileOk = (typeof DeviceProfile !== 'undefined' && DeviceProfile.DRIP_ENABLED);
     let userPref = null;
     try {
@@ -236,37 +32,196 @@ function _initDripCapable() {
         else if (v === '0') userPref = false;
     } catch (e) {}
     this._dripUserPref = userPref;
-    // 用户显式启用 → 即使 DeviceProfile 不通过也分配资源
     this._dripCapable = userPref === true || profileOk;
+    this._dripParticles = [];
+    this._dripSpawnAccumPx = 0;     // 自上次 spawn 以来累计走过的笔触距离
+    this._dripLastSpawnXY = null;
 }
 
-/**
- * 每帧决策：是否真的要跑 drip pass。
- * 与 _dripCapable 解耦：capable=分配了资源；shouldRun=本帧要不要跑。
- */
 function _shouldRunDrip() {
     if (!this._dripCapable) return false;
     const pref = this._dripUserPref;
     if (pref === false) return false;
     if (pref === true)  return true;
-    // 自动模式：看 PerfWatchdog 判定
     if (typeof PerfWatchdog !== 'undefined') {
         return PerfWatchdog.shouldRun('drip');
     }
     return true;
 }
 
+// ─── 笔触期间生成水滴 ────────────────────────────────────────────────────────
+
 /**
- * Debug 命令：toggle drip 用户偏好。
- *   toggleDrip()      → 三态循环 auto → on → off → auto
- *   toggleDrip(true)  → 强制开
- *   toggleDrip(false) → 强制关
- *   toggleDrip(null)  → 回到 auto
+ * 由 drawBrush wrapper 在每个采样点调用。
+ * 水彩笔触时根据距离闸门按概率生成水滴起点。
+ *
+ * @param {number} x 当前采样点 x（画布坐标）
+ * @param {number} y 当前采样点 y
+ * @param {number} brushSize 笔刷直径
+ * @param {{r,g,b}} colorRGB 笔刷色（0~1）
  */
+function _maybeSpawnDripParticles(x, y, brushSize, colorRGB) {
+    if (!this._shouldRunDrip()) return;
+    const wet = this._wetness ?? 0.5;
+    if (wet < 0.01) return;          // 湿度 0：完全关闭
+
+    // 距离闸门：自上次 spawn 走的总长度 ≥ 间隔才触发
+    if (this._dripLastSpawnXY) {
+        const dx = x - this._dripLastSpawnXY.x;
+        const dy = y - this._dripLastSpawnXY.y;
+        this._dripSpawnAccumPx += Math.sqrt(dx * dx + dy * dy);
+    }
+    this._dripLastSpawnXY = { x, y };
+
+    const spawnInterval = DRIP_SPAWN_INTERVAL_PX_BASE
+        + (DRIP_SPAWN_INTERVAL_PX_RANGE * (1 - wet));    // 湿度低 → 间隔更稀
+    if (this._dripSpawnAccumPx < spawnInterval) return;
+    this._dripSpawnAccumPx = 0;
+
+    // 用与水彩笔刷一致的 35 颗粒分布生成虚拟候选位置（极坐标 sqrt 半径，向中心聚集）
+    // 不需要画到 canvas，只取位置；从中随机抽 1~2 个当水滴起点
+    const radius = brushSize / 2;
+    const distScale = (typeof WC_REF_SIZE !== 'undefined' && brushSize > WC_REF_SIZE)
+        ? Math.sqrt(WC_REF_SIZE / brushSize) : 1;
+    const candCount = (typeof WC_DOT_COUNT !== 'undefined') ? WC_DOT_COUNT : 35;
+    const distRange = (typeof WC_DIST_RANGE !== 'undefined') ? WC_DIST_RANGE : 0.8;
+
+    const pickCount = DRIP_CLUSTER_MIN
+        + Math.floor(Math.random() * (DRIP_CLUSTER_MAX - DRIP_CLUSTER_MIN + 1));
+    const dropMaxLife = DRIP_LIFE_MIN + (DRIP_LIFE_MAX - DRIP_LIFE_MIN) * wet;
+    const dropGravity = DRIP_GRAVITY_MIN + (DRIP_GRAVITY_MAX - DRIP_GRAVITY_MIN) * wet;
+
+    // 限制活跃粒子总数（避免长笔触爆量）；上限随湿度浮动
+    const maxParticles = Math.round(
+        DRIP_MAX_PARTICLES_MIN + (DRIP_MAX_PARTICLES_MAX - DRIP_MAX_PARTICLES_MIN) * wet
+    );
+    if (this._dripParticles.length >= maxParticles) return;
+
+    for (let i = 0; i < pickCount; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = Math.sqrt(Math.random()) * radius * distRange * distScale;
+        const px = x + Math.cos(angle) * dist;
+        const py = y + Math.sin(angle) * dist;
+
+        const r0 = radius * (DRIP_PARTICLE_R_MIN + Math.random() * DRIP_PARTICLE_R_RANGE);
+        this._dripParticles.push({
+            x: px,
+            y: py,
+            r: r0,
+            color: { r: colorRGB.r, g: colorRGB.g, b: colorRGB.b },
+            vy: dropGravity * (0.7 + Math.random() * 0.6),    // 个体差异
+            vxAmp: DRIP_VX_AMP_PX * (0.3 + Math.random() * 1.4),
+            vxOmega: DRIP_VX_OMEGA * (0.6 + Math.random() * 0.8),
+            vxPhase: Math.random() * Math.PI * 2,
+            life: dropMaxLife,
+            age: 0,
+            // 上次落章位置：初始化为 spawn 位置，下一次走够 r * spacing 才画
+            lastStampX: px,
+            lastStampY: py,
+            stamped: false,   // 标记是否已经画过至少一次（保证 spawn 时立即画一颗）
+        });
+    }
+}
+
+// ─── 每帧 tick：更新粒子 + 渲染 ──────────────────────────────────────────────
+
+function _stepDripParticles() {
+    if (!this._dripCapable) return;
+    if (!this._dripParticles || this._dripParticles.length === 0) return;
+    if (!this._shouldRunDrip()) {
+        this._dripParticles.length = 0;
+        return;
+    }
+
+    const cw = this.canvas.width;
+    const ch = this.canvas.height;
+    const arr = this._dripParticles;
+    let writeIdx = 0;
+    for (let i = 0; i < arr.length; i++) {
+        const p = arr[i];
+        p.age++;
+        if (p.age >= p.life) continue;     // 寿命到 → 丢弃
+
+        p.y += p.vy;
+        p.x += Math.sin(p.age * p.vxOmega + p.vxPhase) * p.vxAmp * 0.1;
+        // 半径轻微脉动（随机走，不离原值太远）
+        p.r += (Math.random() - 0.5) * DRIP_PARTICLE_R_PULSE;
+        if (p.r < 1.5) p.r = 1.5;
+
+        // 出画布上下边 → 丢弃
+        if (p.y < -p.r || p.y > ch + p.r || p.x < -p.r || p.x > cw + p.r) continue;
+
+        if (writeIdx !== i) arr[writeIdx] = p;
+        writeIdx++;
+    }
+    arr.length = writeIdx;
+
+    if (arr.length === 0) return;
+
+    // 渲染策略：粒子用"距离打章"代替"每帧画"——每颗粒子走够 r * STAMP_SPACING 才画一颗印章。
+    // 这样：
+    //   1) 同一像素不会被反复盖，wetHeatmap 不会饱和到触发 dilute 把水滴洗白
+    //   2) 视觉上像真水滴边滴边走，离散印章串而非连续液柱
+    // 颜色用粒子自带 p.color（在 spawn 时锁定），下一笔不会改变上一笔残留水滴的颜色。
+    // 不调 _applyWetColor：那会用全局 _wetColor 覆盖所有水滴的颜色（多色混画时串色）。
+    if (!this._dripBrushCanvas) {
+        this._dripBrushCanvas = _createSoftDropBrushCanvas(64);
+    }
+    const brushCanvas = this._dripBrushCanvas;
+    const origMixStrength = this.baseMixStrength;
+
+    for (let i = 0; i < arr.length; i++) {
+        const p = arr[i];
+        const dx = p.x - p.lastStampX;
+        const dy = p.y - p.lastStampY;
+        const moved = Math.sqrt(dx * dx + dy * dy);
+        const stampThreshold = p.r * DRIP_STAMP_SPACING_FACTOR;
+        if (p.stamped && moved < stampThreshold) continue;   // 没走够 → 跳过本帧
+
+        // 浓度按寿命线性衰减（年纪越大越淡，模拟颜料在纸上扩散稀释）
+        const t = 1.0 - p.age / p.life;
+        const alpha = Math.max(0, t) * DRIP_DRAW_STRENGTH;
+        if (alpha < 0.005) continue;
+        this.baseMixStrength = origMixStrength * alpha;
+
+        // isWatercolor=false：粒子不注入 wetHeatmap/wetMask/deposit，
+        // 避免新笔触落下时被全屏 _applyWetColor 用新色污染旧水滴的浓度。
+        // drawBrush 主 shader 仍走 mixbox/km 真实混色（融合下方画布颜色）。
+        this.drawBrush(
+            p.x, p.y, p.r * 2,
+            p.color, brushCanvas,
+            1,                          // useFalloff = 径向衰减（软圆形状）
+            { x: 0, y: 0 }, 0,
+            false, 1.0, false, 0, 0,
+            0, 0, false
+        );
+        p.lastStampX = p.x;
+        p.lastStampY = p.y;
+        p.stamped = true;
+    }
+    this.baseMixStrength = origMixStrength;
+}
+
+/** 生成一个软圆 canvas 当水滴笔刷。 */
+function _createSoftDropBrushCanvas(size) {
+    const cv = document.createElement('canvas');
+    cv.width = size;
+    cv.height = size;
+    const ctx = cv.getContext('2d');
+    const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    g.addColorStop(0, 'rgba(0,0,0,1)');
+    g.addColorStop(0.5, 'rgba(0,0,0,0.6)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+    return cv;
+}
+
+// ─── Debug 命令 ──────────────────────────────────────────────────────────────
+
 function toggleDrip(value) {
     let next;
     if (value === undefined) {
-        // 三态循环
         if (this._dripUserPref === null)       next = true;
         else if (this._dripUserPref === true)  next = false;
         else                                    next = null;
@@ -278,61 +233,26 @@ function toggleDrip(value) {
         if (next === null) localStorage.removeItem(DRIP_USER_PREF_KEY);
         else               localStorage.setItem(DRIP_USER_PREF_KEY, next ? '1' : '0');
     } catch (e) {}
-    // 切回关闭时立即清空 dripHeatmap，避免残留
-    if (next === false) this._clearDripHeatmap();
+    if (next === false) this._dripParticles.length = 0;
 
-    // 用户显式开启但当前 painter 未分配资源 → 提示需重启
-    if (next === true && !this._dripCapable) {
-        console.warn('[toggleDrip] 当前 painter 启动期未分配 drip 资源（设备未通过 DeviceProfile 门槛）。已记录用户偏好，下次刷新生效。');
-    } else {
-        const label = next === null ? 'auto' : (next ? '强制开' : '强制关');
-        console.log(`[toggleDrip] ${label}（capable=${this._dripCapable}, watchdog=${typeof PerfWatchdog !== 'undefined' ? PerfWatchdog.getPhase('drip') : 'n/a'}）`);
-    }
+    const label = next === null ? 'auto' : (next ? '强制开' : '强制关');
+    console.log(`[toggleDrip] ${label}（capable=${this._dripCapable}, watchdog=${typeof PerfWatchdog !== 'undefined' ? PerfWatchdog.getPhase('drip') : 'n/a'}, particles=${this._dripParticles.length}）`);
 }
 
-// ─── 调试可视化 ──────────────────────────────────────────────────────────────
-
-function debugDripHeatmap(enable) {
-    if (enable === undefined) enable = !this._debugDripHeatmapEnabled;
-    if (!enable) {
-        this._debugDripHeatmapEnabled = false;
-        console.log('[debugDripHeatmap] 关闭');
-        return;
-    }
-    if (!this._dripCapable) {
-        console.warn('[debugDripHeatmap] 本 painter 未分配 drip 资源，无可视化对象');
-        return;
-    }
-    // 复用 debugHeatmap 的 program（懒初始化）
-    if (!this._debugHeatProgram) this.debugHeatmap(true), this.debugHeatmap(false);
-    this._debugHeatmapEnabled = false;
-    this._debugWetPaperEnabled = false;
-    this._debugDepositHeatmapEnabled = false;
-    this._debugWetMaskHeatmapEnabled = false;
-    this._debugDripHeatmapEnabled = true;
-    this._flushDebugDripHeatmap();
-    console.log('[debugDripHeatmap] 开启 — 再次调用切换关闭');
-}
-
-function _flushDebugDripHeatmap(opacity = 1.0) {
-    if (!this._debugDripHeatmapEnabled) return;
-    if (!this.textures.dripHeatmap) return;
-    this._flushHeatOverlay(this.textures.dripHeatmap, opacity);
+function debugDripHeatmap() {
+    console.log(`[drip] 当前粒子数=${this._dripParticles.length}`,
+        this._dripParticles.slice(0, 5));
 }
 
 // ─── 注册到 BaseWebGLPainter.prototype ───────────────────────────────────────
 
 Object.assign(BaseWebGLPainter.prototype, {
-    setupDripTextures,
-    setupDripFramebuffers,
-    _initDripStepProgram,
-    _stepDrip,
-    _clearDripHeatmap,
     _initDripCapable,
     _shouldRunDrip,
+    _maybeSpawnDripParticles,
+    _stepDripParticles,
     toggleDrip,
     debugDripHeatmap,
-    _flushDebugDripHeatmap,
 });
 
-console.log('drip.js 加载成功');
+console.log('drip.js (particle) 加载成功');

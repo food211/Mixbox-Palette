@@ -521,9 +521,6 @@ function _initWetColorProgram() {
         uniform sampler2D u_wetHeatmap;   // 湿度图
         uniform sampler2D u_wetMask;      // 区域 mask：与 wetHeatmap 取交集才上色
         uniform float u_wetMaskEnabled;   // 0=关闭 mask（行为退回老版），1=启用
-        uniform sampler2D u_dripMask;     // drip：往下流动场（与 wetMask 取并集再做颜色门）
-        uniform float u_dripEnabled;      // 0=关闭 drip 通道（不采样，零开销）
-        uniform float u_dripGain;         // drip 作为 mask 项的增益（<1 让流痕比主笔淡）
         uniform vec2 u_resolution;
         uniform vec3 u_color;             // 笔刷颜色
         uniform float u_gradRadius;       // 梯度采样半径（像素）
@@ -540,12 +537,6 @@ function _initWetColorProgram() {
             vec2 px = 1.0 / u_resolution;
             float heat = texture(u_wetHeatmap, v_uv).r;
             float mask = (u_wetMaskEnabled > 0.5) ? texture(u_wetMask, v_uv).r : 1.0;
-
-            // drip：流痕扩展 mask 范围，让"流到的地方"也注入颜色
-            if (u_dripEnabled > 0.5) {
-                float drip = texture(u_dripMask, v_uv).r * u_dripGain;
-                mask = max(mask, drip);
-            }
 
             // 区域 mask 为 0 直接丢弃（两图取交集）；mask 关闭时恒为 1
             if (mask < 0.001) discard;
@@ -594,9 +585,6 @@ function _initWetColorProgram() {
         u_wetHeatmap: gl.getUniformLocation(prog, 'u_wetHeatmap'),
         u_wetMask:        gl.getUniformLocation(prog, 'u_wetMask'),
         u_wetMaskEnabled: gl.getUniformLocation(prog, 'u_wetMaskEnabled'),
-        u_dripMask:       gl.getUniformLocation(prog, 'u_dripMask'),
-        u_dripEnabled:    gl.getUniformLocation(prog, 'u_dripEnabled'),
-        u_dripGain:       gl.getUniformLocation(prog, 'u_dripGain'),
         u_resolution: gl.getUniformLocation(prog, 'u_resolution'),
         u_color:      gl.getUniformLocation(prog, 'u_color'),
         u_gradRadius: gl.getUniformLocation(prog, 'u_gradRadius'),
@@ -651,19 +639,6 @@ function _applyWetColor(color) {
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, this.textures.wetMaskHeatmap);
     gl.uniform1i(this._wetColorLoc.u_wetMask, 2);
-
-    // drip 通道：仅当本 painter 启用且确实在跑时启用 shader 路径
-    const dripActive = this._dripCapable && this._shouldRunDrip && this._shouldRunDrip()
-                       && this.textures.dripHeatmap;
-    if (dripActive) {
-        gl.activeTexture(gl.TEXTURE3);
-        gl.bindTexture(gl.TEXTURE_2D, this.textures.dripHeatmap);
-        gl.uniform1i(this._wetColorLoc.u_dripMask, 3);
-        gl.uniform1f(this._wetColorLoc.u_dripEnabled, 1.0);
-        gl.uniform1f(this._wetColorLoc.u_dripGain, DRIP_COLOR_GAIN);
-    } else {
-        gl.uniform1f(this._wetColorLoc.u_dripEnabled, 0.0);
-    }
 
     // wet低→沉积强、稀释弱；wet高→沉积弱、稀释强
     const w = this._wetness ?? 0.5;
@@ -774,7 +749,6 @@ function _applyDepositColorPass(color, depositStr) {
     gl.uniform1f(this._wetColorLoc.u_diluteGradSuppress, WET_DILUTE_GRAD_SUPPRESS);
     // 抬笔咖啡环 pass 强制不走 mask（它的设计基于 depositHeatmap 梯度本身）
     gl.uniform1f(this._wetColorLoc.u_wetMaskEnabled, 0.0);
-    gl.uniform1f(this._wetColorLoc.u_dripEnabled, 0.0);
 
     this._disableAllVertexAttribs();
     gl.bindBuffer(gl.ARRAY_BUFFER, this._wetColorBuf);

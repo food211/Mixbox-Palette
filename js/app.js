@@ -2034,6 +2034,9 @@ function beginStroke(type, color = null, startX = 0, startY = 0, pressure = 1.0)
             painter._wetIsDrawing = true;
             painter._wetColor = color ? hexToRgb(color) : { r: 0, g: 0, b: 0 };
             painter._wetMixStrength = painter.baseMixStrength;
+            // drip 距离闸门重置，新笔触从 0 开始累加
+            painter._dripSpawnAccumPx = 0;
+            painter._dripLastSpawnXY = null;
             // RAF 未运行时（如第一笔）立即启动，确保第一笔就有湿纸效果
             painter.startHeatmapFadeOut();
         }
@@ -2322,6 +2325,11 @@ function drawBrush(x, y, color, prevX = x, prevY = y, pressure = 1.0) {
 
     // 恢复用户设置的 baseMixStrength
     painter.baseMixStrength = originalMixStrength;
+
+    // 水彩笔触：按距离闸门生成 drip 水滴起点
+    if (isWatercolor && painter._maybeSpawnDripParticles) {
+        painter._maybeSpawnDripParticles(x, y, effectiveSize * 2, colorRGB);
+    }
 
     return dirtyRect;
 }
