@@ -63,7 +63,7 @@ function _shouldRunDrip() {
 function _maybeSpawnDripParticles(x, y, brushSize, colorRGB) {
     if (!this._shouldRunDrip()) return;
     const wet = this._wetness ?? 0.5;
-    if (wet < 0.01) return;          // 湿度 0：完全关闭
+    if (wet < DRIP_WETNESS_THRESHOLD) return;   // 湿度低于阈值：完全关闭水滴生成
 
     // 距离闸门：自上次 spawn 走的总长度 ≥ 间隔才触发
     if (this._dripLastSpawnXY) {
@@ -89,7 +89,11 @@ function _maybeSpawnDripParticles(x, y, brushSize, colorRGB) {
     const pickCount = DRIP_CLUSTER_MIN
         + Math.floor(Math.random() * (DRIP_CLUSTER_MAX - DRIP_CLUSTER_MIN + 1));
     const dropMaxLife = DRIP_LIFE_MIN + (DRIP_LIFE_MAX - DRIP_LIFE_MIN) * wet;
-    const dropGravity = DRIP_GRAVITY_MIN + (DRIP_GRAVITY_MAX - DRIP_GRAVITY_MIN) * wet;
+    // 重力随笔刷尺寸缩放：大笔刷下水滴要走更远才能脱离笔触范围
+    // 用 sqrt 缓和：size=40 → 1.0×；size=160 → 2.0×（而非 4.0×），避免大笔刷下飞太快
+    const sizeScale = Math.sqrt(brushSize / WC_REF_SIZE);
+    const dropGravity = (DRIP_GRAVITY_MIN + (DRIP_GRAVITY_MAX - DRIP_GRAVITY_MIN) * wet)
+                      * sizeScale;
 
     // 限制活跃粒子总数（避免长笔触爆量）；上限随湿度浮动
     const maxParticles = Math.round(
@@ -119,8 +123,26 @@ function _maybeSpawnDripParticles(x, y, brushSize, colorRGB) {
             lastStampX: px,
             lastStampY: py,
             stamped: false,   // 标记是否已经画过至少一次（保证 spawn 时立即画一颗）
+            preSpread: false, // 标记是否已经做过一次 spawn 时的预扩散
         });
     }
+}
+
+/**
+ * spawn 后第一次 stamp 完，立即对 wetHeatmap 跑若干次 spread pass，
+ * 让 G 通道湿区一开始就有 ~0.2 秒（≈12 帧）扩散后的形状，避免水滴从一个极小热点开始才慢慢扩。
+ * 0.2 秒等效迭代次数：粒子 spawn 一刻没人帮它推，需要在 stamp 后立即推一次。
+ */
+const DRIP_SPAWN_PRESPREAD_ITERS = 12;
+function _preSpreadDripWetHeatmap() {
+    if (!this._wetSpreadProgram) return;
+    const gl = this.gl;
+    // colorMask 限制只写 G 通道，避免预扩散影响主笔触 R 通道（笔触自己每帧 _spreadWetHeatmap 已足够）
+    gl.colorMask(false, true, false, false);
+    for (let i = 0; i < DRIP_SPAWN_PRESPREAD_ITERS; i++) {
+        this._spreadWetHeatmap();
+    }
+    gl.colorMask(true, true, true, true);
 }
 
 // ─── 每帧 tick：更新粒子 + 渲染 ──────────────────────────────────────────────
@@ -142,8 +164,12 @@ function _stepDripParticles() {
         p.age++;
         if (p.age >= p.life) continue;     // 寿命到 → 丢弃
 
-        p.y += p.vy;
-        p.x += Math.sin(p.age * p.vxOmega + p.vxPhase) * p.vxAmp * 0.1;
+        // 寿命过 SETTLE_AT 后停止下落（沉淀成静止圆点；蛇形扭动也停）
+        const ageRatio = p.age / p.life;
+        if (ageRatio < DRIP_SETTLE_AT) {
+            p.y += p.vy;
+            p.x += Math.sin(p.age * p.vxOmega + p.vxPhase) * p.vxAmp * 0.1;
+        }
         // 半径轻微脉动（随机走，不离原值太远）
         p.r += (Math.random() - 0.5) * DRIP_PARTICLE_R_PULSE;
         if (p.r < 1.5) p.r = 1.5;
@@ -170,30 +196,46 @@ function _stepDripParticles() {
     const brushCanvas = this._dripBrushCanvas;
     const origMixStrength = this.baseMixStrength;
 
+    let needPreSpread = false;
     for (let i = 0; i < arr.length; i++) {
         const p = arr[i];
+        const ageR = p.age / p.life;
+        const settled = ageR >= DRIP_SETTLE_AT;
         const dx = p.x - p.lastStampX;
         const dy = p.y - p.lastStampY;
         const moved = Math.sqrt(dx * dx + dy * dy);
         const stampThreshold = p.r * DRIP_STAMP_SPACING_FACTOR;
-        if (p.stamped && moved < stampThreshold) continue;   // 没走够 → 跳过本帧
+        // 沉淀后位置不再变 → 用每隔 N 帧强制 stamp 让圆点叠浓，否则只剩一颗稀薄点
+        const settledStampDue = settled && (p.age % DRIP_SETTLE_STAMP_STRIDE === 0);
+        if (p.stamped && moved < stampThreshold && !settledStampDue) continue;
 
-        // 浓度按寿命线性衰减（年纪越大越淡，模拟颜料在纸上扩散稀释）
-        const t = 1.0 - p.age / p.life;
+        // 寿命阶段：前 SETTLE 段下落 + 收缩 + 衰减；后 SETTLE 段停下变成静止圆点
+        // ageRatio 0→1，phase1 段 0→1，phase2 段 0→1
+        const ageRatio = p.age / p.life;
+        const t = 1.0 - ageRatio;             // 剩余寿命比例（用于 alpha）
         const alpha = Math.max(0, t) * DRIP_DRAW_STRENGTH;
         if (alpha < 0.005) continue;
         this.baseMixStrength = origMixStrength * alpha;
 
-        // isWatercolor=false：粒子不注入 wetHeatmap/wetMask/deposit，
-        // 避免新笔触落下时被全屏 _applyWetColor 用新色污染旧水滴的浓度。
-        // drawBrush 主 shader 仍走 mixbox/km 真实混色（融合下方画布颜色）。
+        // 半径：前 DRIP_SETTLE_AT 段从 1.0 缩到 END，后段保持 END（停下来时是个圆点）
+        let shrink;
+        if (ageRatio < DRIP_SETTLE_AT) {
+            const phase1 = ageRatio / DRIP_SETTLE_AT;
+            shrink = 1.0 - (1.0 - DRIP_R_SHRINK_END) * phase1;
+        } else {
+            shrink = DRIP_R_SHRINK_END;
+        }
+        const drawR = p.r * shrink;
+
+        // isWatercolor=true + isDripParticle=true → updateWetHeatmap 写 wetHeatmap.G（残留通道）
+        // 不写 R，避免被新笔触落笔时的 clearWetHeatmapChannelR 抹掉
         this.drawBrush(
-            p.x, p.y, p.r * 2,
+            p.x, p.y, drawR * 2,
             p.color, brushCanvas,
             1,                          // useFalloff = 径向衰减（软圆形状）
             { x: 0, y: 0 }, 0,
             false, 1.0, false, 0, 0,
-            0, 0, false
+            0, 0, true, true            // isWatercolor=true, isDripParticle=true
         );
         p.lastStampX = p.x;
         p.lastStampY = p.y;
@@ -202,16 +244,23 @@ function _stepDripParticles() {
     this.baseMixStrength = origMixStrength;
 }
 
-/** 生成一个软圆 canvas 当水滴笔刷。 */
+/**
+ * 生成一个咖啡环形状的 canvas 当水滴笔刷：
+ *   中心淡（颜料被推向边缘）、外圈深（颗粒堆积）、最外缘软衰减。
+ *   模拟真水彩干涸时的环状 deposit。
+ */
 function _createSoftDropBrushCanvas(size) {
     const cv = document.createElement('canvas');
     cv.width = size;
     cv.height = size;
     const ctx = cv.getContext('2d');
     const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-    g.addColorStop(0, 'rgba(0,0,0,1)');
-    g.addColorStop(0.5, 'rgba(0,0,0,0.6)');
-    g.addColorStop(1, 'rgba(0,0,0,0)');
+    // 边缘从 0.85 起几乎不衰减，到 0.95 仍 0.7 alpha，1.0 才硬切 → 整体边缘锐利
+    g.addColorStop(0.0,   'rgba(0,0,0,0.55)');  // 中心更浓
+    g.addColorStop(0.6,   'rgba(0,0,0,0.50)');  // 中段稳定
+    g.addColorStop(0.85,  'rgba(0,0,0,0.75)');  // 边缘环带最深
+    g.addColorStop(0.95,  'rgba(0,0,0,0.70)');  // 接近边缘仍很深
+    g.addColorStop(1.0,   'rgba(0,0,0,0)');     // 硬边瞬切
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, size, size);
     return cv;
@@ -251,6 +300,7 @@ Object.assign(BaseWebGLPainter.prototype, {
     _shouldRunDrip,
     _maybeSpawnDripParticles,
     _stepDripParticles,
+    _preSpreadDripWetHeatmap,
     toggleDrip,
     debugDripHeatmap,
 });

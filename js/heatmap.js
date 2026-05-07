@@ -414,8 +414,11 @@ function _initHeatDecayProgram() {
         in vec2 v_uv;
         out vec4 outColor;
         void main() {
-            float heat = texture(u_heatmap, v_uv).r;
-            outColor = vec4(max(heat - u_step, 0.0), 0.0, 0.0, 1.0);
+            vec4 src = texture(u_heatmap, v_uv);
+            // R = 主笔触湿度通道；G = 水滴残留湿区通道；两者独立衰减
+            float r = max(src.r - u_step, 0.0);
+            float g = max(src.g - u_step, 0.0);
+            outColor = vec4(r, g, 0.0, 1.0);
         }
     `);
 
@@ -711,6 +714,8 @@ function startHeatmapFadeOut() {
                 if (typeof PerfWatchdog !== 'undefined') PerfWatchdog.beginFrame('drip', !measuringInactive);
                 if (!measuringInactive) {
                     painter._stepDripParticles();
+                    // 水滴轮廓扩散：基于 wetHeatmap.g 把画布颜色向湿区中心吸
+                    painter._applyDripBleed();
                     painter.flush();
                 }
                 if (typeof PerfWatchdog !== 'undefined') PerfWatchdog.endFrame('drip');

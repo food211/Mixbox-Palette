@@ -129,7 +129,8 @@ window.I18N_TRANSLATIONS = {
     "onboardingBrush": "Try other brushes",
     "onboardingPalette": "Switch palette for different pigments",
     "onboardingEngine": "Compare engines: KM vs Mixbox",
-    "onboardingSmudge": "Try the smudge tool — it has its own brushes too"
+    "onboardingSmudge": "Try the smudge tool — it has its own brushes too",
+    "dripToggleTitle": "Toggle paint drip effect"
   },
   "zh": {
     "title": "🎨 Mixbox 调色板",
@@ -260,7 +261,8 @@ window.I18N_TRANSLATIONS = {
     "onboardingBrush": "试试别的笔刷",
     "onboardingPalette": "换个调色板试试别的颜料",
     "onboardingEngine": "试试切换引擎对比手感",
-    "onboardingSmudge": "试试涂抹工具，它也能换不同笔刷"
+    "onboardingSmudge": "试试涂抹工具，它也能换不同笔刷",
+    "dripToggleTitle": "开关颜料水滴流挂效果"
   },
   "ja": {
     "title": "🎨 Mixbox パレット",
@@ -391,6 +393,7 @@ window.I18N_TRANSLATIONS = {
     "onboardingBrush": "他のブラシも試してみて",
     "onboardingPalette": "パレットを切り替えて別の絵具を",
     "onboardingEngine": "エンジンを切り替えて比べてみて",
-    "onboardingSmudge": "スマッジツールも試してみて。ブラシも切り替え可能"
+    "onboardingSmudge": "スマッジツールも試してみて。ブラシも切り替え可能",
+    "dripToggleTitle": "絵具の滴り効果のオン/オフ"
   }
 };

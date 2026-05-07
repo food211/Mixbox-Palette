@@ -616,6 +616,20 @@ function renderSliders() {
     _applyLabel(document.querySelector('.label-spacing'),  binding.spacing.label);
 
     syncAllRangeThumbs();
+    syncDripToggleUI();
+}
+
+// 仅水彩模式显示 drip 按钮；active 状态反映 painter._dripUserPref（true / false / null=auto）
+function syncDripToggleUI() {
+    const btn = document.getElementById('dripToggleBtn');
+    if (!btn) return;
+    const isWatercolor = getCurrentMode() === 'watercolor';
+    btn.hidden = !isWatercolor;
+    if (!isWatercolor) return;
+    const pref = painter ? painter._dripUserPref : null;
+    // auto 时按 capable 来呈现：dripCapable 为真 → active；否则 inactive
+    const effectiveOn = (pref === true) || (pref === null && !!(painter && painter._dripCapable));
+    btn.classList.toggle('active', effectiveOn);
 }
 
 function persistCurrentState() {
@@ -737,6 +751,17 @@ function bindEvents() {
         pressureBtn.classList.toggle('active', pressureEnabled);
         paletteStorage.saveAppSettings({ pressureEnabled });
     });
+
+    // 水滴效果开关：点击在"开 / 关"之间切换（不暴露 auto 状态，简化用户心智）
+    const dripToggleBtn = document.getElementById('dripToggleBtn');
+    if (dripToggleBtn) {
+        dripToggleBtn.addEventListener('click', () => {
+            if (!painter || typeof painter.toggleDrip !== 'function') return;
+            const currentlyOn = dripToggleBtn.classList.contains('active');
+            painter.toggleDrip(!currentlyOn);
+            syncDripToggleUI();
+        });
+    }
 
     // 压感灵敏度 4 档 toggle（gamma + size 下限/上限 + 浓度下限 绑定存储在 data-* 属性）
     // 必须恰有一个按钮处于 active 状态
