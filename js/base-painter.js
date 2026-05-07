@@ -74,7 +74,8 @@ class BaseWebGLPainter {
         this._wetCache = {
             bleedMix:    WET_BLEED_MIX    * (WET_BLEED_SCALE_MIN  + (WET_BLEED_SCALE_MAX  - WET_BLEED_SCALE_MIN)  * w),
             bleedRadius: WET_BLEED_RADIUS * (WET_BLEED_SCALE_MIN  + (WET_BLEED_SCALE_MAX  - WET_BLEED_SCALE_MIN)  * w),
-            coldMix:     WET_COLD_MIX     * (WET_COLD_SCALE_MAX   + (WET_COLD_SCALE_MIN   - WET_COLD_SCALE_MAX)   * w),
+            // coldMix 仅 mixbox-painter 使用；KM 已移除该乘数。湿度调制去掉，统一为恒定 WET_COLD_MIX。
+            coldMix:     WET_COLD_MIX,
             smudgeMix:   WET_SMUDGE_MIX   * (WET_SMUDGE_SCALE_MIN + (WET_SMUDGE_SCALE_MAX - WET_SMUDGE_SCALE_MIN) * w),
         };
     }
@@ -104,6 +105,7 @@ class BaseWebGLPainter {
         this._calcGpuBudget();
         this.compileShaders();
         await this._loadLUT();
+        this._initDripCapable();
         this.setupTextures();
         this.setupFramebuffers();
         this.setupGeometry();

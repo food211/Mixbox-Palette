@@ -20,6 +20,15 @@
             && navigator.platform === 'MacIntel'
             && (navigator.maxTouchPoints || 0) > 1);
 
+    // drip（湿区往下流动）启动期硬门槛：
+    //   - 屏幕宽 < 600px：直接关，省得测（手机端笔触短，效果几乎不可见）
+    //   - hardwareConcurrency < 4：低端设备不开
+    // 通过门槛 ≠ 一定开启，运行期 PerfWatchdog 还会做 A/B 实测降级。
+    const screenW = (typeof window !== 'undefined' && window.screen) ? window.screen.width : 1024;
+    const cores = (typeof navigator !== 'undefined' && navigator.hardwareConcurrency) || 4;
+    const dripPassesScreen = screenW >= 600;
+    const dripPassesCores = cores >= 4;
+
     const DeviceProfile = {
         hasFinePointer,
         isIPad,
@@ -35,6 +44,12 @@
         // 桌面：保持高上限（CPU 强，极少触发）
         // 纯触控：保守兜底
         MAX_STEPS_PER_FRAME: isIPad ? 15 : hasFinePointer ? 120 : 15,
+
+        // drip 启动期允许加载（仍可被 PerfWatchdog 运行期降级、用户手动开关覆盖）
+        DRIP_ENABLED: dripPassesScreen && dripPassesCores,
+
+        // drip 传播 pass 节流：触控设备每 N 帧才跑一次传播，省 fillrate
+        DRIP_PASS_STRIDE: hasFinePointer ? 1 : 3,
     };
 
     global.DeviceProfile = DeviceProfile;

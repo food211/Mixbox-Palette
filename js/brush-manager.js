@@ -1,5 +1,8 @@
 // ─── 水彩笔刷纹理参数 ─────────────────────────────────────────────────────────
 const WC_DOT_COUNT      = 35;    // 点数
+const WC_REF_SIZE       = 40;    // 基准笔尖：WC_DIST_RANGE 在此尺寸下成立，更大 size 时分布半径收紧
+// 随机笔刷（watercolor/splatter/dry）变体池大小：每个 size 预生成 N 份，落笔随机挑一份
+const RANDOM_VARIANT_COUNT = 4;
 const WC_DIST_RANGE     = 0.8;   // 点分布半径（相对笔刷size）
 const WC_DOT_SIZE_MIN   = 0.12;  // 点最小半径（相对size）
 const WC_DOT_SIZE_RANGE = 0.18;  // 点大小随机范围
@@ -22,8 +25,20 @@ class BrushManager {
             { type: 'flat' },
             { type: 'dry' }
         ];
-        // 笔刷纹理缓存（仅确定性笔刷，key = `${type}_${size}`）
+        // 笔刷纹理缓存
+        // 确定性笔刷（circle/soft/flat）：key = `${type}_${size}` → canvas
+        // 随机笔刷（watercolor/splatter/dry）：key = `${type}_${size}` → canvas[]（变体池）
         this._brushCache = new Map();
+        // 当前笔画使用的变体（refreshRandomBrush 写入，createBrushTexture 读取）
+        // key = `${type}_${size}` → canvas
+        this._activeVariant = new Map();
+        // 上一次使用的变体索引；新一笔只在剩余变体中挑，避免连续两笔用同一份纹理
+        // （不连续的"偶发重复"仍允许）
+        // key = `${type}_${size}` → number
+        this._lastVariantIdx = new Map();
+        // 上次使用的变体索引，下笔从剩余变体里挑，避免连续两笔撞同一份纹理
+        // key = `${type}_${size}` → number
+        this._lastVariantIdx = new Map();
     }
 
     /**
@@ -111,27 +126,66 @@ class BrushManager {
     }
 
     /**
-     * 强制重新生成随机笔刷并更新缓存（每笔落笔时调用一次）
-     * 适用于 splatter / dry 这类含随机元素的笔刷
+     * 是否为含随机元素的笔刷（用变体池策略）
+     */
+    _isRandomBrush(brush) {
+        return !brush.image && (brush.type === 'watercolor' || brush.type === 'splatter' || brush.type === 'dry');
+    }
+
+    /**
+     * 落笔时调用：确保变体池存在（懒生成 RANDOM_VARIANT_COUNT 份），
+     * 然后从池中随机挑一份作为本笔的"激活变体"，下次 createBrushTexture 直接返回它
      */
     refreshRandomBrush(size, brush) {
-        if (brush.image) return;
-        if (brush.type !== 'splatter' && brush.type !== 'dry') return;
+        if (!this._isRandomBrush(brush)) return;
         const key = `${brush.type}_${size}`;
-        this._brushCache.delete(key);
-        this.createBrushTexture(size, brush);
+        let pool = this._brushCache.get(key);
+        if (!Array.isArray(pool)) {
+            pool = [];
+            for (let i = 0; i < RANDOM_VARIANT_COUNT; i++) {
+                pool.push(this._buildBrushCanvas(size, brush));
+            }
+            this._brushCache.set(key, pool);
+        }
+        const lastIdx = this._lastVariantIdx.get(key);
+        let idx = Math.floor(Math.random() * pool.length);
+        if (idx === lastIdx && pool.length > 1) {
+            // 连撞同一份：在剩余 N-1 份里再挑一次（>=2 份就保证与上一笔不同）
+            idx = (idx + 1 + Math.floor(Math.random() * (pool.length - 1))) % pool.length;
+        }
+        this._lastVariantIdx.set(key, idx);
+        this._activeVariant.set(key, pool[idx]);
     }
 
     /**
      * 创建笔刷纹理
      */
     createBrushTexture(size, brush) {
-        // splatter/dry 现在也走缓存，由 refreshRandomBrush 在落笔时刷新随机
         const cacheable = !brush.image;
         if (cacheable) {
             const key = `${brush.type}_${size}`;
-            if (this._brushCache.has(key)) return this._brushCache.get(key);
+            if (this._isRandomBrush(brush)) {
+                // 随机笔刷：返回当前激活变体；池未建则现场建一份并激活
+                const active = this._activeVariant.get(key);
+                if (active) return active;
+                this.refreshRandomBrush(size, brush);
+                return this._activeVariant.get(key);
+            }
+            // 确定性笔刷：单 canvas 缓存
+            const cached = this._brushCache.get(key);
+            if (cached) return cached;
         }
+        const canvas = this._buildBrushCanvas(size, brush);
+        if (cacheable) {
+            this._brushCache.set(`${brush.type}_${size}`, canvas);
+        }
+        return canvas;
+    }
+
+    /**
+     * 实际生成一份笔刷 canvas（不带任何缓存逻辑）
+     */
+    _buildBrushCanvas(size, brush) {
 
         const canvas = document.createElement('canvas');
         canvas.width = size * 2;
@@ -167,9 +221,12 @@ class BrushManager {
                     break;
                     
                 case 'watercolor': {
+                    // 大尺寸下分布半径按 sqrt(REF/size) 收紧，让 35 个点之间的间距与 size=40 接近；
+                    // 点本身仍按 size 等比放大。size ≤ REF 时 distScale=1，不影响小笔尖手感。
+                    const distScale = size > WC_REF_SIZE ? Math.sqrt(WC_REF_SIZE / size) : 1;
                     for (let i = 0; i < WC_DOT_COUNT; i++) {
                         const angle = Math.random() * Math.PI * 2;
-                        const dist = Math.sqrt(Math.random()) * size * WC_DIST_RANGE;
+                        const dist = Math.sqrt(Math.random()) * size * WC_DIST_RANGE * distScale;
                         const dotSize = size * (WC_DOT_SIZE_MIN + Math.random() * WC_DOT_SIZE_RANGE);
                         const cx = centerX + Math.cos(angle) * dist;
                         const cy = centerY + Math.sin(angle) * dist;
@@ -254,10 +311,6 @@ class BrushManager {
             }
         }
         
-        if (cacheable) {
-            const key = `${brush.type}_${size}`;
-            this._brushCache.set(key, canvas);
-        }
         return canvas;
     }
 

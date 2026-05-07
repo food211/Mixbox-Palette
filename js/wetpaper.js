@@ -28,6 +28,7 @@ function _initWetPaperProgram() {
     this._initWetSpreadProgram();
     this._initWetBleedProgram();
     this._initDepositSpreadProgram();
+    this._initDripBleedProgram();
 }
 
 function _stepWetPaper() {
@@ -67,21 +68,24 @@ function _initWetSpreadProgram() {
 
         void main() {
             vec2 px = 1.0 / u_resolution;
-            float center = texture(u_heatmap, v_uv).r;
+            // R = 主笔触湿度通道；G = 水滴专用湿区通道（同时充当 mask + 扩散梯度源）
+            // 两个通道共用同一套邻居采样和 falloff，独立 max 传播
+            vec2 center = texture(u_heatmap, v_uv).rg;
 
-            float n  = texture(u_heatmap, v_uv + vec2( 0.0,  px.y * u_radius)).r;
-            float s  = texture(u_heatmap, v_uv + vec2( 0.0, -px.y * u_radius)).r;
-            float e  = texture(u_heatmap, v_uv + vec2( px.x * u_radius,  0.0)).r;
-            float w  = texture(u_heatmap, v_uv + vec2(-px.x * u_radius,  0.0)).r;
-            float ne = texture(u_heatmap, v_uv + vec2( px.x * u_radius * 0.707,  px.y * u_radius * 0.707)).r;
-            float nw = texture(u_heatmap, v_uv + vec2(-px.x * u_radius * 0.707,  px.y * u_radius * 0.707)).r;
-            float se = texture(u_heatmap, v_uv + vec2( px.x * u_radius * 0.707, -px.y * u_radius * 0.707)).r;
-            float sw = texture(u_heatmap, v_uv + vec2(-px.x * u_radius * 0.707, -px.y * u_radius * 0.707)).r;
+            vec2 n  = texture(u_heatmap, v_uv + vec2( 0.0,  px.y * u_radius)).rg;
+            vec2 s  = texture(u_heatmap, v_uv + vec2( 0.0, -px.y * u_radius)).rg;
+            vec2 e  = texture(u_heatmap, v_uv + vec2( px.x * u_radius,  0.0)).rg;
+            vec2 w  = texture(u_heatmap, v_uv + vec2(-px.x * u_radius,  0.0)).rg;
+            vec2 ne = texture(u_heatmap, v_uv + vec2( px.x * u_radius * 0.707,  px.y * u_radius * 0.707)).rg;
+            vec2 nw = texture(u_heatmap, v_uv + vec2(-px.x * u_radius * 0.707,  px.y * u_radius * 0.707)).rg;
+            vec2 se = texture(u_heatmap, v_uv + vec2( px.x * u_radius * 0.707, -px.y * u_radius * 0.707)).rg;
+            vec2 sw = texture(u_heatmap, v_uv + vec2(-px.x * u_radius * 0.707, -px.y * u_radius * 0.707)).rg;
 
-            float maxN = max(max(max(n, s), max(e, w)),
-                             max(max(ne, nw), max(se, sw)));
-            float inherited = maxN * u_falloff;
-            outColor = vec4(max(center, inherited), 0.0, 0.0, 1.0);
+            vec2 maxN = max(max(max(n, s), max(e, w)),
+                            max(max(ne, nw), max(se, sw)));
+            vec2 inherited = maxN * u_falloff;
+            vec2 outRG = max(center, inherited);
+            outColor = vec4(outRG.r, outRG.g, 0.0, 1.0);
         }
     `);
 
@@ -910,10 +914,11 @@ function _initWetBleedProgram() {
             float neighborGate = smoothstep(0.05, 0.25, avgNeighborDeposit);
             float selfGate     = smoothstep(0.05, 0.5,  myDeposit);
             float interiorRaw = max(neighborGate, selfGate);
-            // wet 越湿越倾向流动（真水彩物理）
-            float wetnessFlow = smoothstep(0.1, 0.6, wetness);
+            // wet 越湿越倾向流动（真水彩物理），但低湿度保留 30% 最小融合
+            // 否则湿度=0 时笔内圆点之间的缝完全不填补，会露出底色变白
+            float wetnessFlow = max(0.3, smoothstep(0.1, 0.6, wetness));
             float interiorGate = interiorRaw * wetnessFlow;
-            float flatAmt = u_strength * 2.5 * absorbJitter * wetGate * interiorGate;
+            float flatAmt = u_strength * 1.5 * absorbJitter * wetGate * interiorGate;
             if (flatWeight > 0.001 && flatAmt > 0.001) {
                 vec3 flatAvg = flatColor / flatWeight;
                 outRGB = mix(outRGB, flatAvg, clamp(flatAmt, 0.0, 1.0));
@@ -1016,6 +1021,211 @@ function _applyWetBleed() {
     gl.bindBuffer(gl.ARRAY_BUFFER, this._wetBleedBuf);
     gl.enableVertexAttribArray(this._wetBleedLoc.a_pos);
     gl.vertexAttribPointer(this._wetBleedLoc.a_pos, 2, gl.FLOAT, false, 0, 0);
+
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+}
+
+// ─── drip 专属轮廓扩散 ──────────────────────────────────────────────────────
+// 复用主 bleed 的"梯度吸色"思路，但 mask + 梯度全部来自 wetHeatmap.g（水滴专用通道），
+// 完全隔离于主笔触 deposit/R 通道，新笔触落笔不会清掉。
+
+function _initDripBleedProgram() {
+    const cached = BaseWebGLPainter._programCache.dripBleed;
+    if (cached) {
+        this._dripBleedProgram = cached.program;
+        this._dripBleedLoc     = cached.locations;
+        this._dripBleedBuf     = cached.buffer;
+        return;
+    }
+    const gl = this.gl;
+
+    const vs = this.createShader(gl.VERTEX_SHADER, `#version 300 es
+        in vec2 a_pos;
+        out vec2 v_uv;
+        void main() {
+            v_uv = vec2(a_pos.x * 0.5 + 0.5, a_pos.y * 0.5 + 0.5);
+            gl_Position = vec4(a_pos, 0.0, 1.0);
+        }
+    `);
+
+    const fs = this.createShader(gl.FRAGMENT_SHADER, `#version 300 es
+        precision highp float;
+        uniform sampler2D u_canvas;
+        uniform sampler2D u_dripMask;     // wetHeatmap.g：水滴湿区 + 梯度源
+        uniform vec2 u_resolution;
+        uniform float u_radius;
+        uniform float u_strength;
+        uniform float u_gateMin;
+        uniform float u_noiseAmount;
+        in vec2 v_uv;
+        out vec4 outColor;
+
+        float hash(vec2 p) {
+            return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+        }
+
+        void main() {
+            vec2 px = 1.0 / u_resolution;
+            float my = texture(u_dripMask, v_uv).g;
+            vec4 myColor = texture(u_canvas, v_uv);
+
+            if (my < u_gateMin) {
+                outColor = myColor;
+                return;
+            }
+
+            // 像素级纤维噪声：扰动半径和吸色强度，让边缘呈现纸纤维粗细不均的质感
+            vec2 pixelCoord = floor(v_uv * u_resolution);
+            float noise1 = hash(pixelCoord);
+            vec2 clusterCoord = floor(v_uv * u_resolution / 3.0);
+            float clusterNoise = hash(clusterCoord);
+
+            float radiusJitter = mix(1.0 - u_noiseAmount, 1.0 + u_noiseAmount, noise1);
+            float effectiveRadius = u_radius * radiusJitter;
+            float absorbJitter = mix(1.0 - u_noiseAmount, 1.0 + u_noiseAmount, clusterNoise);
+
+            vec2 dirs[8];
+            dirs[0] = vec2( 1.0,  0.0);
+            dirs[1] = vec2(-1.0,  0.0);
+            dirs[2] = vec2( 0.0,  1.0);
+            dirs[3] = vec2( 0.0, -1.0);
+            dirs[4] = vec2( 0.707,  0.707);
+            dirs[5] = vec2(-0.707,  0.707);
+            dirs[6] = vec2( 0.707, -0.707);
+            dirs[7] = vec2(-0.707, -0.707);
+
+            // 双路：grad（边缘梯度吸——轮廓扩散） + flat（实心区双向平滑——内部融合）
+            vec3 gradColor = vec3(0.0);
+            float gradWeight = 0.0;
+            vec3 flatColor = vec3(0.0);
+            float flatWeight = 0.0;
+            float neighborMaskSum = 0.0;
+
+            for (int i = 0; i < 8; i++) {
+                // 每个方向再加独立的像素级偏移，让采样点散开
+                float di = float(i);
+                vec2 perDirJitter = vec2(
+                    hash(pixelCoord + vec2(di * 1.7, 0.5)) - 0.5,
+                    hash(pixelCoord + vec2(0.3, di * 2.1)) - 0.5
+                ) * u_noiseAmount * effectiveRadius;
+                vec2 sampleUV = v_uv + (dirs[i] * effectiveRadius + perDirJitter) * px;
+
+                float n = texture(u_dripMask, sampleUV).g;
+                vec3 nColor = texture(u_canvas, sampleUV).rgb;
+
+                // 路 1：梯度吸（轮廓扩散，只往湿区中心方向吸）
+                float dh = n - my;
+                if (dh > 0.0) {
+                    gradColor += nColor * dh;
+                    gradWeight += dh;
+                }
+
+                // 路 2：双向平滑（湿区内部颜色互融）
+                float w = n + 0.15;
+                flatColor += nColor * w;
+                flatWeight += w;
+                neighborMaskSum += n;
+            }
+
+            vec3 outRGB = myColor.rgb;
+
+            // 路 1：梯度吸 —— 高 my 处自带 resist 抑制，避免实心中心被反复抹白
+            float resist = 1.0 - smoothstep(0.3, 0.8, my);
+            if (gradWeight > 0.001) {
+                vec3 gradAvg = gradColor / gradWeight;
+                // gateScale 上限再降到 0.03 —— 水滴 G 通道整体热度远低于主笔触 R，
+                // 让 my≈0.005~0.03 的小热区也能拿到满 gateScale，噪声扰动充分显现
+                float gateScale = smoothstep(u_gateMin, 0.03, my);
+                float gradAmt = u_strength * gradWeight * absorbJitter * gateScale * resist;
+                outRGB = mix(outRGB, gradAvg, clamp(gradAmt, 0.0, 1.0));
+            }
+
+            // 路 2：双向平滑 —— 实心区融合
+            // 整体阈值再降一档，对齐水滴 G 通道的低热度尺度
+            float avgNeighbor = neighborMaskSum / 8.0;
+            float neighborGate = smoothstep(0.005, 0.04, avgNeighbor);
+            float selfGate     = smoothstep(0.005, 0.06, my);
+            float interiorGate = max(neighborGate, selfGate);
+            float flatAmt = u_strength * 1.5 * absorbJitter * interiorGate;
+            if (flatWeight > 0.001 && flatAmt > 0.001) {
+                vec3 flatAvg = flatColor / flatWeight;
+                outRGB = mix(outRGB, flatAvg, clamp(flatAmt, 0.0, 1.0));
+            }
+
+            outColor = vec4(outRGB, myColor.a);
+        }
+    `);
+
+    const prog = this.createProgram(vs, fs);
+    this._dripBleedProgram = prog;
+
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+        -1,-1,  1,-1,  -1,1,  1,1
+    ]), gl.STATIC_DRAW);
+    this._dripBleedBuf = buf;
+
+    this._dripBleedLoc = {
+        a_pos:         gl.getAttribLocation(prog,  'a_pos'),
+        u_canvas:      gl.getUniformLocation(prog, 'u_canvas'),
+        u_dripMask:    gl.getUniformLocation(prog, 'u_dripMask'),
+        u_resolution:  gl.getUniformLocation(prog, 'u_resolution'),
+        u_radius:      gl.getUniformLocation(prog, 'u_radius'),
+        u_strength:    gl.getUniformLocation(prog, 'u_strength'),
+        u_gateMin:     gl.getUniformLocation(prog, 'u_gateMin'),
+        u_noiseAmount: gl.getUniformLocation(prog, 'u_noiseAmount'),
+    };
+
+    BaseWebGLPainter._programCache.dripBleed = {
+        program: prog,
+        locations: this._dripBleedLoc,
+        buffer: this._dripBleedBuf,
+    };
+}
+
+function _applyDripBleed() {
+    if (!this._dripBleedProgram) return;
+    // 没有活跃水滴粒子时跳过（避免空跑）
+    if (!this._dripParticles || this._dripParticles.length === 0) return;
+
+    const gl = this.gl;
+    const cw = this.canvas.width;
+    const ch = this.canvas.height;
+
+    // canvas → temp
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this._copyReadFB);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.textures.canvas, 0);
+    gl.bindTexture(gl.TEXTURE_2D, this.textures.temp);
+    gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, cw, ch);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+    gl.useProgram(this._dripBleedProgram);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
+    gl.viewport(0, 0, cw, ch);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.textures.temp);
+    gl.uniform1i(this._dripBleedLoc.u_canvas, 0);
+
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.textures.wetHeatmap);
+    gl.uniform1i(this._dripBleedLoc.u_dripMask, 1);
+
+    // 湿度作为水滴扩散强度的总开关：湿度=0 时 bleed 完全停止，湿度=1 时满强度
+    const wetFactor = this._wetness ?? 0.5;
+    gl.uniform2f(this._dripBleedLoc.u_resolution,  cw, ch);
+    gl.uniform1f(this._dripBleedLoc.u_radius,      DRIP_BLEED_RADIUS);
+    gl.uniform1f(this._dripBleedLoc.u_strength,    DRIP_BLEED_STRENGTH * wetFactor);
+    gl.uniform1f(this._dripBleedLoc.u_gateMin,     DRIP_BLEED_GATE_MIN);
+    gl.uniform1f(this._dripBleedLoc.u_noiseAmount, DRIP_BLEED_NOISE);
+
+    this._disableAllVertexAttribs();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this._dripBleedBuf);
+    gl.enableVertexAttribArray(this._dripBleedLoc.a_pos);
+    gl.vertexAttribPointer(this._dripBleedLoc.a_pos, 2, gl.FLOAT, false, 0, 0);
 
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -1336,6 +1546,8 @@ Object.assign(BaseWebGLPainter.prototype, {
     _applyDepositColorPass,
     _initWetBleedProgram,
     _applyWetBleed,
+    _initDripBleedProgram,
+    _applyDripBleed,
     setWetPaperActive,
     _startWetPaperRaf,
     _stopWetPaperRaf,

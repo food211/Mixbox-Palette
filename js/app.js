@@ -21,6 +21,8 @@ function _bindDebugShortcuts(painter) {
     window.debugWetPaper       = (on) => painter.debugWetPaper(on);
     window.debugWetMask        = (on) => painter.debugWetMask(on);
     window.toggleWetMask       = (on) => painter.toggleWetMask(on);
+    window.toggleDrip          = (on) => painter.toggleDrip(on);
+    window.debugDripHeatmap    = (on) => painter.debugDripHeatmap(on);
 
     // 不带括号的别名：定义成 getter，访问即触发 toggle（仅无参形态）
     const defGetter = (name, fn) => Object.defineProperty(window, name, {
@@ -33,6 +35,8 @@ function _bindDebugShortcuts(painter) {
     defGetter('dwp',  () => painter.debugWetPaper());
     defGetter('dwm',  () => painter.debugWetMask());
     defGetter('twm',  () => painter.toggleWetMask());
+    defGetter('td',    () => painter.toggleDrip());
+    defGetter('ddrip', () => painter.debugDripHeatmap());
 }
 
 function reportAnalyticsEnv() {
@@ -612,6 +616,20 @@ function renderSliders() {
     _applyLabel(document.querySelector('.label-spacing'),  binding.spacing.label);
 
     syncAllRangeThumbs();
+    syncDripToggleUI();
+}
+
+// 仅水彩模式显示 drip 按钮；active 状态反映 painter._dripUserPref（true / false / null=auto）
+function syncDripToggleUI() {
+    const btn = document.getElementById('dripToggleBtn');
+    if (!btn) return;
+    const isWatercolor = getCurrentMode() === 'watercolor';
+    btn.hidden = !isWatercolor;
+    if (!isWatercolor) return;
+    const pref = painter ? painter._dripUserPref : null;
+    // auto 时按 capable 来呈现：dripCapable 为真 → active；否则 inactive
+    const effectiveOn = (pref === true) || (pref === null && !!(painter && painter._dripCapable));
+    btn.classList.toggle('active', effectiveOn);
 }
 
 function persistCurrentState() {
@@ -733,6 +751,17 @@ function bindEvents() {
         pressureBtn.classList.toggle('active', pressureEnabled);
         paletteStorage.saveAppSettings({ pressureEnabled });
     });
+
+    // 水滴效果开关：点击在"开 / 关"之间切换（不暴露 auto 状态，简化用户心智）
+    const dripToggleBtn = document.getElementById('dripToggleBtn');
+    if (dripToggleBtn) {
+        dripToggleBtn.addEventListener('click', () => {
+            if (!painter || typeof painter.toggleDrip !== 'function') return;
+            const currentlyOn = dripToggleBtn.classList.contains('active');
+            painter.toggleDrip(!currentlyOn);
+            syncDripToggleUI();
+        });
+    }
 
     // 压感灵敏度 4 档 toggle（gamma + size 下限/上限 + 浓度下限 绑定存储在 data-* 属性）
     // 必须恰有一个按钮处于 active 状态
@@ -2030,6 +2059,9 @@ function beginStroke(type, color = null, startX = 0, startY = 0, pressure = 1.0)
             painter._wetIsDrawing = true;
             painter._wetColor = color ? hexToRgb(color) : { r: 0, g: 0, b: 0 };
             painter._wetMixStrength = painter.baseMixStrength;
+            // drip 距离闸门重置，新笔触从 0 开始累加
+            painter._dripSpawnAccumPx = 0;
+            painter._dripLastSpawnXY = null;
             // RAF 未运行时（如第一笔）立即启动，确保第一笔就有湿纸效果
             painter.startHeatmapFadeOut();
         }
@@ -2318,6 +2350,11 @@ function drawBrush(x, y, color, prevX = x, prevY = y, pressure = 1.0) {
 
     // 恢复用户设置的 baseMixStrength
     painter.baseMixStrength = originalMixStrength;
+
+    // 水彩笔触：按距离闸门生成 drip 水滴起点
+    if (isWatercolor && painter._maybeSpawnDripParticles) {
+        painter._maybeSpawnDripParticles(x, y, effectiveSize * 2, colorRGB);
+    }
 
     return dirtyRect;
 }

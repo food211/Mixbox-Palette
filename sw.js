@@ -6,7 +6,7 @@
  * 后续相对路径请求（versions.json 等）撞到没在跑的 vite 报 connection refused。
  */
 const IS_DEV_HOST = self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1';
-const CACHE_NAME = 'km-palette-v96';
+const CACHE_NAME = 'km-palette-v97';
 const CACHE_URLS = [
   './app.html',
   './css/base.css',
@@ -26,10 +26,12 @@ const CACHE_URLS = [
   './js/app.js',
   './js/mixbox.js',
   './js/device-profile.js',
+  './js/perf-watchdog.js',
   './js/frame-scheduler.js',
   './js/base-painter.js',
   './js/heatmap.js',
   './js/wetpaper.js',
+  './js/drip.js',
   './js/mixbox-painter.js',
   './js/km-painter.js',
   './js/brush-manager.js',

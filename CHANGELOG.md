@@ -1,5 +1,22 @@
 # 更新日志 / Changelog
 
+== V1.5.6b ==
+[ZH]
+### 新功能
+- **水彩颜料流挂** — 高湿度下笔触会自然滴下水滴，沿途留下浅淡的色痕，最后沉淀成带咖啡环边缘的色斑，更接近真实水彩在纸上自由流动的感觉
+- **流挂开关** — 水彩笔的湿度滑条右侧新增 💧 按钮，可一键开关流挂效果
+
+### 优化
+- **水彩笔扩散更细腻** — 湿区扩散半径下调，晕染过渡更柔和
+
+[EN]
+### New Features
+- **Watercolor drip** — At higher wetness, strokes naturally drip downward, leaving faint color trails and settling into spots with coffee-ring edges — closer to how real watercolor flows on paper
+- **Drip toggle** — A new 💧 button next to the watercolor wetness slider lets you switch the drip effect on/off
+
+### Improvements
+- **Smoother watercolor diffusion** — Reduced wet-area spread radius for a softer, more delicate transition
+
 == V1.5.6 ==
 [ZH]
 ### 优化
