@@ -105,6 +105,7 @@ class BaseWebGLPainter {
         this._calcGpuBudget();
         this.compileShaders();
         await this._loadLUT();
+        this._initDripCapable();
         this.setupTextures();
         this.setupFramebuffers();
         this.setupGeometry();
@@ -112,6 +113,7 @@ class BaseWebGLPainter {
         this._initHeatmapProgram();
         this._initHeatDecayProgram();
         this._initWetPaperProgram();
+        if (this._dripCapable) this._initDripStepProgram();
     }
 
     initWebGL() {
@@ -616,6 +618,7 @@ class BaseWebGLPainter {
         if (this._debugWetPaperEnabled) this._flushDebugWetPaper(this._debugHeatOpacity ?? 1.0);
         if (this._debugDepositHeatmapEnabled) this._flushDebugDepositHeatmap(this._debugHeatOpacity ?? 1.0);
         if (this._debugWetMaskHeatmapEnabled) this._flushDebugWetMaskHeatmap(this._debugHeatOpacity ?? 1.0);
+        if (this._debugDripHeatmapEnabled) this._flushDebugDripHeatmap(this._debugHeatOpacity ?? 1.0);
     }
 
     /**

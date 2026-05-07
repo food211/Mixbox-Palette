@@ -21,6 +21,8 @@ function _bindDebugShortcuts(painter) {
     window.debugWetPaper       = (on) => painter.debugWetPaper(on);
     window.debugWetMask        = (on) => painter.debugWetMask(on);
     window.toggleWetMask       = (on) => painter.toggleWetMask(on);
+    window.toggleDrip          = (on) => painter.toggleDrip(on);
+    window.debugDripHeatmap    = (on) => painter.debugDripHeatmap(on);
 
     // 不带括号的别名：定义成 getter，访问即触发 toggle（仅无参形态）
     const defGetter = (name, fn) => Object.defineProperty(window, name, {
@@ -33,6 +35,8 @@ function _bindDebugShortcuts(painter) {
     defGetter('dwp',  () => painter.debugWetPaper());
     defGetter('dwm',  () => painter.debugWetMask());
     defGetter('twm',  () => painter.toggleWetMask());
+    defGetter('td',    () => painter.toggleDrip());
+    defGetter('ddrip', () => painter.debugDripHeatmap());
 }
 
 function reportAnalyticsEnv() {

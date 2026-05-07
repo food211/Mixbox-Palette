@@ -205,6 +205,32 @@ const WET_CANVAS_BLEED_NOISE_SCALE_EXP = 0.4;
 /** 湿度 gate 下限：wetHeatmap 低于此值的像素停止扩散（表示已干、定型） */
 const WET_CANVAS_BLEED_WET_GATE_MIN = 0.02;
 
+// ─── 3.4 drip（湿区往下流动）────────────────────────────────────────────────
+// 基于 wetMaskHeatmap 边缘渗出 + 重力向下传播，写到独立 dripHeatmap，
+// 再在 _applyWetColor shader 里把 mask 项替换为 max(wetMask, drip)。
+// 全管线由 painter._dripEnabled / DeviceProfile.DRIP_ENABLED / PerfWatchdog 三层门控。
+
+/** 每帧每像素从 wetMask 渗出到 drip 的概率（hash 稀疏化，越大流挂越密） */
+const DRIP_CHANCE_PER_FRAME = 0.04;
+
+/** wetMask 低于此值不渗出（保证只在真正湿的区域生效） */
+const DRIP_SEED_MASK_GATE = 0.15;
+
+/** 每帧向下推进的像素数（重力速度） */
+const DRIP_GRAVITY_PX = 1.6;
+
+/** 横向抖动幅度（像素，hash 噪声驱动），0=直流，1+=蛇形 */
+const DRIP_JITTER_X_PX = 0.6;
+
+/** 传播衰减（0~1）：每帧 drip 强度保留比例，决定最大流挂长度 */
+const DRIP_DECAY = 0.985;
+
+/** wetHeatmap 门控：低于此值停止流动（流到干区自然停） */
+const DRIP_WET_GATE = 0.05;
+
+/** drip 在 _applyWetColor 中作为 mask 项的增益（<1 让流痕比主笔淡） */
+const DRIP_COLOR_GAIN = 0.6;
+
 // ─── 3.3 _applyDepositColor（咖啡环）────────────────────────────────────────
 // 松开画笔时 8 帧渐进沉积，基于 depositHeatmap 的梯度做边缘强调。
 // 目前复用 _applyWetColor 的 shader，参数见 3.1 的 WET_DEPOSIT_* 与 1.4 的 depositHeatmap 组。

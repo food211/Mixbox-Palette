@@ -348,6 +348,7 @@
             const tier0 = Promise.all([
                 loadScript('js/params.js'),
                 loadScript('js/device-profile.js'),
+                loadScript('js/perf-watchdog.js'),
                 loadScript('js/frame-scheduler.js'),
                 loadScript('js/base-painter.js'),
                 loadScript('js/brush-manager.js'),
@@ -363,6 +364,7 @@
             const tier1 = Promise.all([
                 loadScript('js/heatmap.js'),
                 loadScript('js/wetpaper.js'),
+                loadScript('js/drip.js'),
             ]);
 
             // updater / announcer 不依赖其他脚本，此时就发起下载（不 await，让请求尽早排队）
