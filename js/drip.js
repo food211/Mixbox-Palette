@@ -16,7 +16,7 @@
  *
  *   寿命/重力随当前湿度（_wetness 0~1）线性映射；湿度=0 → 完全跳过。
  *
- * 三层启停门控：DeviceProfile.DRIP_ENABLED / PerfWatchdog / painter._dripUserPref
+ * 两层启停门控：DeviceProfile.DRIP_ENABLED / painter._dripUserPref
  */
 
 const DRIP_USER_PREF_KEY = 'drip_user_pref_v1';
@@ -42,10 +42,6 @@ function _shouldRunDrip() {
     if (!this._dripCapable) return false;
     const pref = this._dripUserPref;
     if (pref === false) return false;
-    if (pref === true)  return true;
-    if (typeof PerfWatchdog !== 'undefined') {
-        return PerfWatchdog.shouldRun('drip');
-    }
     return true;
 }
 
@@ -285,7 +281,7 @@ function toggleDrip(value) {
     if (next === false) this._dripParticles.length = 0;
 
     const label = next === null ? 'auto' : (next ? '强制开' : '强制关');
-    console.log(`[toggleDrip] ${label}（capable=${this._dripCapable}, watchdog=${typeof PerfWatchdog !== 'undefined' ? PerfWatchdog.getPhase('drip') : 'n/a'}, particles=${this._dripParticles.length}）`);
+    console.log(`[toggleDrip] ${label}（capable=${this._dripCapable}, particles=${this._dripParticles.length}）`);
 }
 
 function debugDripHeatmap() {

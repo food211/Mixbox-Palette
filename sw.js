@@ -26,7 +26,6 @@ const CACHE_URLS = [
   './js/app.js',
   './js/mixbox.js',
   './js/device-profile.js',
-  './js/perf-watchdog.js',
   './js/frame-scheduler.js',
   './js/base-painter.js',
   './js/heatmap.js',

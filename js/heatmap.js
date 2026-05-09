@@ -624,19 +624,6 @@ function startHeatmapFadeOut() {
     let dripFrameCounter = 0;
     let pendingApplyWetColorCount = 0;
 
-    // 注册 drip 的 PerfWatchdog（首次注册时；多次调用幂等）
-    if (typeof PerfWatchdog !== 'undefined' && painter._dripCapable) {
-        PerfWatchdog.register('drip', {
-            budgetMs: 4,
-            sampleFrames: 60,
-            warmupMs: 5000,
-            onDowngrade: () => {
-                console.warn('[drip] 运行期实测超预算，已自动降级关闭');
-                if (painter._dripParticles) painter._dripParticles.length = 0;
-            },
-        });
-    }
-
     function tick() {
         if (painter._disposed) {
             FrameScheduler.unregister(taskName);
@@ -709,16 +696,10 @@ function startHeatmapFadeOut() {
             dripFrameCounter++;
             if (dripFrameCounter >= DRIP_STRIDE) {
                 dripFrameCounter = 0;
-                const measuringInactive = (typeof PerfWatchdog !== 'undefined')
-                    && PerfWatchdog.isMeasuringInactive('drip');
-                if (typeof PerfWatchdog !== 'undefined') PerfWatchdog.beginFrame('drip', !measuringInactive);
-                if (!measuringInactive) {
-                    painter._stepDripParticles();
-                    // 水滴轮廓扩散：基于 wetHeatmap.g 把画布颜色向湿区中心吸
-                    painter._applyDripBleed();
-                    painter.flush();
-                }
-                if (typeof PerfWatchdog !== 'undefined') PerfWatchdog.endFrame('drip');
+                painter._stepDripParticles();
+                // 水滴轮廓扩散：基于 wetHeatmap.g 把画布颜色向湿区中心吸
+                painter._applyDripBleed();
+                painter.flush();
             }
         }
 
@@ -793,7 +774,7 @@ function listDebugCommands() {
         ['debugWetPaper()        (dwp)', '切换 wetHeatmap 可视化（与 debugHeatmap 同源）'],
         ['debugWetMask()         (dwm)', '切换 wetMask × wetHeatmap 交集可视化（_applyWetColor 实际生效区）'],
         ['toggleWetMask(t/f)     (twm)', '启用/关闭 _applyWetColor 取 mask 交集（默认启用）'],
-        ['toggleDrip(t/f/null)   (td) ', '强制开/关/auto 颜料水滴往下流挂；auto 模式由设备 + PerfWatchdog 决定'],
+        ['toggleDrip(t/f/null)   (td) ', '强制开/关/auto 颜料水滴往下流挂；auto 模式由设备能力决定'],
         ['debugDripHeatmap()     (ddrip)', '打印当前活跃水滴粒子数及前 5 个状态'],
         ['help()                 (h)  ', '列出本清单'],
     ];
