@@ -1,5 +1,14 @@
 # 更新日志 / Changelog
 
+== V1.5.6c ==
+[ZH]
+### 修复
+- **水滴流挂开关失效** — 修复了部分情况下水滴流挂效果无法开启的问题
+
+[EN]
+### Bug Fixes
+- **Drip toggle not working** — Fixed an issue where the watercolor drip effect could fail to turn on in some cases
+
 == V1.5.6b ==
 [ZH]
 ### 新功能

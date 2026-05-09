@@ -1,6 +1,11 @@
 {
   "versions": [
     {
+      "version": "V1.5.6c",
+      "zh": "### 修复\r\n- **水滴流挂开关失效** — 修复了部分情况下水滴流挂效果无法开启的问题",
+      "en": "### Bug Fixes\r\n- **Drip toggle not working** — Fixed an issue where the watercolor drip effect could fail to turn on in some cases"
+    },
+    {
       "version": "V1.5.6b",
       "zh": "### 新功能\r\n- **水彩颜料流挂** — 高湿度下笔触会自然滴下水滴，沿途留下浅淡的色痕，最后沉淀成带咖啡环边缘的色斑，更接近真实水彩在纸上自由流动的感觉\r\n- **流挂开关** — 水彩笔的湿度滑条右侧新增 💧 按钮，可一键开关流挂效果\r\n\r\n### 优化\r\n- **水彩笔扩散更细腻** — 湿区扩散半径下调，晕染过渡更柔和",
       "en": "### New Features\r\n- **Watercolor drip** — At higher wetness, strokes naturally drip downward, leaving faint color trails and settling into spots with coffee-ring edges — closer to how real watercolor flows on paper\r\n- **Drip toggle** — A new 💧 button next to the watercolor wetness slider lets you switch the drip effect on/off\r\n\r\n### Improvements\r\n- **Smoother watercolor diffusion** — Reduced wet-area spread radius for a softer, more delicate transition"
@@ -9,12 +14,7 @@
       "version": "V1.5.6",
       "zh": "### 优化\r\n- **水彩笔焕新** — 现在有真实的透明叠色效果，晕染更自然，并且能和画布上已有的像素相互作用、彼此融合，整体表现更接近真实水彩",
       "en": "### Improvements\r\n- **Watercolor brush revamped** — Real translucent layering, more natural diffusion, and strokes now interact and blend with existing pixels on the canvas — much closer to real watercolor"
-    },
-    {
-      "version": "V1.5.5",
-      "zh": "### 新功能\r\n- **新手引导** — 第一次画画后会贴心提示可以切换笔刷、调色板和混色引擎，老用户不会被打扰\r\n\r\n### 修复\r\n- **检查更新失败** — 修复在某些情况下点击\"检查更新\"会报连接失败的问题",
-      "en": "### New Features\r\n- **Onboarding tips** — After your first stroke, friendly bubbles point out the brush, palette, and engine switches; existing users are skipped automatically\r\n\r\n### Fix\r\n- **Update check failure** — Fixed a case where clicking \"check for updates\" could fail with a connection error"
     }
   ],
-  "generatedAt": "2026-05-07T18:48:01.099Z"
+  "generatedAt": "2026-05-09T08:52:15.476Z"
 }
