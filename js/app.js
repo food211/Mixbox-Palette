@@ -314,6 +314,12 @@ async function initApp() {
     loadToolStatesFromStorage();
     currentBrush.type = toolStates.brush.brushType;
 
+    // 4a. 把"启动时实际生效"的 palette / brush 当作一次切换上报，
+    // 让 GA4 报表里 (not set) 桶消失。带 is_initial:true 区分主动切换与启动初值，
+    // 历史"主动切换"口径仍可通过过滤 is_initial != true 还原。
+    track('palette_preset_change', { from_palette: '(initial)', to_palette: currentPalette, is_initial: true });
+    track('brush_select', { brush_type: currentBrush.type, tool: 'brush', is_initial: true });
+
     // 4b. 加载应用全局设置（颜色、压感）
     const savedAppSettings = paletteStorage.loadAppSettings();
     if (savedAppSettings) {
