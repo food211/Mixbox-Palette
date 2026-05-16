@@ -42,14 +42,14 @@ Drag the handles on either side of the black panel to resize the mixing canvas (
 
 ---
 
-## Dual Mixing Engines — MB / KM
+## Dual Mixing Engines — KM / MB
 
-Switch anytime via the **MB/KM** button in the top-left. Canvas auto-repaints from stroke history.
+Both engines are calibrated to produce visually similar results in most cases. Switch anytime via the **MB/KM** button in the top-left. Canvas auto-repaints from stroke history.
 
-- **Mixbox (MB)** — Default. [Mixbox](https://scrtwpns.com/mixbox/) LUT-based algorithm, CC BY-NC 4.0. Hand-tuned anchor pigments → expressive, lively mixing (deep red + white can drift to vivid pink/magenta). Covers faster per stroke.
-- **KM** — Self-implemented. 32³ LUT maps RGB to 38-wavelength reflectance spectra (data from [spectral.js](https://github.com/rvanwijnen/spectral.js), MIT), then Kubelka-Munk mixing in spectral space. GPL v3. No anchor approximation → hue stays stable when diluted (deep red stays red, browns stay brown). Blends more gradually with wider transition bands.
+- **KM** — Default. Self-implemented. 32³ LUT maps RGB to 38-wavelength reflectance spectra (data from [spectral.js](https://github.com/rvanwijnen/spectral.js), MIT), then Kubelka-Munk mixing in spectral space. GPL v3. **More physically accurate and more sensitive** — small differences in pigment RGB produce visibly different mixing behavior, closer to how real paints respond to subtle variations. Algorithmically more prone to producing greens in certain blue/yellow combinations.
+- **Mixbox (MB)** — [Mixbox](https://scrtwpns.com/mixbox/) LUT-based algorithm, CC BY-NC 4.0. Hand-tuned anchor pigments → coarser but more uniform — produces consistent results across a wide range of inputs. Lower precision than KM, higher stability.
 
-Neither is "more correct" — pick MB for expressive mixing within its sweet spot, pick KM for predictable hue preservation and watercolor-style washes. Differences show up most in the 25–75% concentration range and on composite colors.
+The two engines now produce comparable results — pick KM (default) for higher precision and sensitivity, switch to MB for a more uniform feel or to avoid the GPL license. Differences are most visible at 25–75% concentration and on certain blue+yellow composites.
 
 Try the [KM Tuner](https://food211.github.io/Mixbox-Palette/km-tuner.html) to compare side by side.
 
@@ -192,14 +192,14 @@ Adobe Photoshop UXP 调色板插件，内置双物理混色引擎，模拟真实
 
 ---
 
-## 双混色引擎 —— MB / KM
+## 双混色引擎 —— KM / MB
 
-左上角 **MB/KM** 按钮随时切换，画布自动用笔画历史重绘。
+两个引擎已完成校准，多数场景下视觉效果接近。左上角 **MB/KM** 按钮随时切换，画布自动用笔画历史重绘。
 
-- **Mixbox (MB)** — 默认。基于 [Mixbox](https://scrtwpns.com/mixbox/) LUT 算法，CC BY-NC 4.0。人工调校的锚点颜料 → 表现力强、色彩"出彩"（深红+白能推到鲜亮的粉红/品红）。同浓度下覆盖更快。
-- **KM** — 自研。32³ LUT 把 RGB 映射到 38 波长反射率光谱（光谱数据来自 [spectral.js](https://github.com/rvanwijnen/spectral.js)，MIT），在光谱空间应用 Kubelka-Munk 公式混色。GPL v3。无锚点近似 → 色相稀释时稳定（深红稀释仍是红、棕色薄涂仍是棕）。混色更渐进，过渡带更宽更柔和。
+- **KM** —— **默认引擎**。自研。32³ LUT 把 RGB 映射到 38 波长反射率光谱（光谱数据来自 [spectral.js](https://github.com/rvanwijnen/spectral.js)，MIT），在光谱空间应用 Kubelka-Munk 公式混色。GPL v3。**计算更精确、对颜料 RGB 更灵敏** —— 颜料 RGB 的细微差异会带来可见的混色差异，更接近真实颜料对细微变化的响应。算法特性使某些蓝+黄组合更容易混合出绿色。
+- **Mixbox (MB)** —— 基于 [Mixbox](https://scrtwpns.com/mixbox/) LUT 算法，CC BY-NC 4.0。人工调校的锚点颜料 → 较粗糙但更均一 —— 在更广的输入范围内产出一致结果。精确度低于 KM，但稳定性更好。
 
-没有谁更"对" —— 想要"出彩、有表现力"选 MB；想要"色相稳、还原忠实、水彩薄涂"选 KM。差异在 25–75% 浓度区间和复合色上最明显。
+两个引擎现在效果接近 —— 默认用 KM 获得更高精度和灵敏度，想要更均一的手感或需要规避 GPL 许可时切换到 MB。差异在 25–75% 浓度区间和某些蓝+黄复合色上最明显。
 
 可使用 [KM Tuner](https://food211.github.io/Mixbox-Palette/km-tuner.html) 对比两引擎效果。
 
