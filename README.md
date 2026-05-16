@@ -1,6 +1,6 @@
 # 🎨 Mixbox Palette for Adobe Photoshop
 
-[点击查看中文版](#-mixbox-调色板---adobe-photoshop-插件)
+[点击查看中文版](#-mixbox-调色板---adobe-photoshop-插件) · [日本語版はこちら](README.ja.md)
 
 A UXP plugin for realistic pigment mixing in Adobe Photoshop, with dual physical mixing engines.
 
@@ -66,7 +66,7 @@ Try the [KM Tuner](https://food211.github.io/Mixbox-Palette/km-tuner.html) to co
 - **Zoom** — 60%–150% via top-right dropdown
 - **Undo/Redo** — up to 50 steps, GPU-backed canvas snapshots
 - **Auto-save** — canvas, settings, and history persist automatically
-- **Multilingual** — English / 中文, auto-detects system language
+- **Multilingual** — English / 中文 / 日本語, auto-detects system language
 
 ---
 
@@ -156,7 +156,7 @@ See [Changelog](https://food211.github.io/Mixbox-Palette/changelog.html) for ver
 
 # 🎨 Mixbox 调色板 - Adobe Photoshop 插件
 
-[Click here for English version](#-mixbox-palette-for-adobe-photoshop)
+[Click here for English version](#-mixbox-palette-for-adobe-photoshop) · [日本語版はこちら](README.ja.md)
 
 Adobe Photoshop UXP 调色板插件，内置双物理混色引擎，模拟真实颜料混合效果。
 
@@ -216,7 +216,7 @@ Adobe Photoshop UXP 调色板插件，内置双物理混色引擎，模拟真实
 - **缩放控制** —— 右上角下拉菜单，60%–150%
 - **50 步撤销/重做** —— 直接保存画布快照，使用 GPU 显存记录增量
 - **自动保存** —— 画布、历史和设置自动保存
-- **中英文双语** —— 自动跟随系统语言，可手动切换
+- **多语言支持** —— English / 中文 / 日本語，自动跟随系统语言，可手动切换
 
 ---
 
