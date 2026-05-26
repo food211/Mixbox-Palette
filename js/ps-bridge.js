@@ -1,6 +1,6 @@
 // ============ WebView 通信 ============
 // 远端要求的最低宿主版本（宿主版本低于此值时提示用户更新插件）
-const MIN_HOST_VERSION = '1.0.4';
+const MIN_HOST_VERSION = '1.2.0';
 
 // 画布背景色（模拟水彩纸的暖白色，RGB 约 248/248/245）
 const CANVAS_BG = { r: 1, g: 1, b: 1 };
