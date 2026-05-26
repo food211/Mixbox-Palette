@@ -1,5 +1,14 @@
 # 更新日志 / Changelog
 
+== V1.5.6d ==
+[ZH]
+### 修复
+- **旧版 PS 插件无法同步颜色** — 如果你的 Photoshop 插件版本较旧，打开时会提示前往 Adobe Exchange 更新，避免出现部分功能（如选区传输、从 PS 导入像素）静默失效
+
+[EN]
+### Bug Fixes
+- **Old PS plugin can't sync colors** — If your Photoshop plugin is outdated, you'll now see a prompt to update via Adobe Exchange, preventing silent failure of features like region transfer and importing pixels from PS
+
 == V1.5.6c ==
 [ZH]
 ### 修复
