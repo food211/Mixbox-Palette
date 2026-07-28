@@ -4,6 +4,8 @@
 
 A UXP plugin for realistic pigment mixing in Adobe Photoshop, with dual physical mixing engines.
 
+[Try the online SPA](https://mixbox-palette.pages.dev/)
+
 ![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg)
 ![Mixbox License](https://img.shields.io/badge/Mixbox-CC%20BY--NC%204.0-lightgrey.svg)
 
@@ -159,6 +161,8 @@ See [Changelog](https://food211.github.io/Mixbox-Palette/changelog.html) for ver
 [Click here for English version](#-mixbox-palette-for-adobe-photoshop) · [日本語版はこちら](README.ja.md)
 
 Adobe Photoshop UXP 调色板插件，内置双物理混色引擎，模拟真实颜料混合效果。
+
+[在线体验 SPA](https://mixbox-palette.pages.dev/)
 
 <img src="./assets/gifs/red_blue_yellow.gif" alt="红蓝黄三原色混合" width="480">
 
