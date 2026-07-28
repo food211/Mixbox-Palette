@@ -99,7 +99,7 @@ let lastImportPsBounds = null;   // { top, left, bottom, right } 最近一次导
 // mode = 'brush' | 'watercolor' | 'smudge'，由 currentTool + 当前笔型推导
 const TOOL_STATE_DEFAULTS = {
     brush:      { size: 40, mixStrength: 77, spacingRatio: 0.05, brushType: 'watercolor' },
-    watercolor: { mixStrength: 77, wetness: 50, brushType: 'watercolor' },
+    watercolor: { mixStrength: 77, wetness: 100, brushType: 'watercolor' },
     smudge:     { size: 40, strength: 50, spacingRatio: 0.05, brushType: 'watercolor' },
 };
 const toolStates = {

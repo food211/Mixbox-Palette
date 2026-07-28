@@ -1,5 +1,14 @@
 # 更新日志 / Changelog
 
+== V1.5.6e ==
+[ZH]
+### 优化
+- **水彩笔默认湿度调整为 100** — 新用户和重置后的水彩笔默认使用最高湿度，直接获得更充分的晕染与流动效果
+
+[EN]
+### Improvements
+- **Default watercolor wetness increased to 100** — New and reset watercolor brushes now start at maximum wetness for fuller diffusion and flow
+
 == V1.5.6d ==
 [ZH]
 ### 修复
