@@ -1,6 +1,11 @@
 {
   "versions": [
     {
+      "version": "V1.5.6e",
+      "zh": "### 优化\r\n- **水彩笔默认湿度调整为 100** — 新用户和重置后的水彩笔默认使用最高湿度，直接获得更充分的晕染与流动效果",
+      "en": "### Improvements\r\n- **Default watercolor wetness increased to 100** — New and reset watercolor brushes now start at maximum wetness for fuller diffusion and flow"
+    },
+    {
       "version": "V1.5.6d",
       "zh": "### 修复\r\n- **旧版 PS 插件无法同步颜色** — 如果你的 Photoshop 插件版本较旧，打开时会提示前往 Adobe Exchange 更新，避免出现部分功能（如选区传输、从 PS 导入像素）静默失效",
       "en": "### Bug Fixes\r\n- **Old PS plugin can't sync colors** — If your Photoshop plugin is outdated, you'll now see a prompt to update via Adobe Exchange, preventing silent failure of features like region transfer and importing pixels from PS"
@@ -9,12 +14,7 @@
       "version": "V1.5.6c",
       "zh": "### 修复\r\n- **水滴流挂开关失效** — 修复了部分情况下水滴流挂效果无法开启的问题",
       "en": "### Bug Fixes\r\n- **Drip toggle not working** — Fixed an issue where the watercolor drip effect could fail to turn on in some cases"
-    },
-    {
-      "version": "V1.5.6b",
-      "zh": "### 新功能\r\n- **水彩颜料流挂** — 高湿度下笔触会自然滴下水滴，沿途留下浅淡的色痕，最后沉淀成带咖啡环边缘的色斑，更接近真实水彩在纸上自由流动的感觉\r\n- **流挂开关** — 水彩笔的湿度滑条右侧新增 💧 按钮，可一键开关流挂效果\r\n\r\n### 优化\r\n- **水彩笔扩散更细腻** — 湿区扩散半径下调，晕染过渡更柔和",
-      "en": "### New Features\r\n- **Watercolor drip** — At higher wetness, strokes naturally drip downward, leaving faint color trails and settling into spots with coffee-ring edges — closer to how real watercolor flows on paper\r\n- **Drip toggle** — A new 💧 button next to the watercolor wetness slider lets you switch the drip effect on/off\r\n\r\n### Improvements\r\n- **Smoother watercolor diffusion** — Reduced wet-area spread radius for a softer, more delicate transition"
     }
   ],
-  "generatedAt": "2026-05-26T05:29:47.009Z"
+  "generatedAt": "2026-07-28T03:49:16.741Z"
 }
