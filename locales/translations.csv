@@ -17,6 +17,7 @@ selectBrush,Select Brush,选择笔刷,ブラシを選択
 undo,Undo,撤销,元に戻す
 redo,Redo,重做,やり直し
 smudgeTool,Smudge (S),涂抹 (S),スマッジ (S)
+brushTool,Brush (B),画笔 (B),ブラシ (B)
 eyedropperTool,Eyedropper (I),吸管 (I),スポイト (I)
 pressureSensitivity,Pressure Sensitivity,压感灵敏度,筆圧の感度
 pressureSensVery,Softest tip,笔尖最软,筆先が最も柔らかい
@@ -64,6 +65,14 @@ paletteName_schminckeHoradam,Schmincke Horadam 16,施美尔 Horadam 16色,シュ
 paletteName_kuretakeGansai,Kuretake Gansai 16,吴竹 Gansai 16色,呉竹 顔彩 16色
 paletteName_rembrandtOil,Rembrandt Oil 16,伦勃朗油画 16色,レンブラント 油彩 16色
 paletteName_wnGouache,Winsor & Newton Designers Gouache Mix,温莎牛顿 Designers Gouache,ウィンザー&ニュートン デザイナーズ ガッシュ
+paletteName_hidden,Hide palette,隐藏色板,パレットを非表示
+paletteShort_winsorNewtonCotman,W&N Cotman,温莎 Cotman,W&N コットマン
+paletteShort_digitalArtist,Digital Artist,数字艺术家,デジタル
+paletteShort_schminckeHoradam,Horadam,Horadam,ホラダム
+paletteShort_kuretakeGansai,Gansai,Gansai,顔彩
+paletteShort_rembrandtOil,Rembrandt Oil,伦勃朗油画,レンブラント
+paletteShort_wnGouache,W&N Gouache,温莎 Gouache,W&N ガッシュ
+paletteShort_hidden,Hide palette,隐藏色板,パレット非表示
 switchLanguage,Switch Language,切换语言,言語を切り替え
 versionModalTitle,Version Info,版本信息,バージョン情報
 versionUpToDate,✓ Up to date,✓ 已是最新版本,✓ 最新バージョンです
@@ -129,3 +138,7 @@ onboardingPalette,Switch palette for different pigments,换个调色板试试别
 onboardingEngine,Compare engines: KM vs Mixbox,试试切换引擎对比手感,エンジンを切り替えて比べてみて
 onboardingSmudge,Try the smudge tool — it has its own brushes too,试试涂抹工具，它也能换不同笔刷,スマッジツールも試してみて。ブラシも切り替え可能
 dripToggleTitle,Toggle paint drip effect,开关颜料水滴流挂效果,絵具の滴り効果のオン/オフ
+engineTitleKM,KM Palette,KM 调色板,KM パレット
+engineTitleMixbox,Mixbox Palette,Mixbox 调色板,Mixbox パレット
+pressureLabel,Pressure,笔压,筆圧
+pressureToggleTitle,Toggle pen pressure,切换笔压,筆圧のオン／オフ

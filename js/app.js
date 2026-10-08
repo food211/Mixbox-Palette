@@ -75,6 +75,8 @@ function reportAnalyticsEnv() {
     } catch (_) {}
 }
 
+// 隐藏色板：调色盘下拉菜单里的一个选项，选中后不加载任何色块，颜色选择器隐藏
+const HIDDEN_PALETTE = 'hidden';
 // 当前颜料预设
 let currentPalette = 'winsorNewtonCotman';
 let colors = palettePresets[currentPalette].colors;
@@ -100,7 +102,7 @@ let lastImportPsBounds = null;   // { top, left, bottom, right } 最近一次导
 const TOOL_STATE_DEFAULTS = {
     brush:      { size: 40, mixStrength: 77, spacingRatio: 0.05, brushType: 'watercolor' },
     watercolor: { mixStrength: 77, wetness: 100, brushType: 'watercolor' },
-    smudge:     { size: 40, strength: 50, spacingRatio: 0.05, brushType: 'watercolor' },
+    smudge:     { size: 40, strength: 50, spacingRatio: 0.05, brushType: 'circle' },
 };
 const toolStates = {
     brush:      { ...TOOL_STATE_DEFAULTS.brush },
@@ -240,9 +242,7 @@ async function switchEngine(engine) {
     // 更新按钮文字
     const engineBtn = document.getElementById('engineBtn');
     if (engineBtn) {
-        engineBtn.textContent = engine === 'km' ? 'KM' : 'MB';
-        engineBtn.classList.toggle('active', engine === 'km');
-        engineBtn.classList.toggle('mb', engine === 'mixbox');
+        updateEngineTitle();
     }
     console.log('✅ 引擎已切换为:', engine);
 }
@@ -265,7 +265,6 @@ const closeModalBtn = document.getElementById('closeModalBtn');
 const brushGrid = document.getElementById('brushGrid');
 const paletteDropdown = document.getElementById('paletteDropdown');
 const paletteBtn = document.getElementById('paletteBtn');
-const paletteInfo = document.querySelector('.palette-info');
 const brushMixSlider = document.getElementById('brushMix');
 const brushMixValue = document.getElementById('brushMixStrength');
 const brushSpacingSlider = document.getElementById('brushSpacing');
@@ -304,10 +303,10 @@ async function initApp() {
     
     // 3. 加载保存的调色盘预设
     const savedPalette = paletteStorage.loadPalettePreset();
-    if (savedPalette && palettePresets[savedPalette]) {
+    if (savedPalette && isSelectablePalette(savedPalette)) {
         currentPalette = savedPalette;
-        colors = palettePresets[currentPalette].colors;
-        console.log('✅ 已加载保存的调色盘预设:', palettePresets[currentPalette].name);
+        colors = getPaletteColors(currentPalette);
+        console.log('✅ 已加载保存的调色盘预设:', currentPalette);
     }
     
     // 4. 加载工具状态（toolStates 重构后）
@@ -472,25 +471,29 @@ function initUI() {
 function initPaletteDropdown() {
     // 清空下拉菜单
     paletteDropdown.innerHTML = '';
-    
-    // 添加预设选项
-    for (const key in palettePresets) {
-        const option = document.createElement('div');
+
+    // 预设色板 + 隐藏色板；隐藏色板排在最后，和色板之间用分隔线隔开
+    for (const key of [...Object.keys(palettePresets), HIDDEN_PALETTE]) {
+        const option = document.createElement('button');
+        option.type = 'button';
         option.className = 'palette-option';
+        option.classList.toggle('palette-option-separated', key === HIDDEN_PALETTE);
+        option.setAttribute('aria-pressed', String(key === currentPalette));
         if (key === currentPalette) {
             option.classList.add('active');
         }
         option.textContent = I18N.paletteName(key);
         option.dataset.palette = key;
-        
-        option.addEventListener('click', (e) => {
-            switchPalette(e.target.dataset.palette);
-            paletteDropdown.classList.remove('show');
+
+        option.addEventListener('click', () => {
+            switchPalette(option.dataset.palette);
+            setPaletteMenuOpen(false);
+            paletteBtn.focus();
         });
-        
+
         paletteDropdown.appendChild(option);
     }
-    
+
     // 更新调色板信息
     updatePaletteInfo();
 }
@@ -499,38 +502,67 @@ function initPaletteDropdown() {
  * 更新调色板信息
  */
 function updatePaletteInfo() {
-    paletteInfo.textContent = I18N.paletteName(currentPalette);
+    paletteBtn.querySelector('span').textContent = I18N.paletteShortName(currentPalette);
+    paletteBtn.title = I18N.paletteName(currentPalette);
+}
+
+/**
+ * 下拉菜单可选的调色盘：预设色板或隐藏色板
+ */
+function isSelectablePalette(key) {
+    return key === HIDDEN_PALETTE || Boolean(palettePresets[key]);
+}
+
+/**
+ * 隐藏色板不加载任何色块
+ */
+function getPaletteColors(key) {
+    return key === HIDDEN_PALETTE ? [] : palettePresets[key].colors;
 }
 
 /**
  * 切换调色板
  */
 function switchPalette(paletteKey) {
-    if (palettePresets[paletteKey] && paletteKey !== currentPalette) {
+    if (isSelectablePalette(paletteKey) && paletteKey !== currentPalette) {
         track('palette_preset_change', { from_palette: currentPalette, to_palette: paletteKey });
         if (window.Onboarding) window.Onboarding.onPaletteSwitch();
         currentPalette = paletteKey;
-        colors = palettePresets[paletteKey].colors;
-        
+        colors = getPaletteColors(paletteKey);
+
         // 更新UI
         updateColorPicker();
         updateColorDisplay();
         updatePaletteInfo();
-        
+
         // 更新下拉菜单激活状态
         document.querySelectorAll('.palette-option').forEach(option => {
             option.classList.toggle('active', option.dataset.palette === paletteKey);
+            option.setAttribute('aria-pressed', String(option.dataset.palette === paletteKey));
         });
-        
+
         // 保存调色盘预设（新增）
         paletteStorage.savePalettePreset(paletteKey);
     }
+}
+
+function updateEngineTitle() {
+    const title = document.getElementById('engineTitle');
+    const key = currentEngine === 'km' ? 'engineTitleKM' : 'engineTitleMixbox';
+    title.textContent = t(key);
+    document.title = title.textContent;
+}
+
+function setPaletteMenuOpen(open) {
+    paletteDropdown.classList.toggle('show', open);
+    paletteBtn.setAttribute('aria-expanded', String(open));
 }
 
 /**
  * 更新颜色选择器
  */
 function updateColorPicker() {
+    colorPicker.hidden = currentPalette === HIDDEN_PALETTE;
     // 清空颜色选择器
     colorPicker.innerHTML = '';
     
@@ -699,7 +731,6 @@ function initCustomRanges() {
 }
 
 function bindEvents() {
-
     // 三个 slider 走统一通道：DOM 输入 → 写入当前 state → 持久化 → 通知 painter
     brushSizeInput.addEventListener('input', (e) => {
         const value = parseInt(e.target.value);
@@ -752,9 +783,11 @@ function bindEvents() {
     // 涂抹工具按钮
     const pressureBtn = document.getElementById('pressureBtn');
     pressureBtn.classList.toggle('active', pressureEnabled);
+    pressureBtn.setAttribute('aria-pressed', String(pressureEnabled));
     pressureBtn.addEventListener('click', () => {
         pressureEnabled = !pressureEnabled;
         pressureBtn.classList.toggle('active', pressureEnabled);
+        pressureBtn.setAttribute('aria-pressed', String(pressureEnabled));
         paletteStorage.saveAppSettings({ pressureEnabled });
     });
 
@@ -778,7 +811,10 @@ function bindEvents() {
         pressureSizeFloor = parseFloat(btn.dataset.sizeFloor);
         pressureSizeCeil  = parseFloat(btn.dataset.sizeCeil);
         pressureMixFloor  = parseFloat(btn.dataset.mixFloor);
-        pressureSensBtns.forEach(b => b.classList.toggle('active', b === btn));
+        pressureSensBtns.forEach(b => {
+            b.classList.toggle('active', b === btn);
+            b.setAttribute('aria-pressed', String(b === btn));
+        });
         if (persist) {
             paletteStorage.saveAppSettings({
                 pressureGamma,
@@ -809,12 +845,9 @@ function bindEvents() {
     const smudgeBtn = document.getElementById('smudgeBtn');
     smudgeBtn.addEventListener('click', () => {
         if (window.Onboarding) window.Onboarding.onSmudgeUse();
-        const brushPreviewBtn = document.getElementById('brushPreviewBtn');
         if (currentTool === 'brush') {
             currentTool = 'smudge';
             currentBrush = { type: toolStates.smudge.brushType, image: null };
-            smudgeBtn.classList.add('active');
-            if (brushPreviewBtn) brushPreviewBtn.classList.add('smudge-active');
             updateStatus('smudge');
         } else {
             currentTool = 'brush';
@@ -824,10 +857,9 @@ function bindEvents() {
                 toolStates.brush.brushType === 'watercolor') {
                 currentBrush.type = 'watercolor';
             }
-            smudgeBtn.classList.remove('active');
-            if (brushPreviewBtn) brushPreviewBtn.classList.remove('smudge-active');
             updateStatus('draw');
         }
+        syncToolModeButtons();
         const mode = getCurrentMode();
         if (painter) {
             painter.setHeatmapDecayActive(mode === 'smudge');
@@ -1039,19 +1071,24 @@ function bindEvents() {
         }
     }
 
-    // 引擎切换按钮
+    // The title is the engine switch; serialize async switches during rapid clicks.
     const engineBtn = document.getElementById('engineBtn');
-    if (engineBtn) {
-        engineBtn.textContent = currentEngine === 'km' ? 'KM' : 'MB';
-        engineBtn.classList.toggle('active', currentEngine === 'km');
-        engineBtn.classList.toggle('mb', currentEngine === 'mixbox');
-        engineBtn.addEventListener('click', () => {
-            const nextEngine = currentEngine === 'mixbox' ? 'km' : 'mixbox';
+    updateEngineTitle();
+    engineBtn.addEventListener('click', async () => {
+        if (engineBtn.disabled) return;
+        const nextEngine = currentEngine === 'mixbox' ? 'km' : 'mixbox';
+        engineBtn.disabled = true;
+        engineBtn.setAttribute('aria-busy', 'true');
+        try {
             track('engine_switch', { from_engine: currentEngine, to_engine: nextEngine });
             if (window.Onboarding) window.Onboarding.onEngineSwitch();
-            switchEngine(nextEngine);
-        });
-    }
+            await switchEngine(nextEngine);
+        } finally {
+            engineBtn.disabled = false;
+            engineBtn.removeAttribute('aria-busy');
+            updateEngineTitle();
+        }
+    });
 
     // 打开笔刷选择器
     brushPreviewBtn.addEventListener('click', () => {
@@ -1073,16 +1110,44 @@ function bindEvents() {
     // 调色板下拉菜单
     paletteBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        paletteDropdown.classList.toggle('show');
+        setPaletteMenuOpen(!paletteDropdown.classList.contains('show'));
     });
     
     // 点击其他地方关闭下拉菜单
     document.addEventListener('click', (e) => {
         if (!paletteBtn.contains(e.target) && !paletteDropdown.contains(e.target)) {
-            paletteDropdown.classList.remove('show');
+            setPaletteMenuOpen(false);
         }
     });
     
+    paletteBtn.addEventListener('keydown', (e) => {
+        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+        e.preventDefault();
+        setPaletteMenuOpen(true);
+        const options = paletteDropdown.querySelectorAll('button');
+        options[e.key === 'ArrowUp' ? options.length - 1 : 0]?.focus();
+    });
+    paletteDropdown.addEventListener('keydown', (e) => {
+        const options = [...paletteDropdown.querySelectorAll('button')];
+        let index = options.indexOf(document.activeElement);
+        if (e.key === 'ArrowDown') index = (index + 1) % options.length;
+        else if (e.key === 'ArrowUp') index = (index - 1 + options.length) % options.length;
+        else if (e.key === 'Home') index = 0;
+        else if (e.key === 'End') index = options.length - 1;
+        else return;
+        e.preventDefault();
+        options[index].focus();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && paletteDropdown.classList.contains('show')) {
+            setPaletteMenuOpen(false);
+            paletteBtn.focus();
+        }
+    });
+    document.addEventListener('focusin', (e) => {
+        if (!e.target.closest('.palette-selector')) setPaletteMenuOpen(false);
+    });
+
     // 键盘事件
     let shiftSmudgeActive = false; // Shift 临时涂抹模式
     let previousTool = null; // 记录上一次的工具，用于快捷键双击回切
@@ -1105,6 +1170,11 @@ function bindEvents() {
             return;
         }
         previousTool = current;
+        activateTool(targetTool);
+    }
+
+    // 退出当前特殊模式并进入目标工具（快捷键和工具按钮共用）
+    function activateTool(targetTool) {
         // 先退出当前特殊模式
         if (isEyedropperMode) document.getElementById('eyedropperBtn').click();
         if (isRectSelectMode) exitRectSelectMode();
@@ -1127,7 +1197,13 @@ function bindEvents() {
         }
     }
 
+    document.getElementById('brushBtn').addEventListener('click', () => activateTool('brush'));
+
     document.addEventListener('keydown', (e) => {
+        // Keep Space's focus handoff in Photoshop; ordinary browsers use native button activation.
+        if (e.key === 'Enter' && e.target.closest('button')) return;
+        if (e.key === ' ' && e.target.closest('button') && !isInWebView()) return;
+
         // 阻止空格滚动页面；主动释放焦点让 PS 可以接管
         if (e.key === ' ') {
             e.preventDefault();
@@ -2000,6 +2076,14 @@ function extractAndSendPixels(sx, sy, sw, sh) {
 }
 
 /**
+ * 画笔 / 涂抹是一组互斥的模式按钮，高亮跟随 currentTool
+ */
+function syncToolModeButtons() {
+    document.getElementById('brushBtn').classList.toggle('active', currentTool === 'brush');
+    document.getElementById('smudgeBtn').classList.toggle('active', currentTool === 'smudge');
+}
+
+/**
  * 更新状态文本：改 class 控制颜色，改 textContent 填当前语言文本
  */
 function updateStatus(mode) {
@@ -2445,7 +2529,9 @@ function initInstructionsToggle() {
     const chevron = document.getElementById('instructionsChevron');
     if (!toggle || !body || !chevron) return;
 
-    const isOpen = localStorage.getItem('mixbox_instructions_open') !== 'false';
+    const isOpen = localStorage.getItem('mixbox_instructions_open') === 'true';
+    toggle.setAttribute('aria-expanded', String(isOpen));
+    body.inert = !isOpen;
     if (!isOpen) {
         body.classList.add('collapsed');
     } else {
@@ -2455,6 +2541,8 @@ function initInstructionsToggle() {
     toggle.addEventListener('click', () => {
         const collapsed = body.classList.toggle('collapsed');
         chevron.classList.toggle('open', !collapsed);
+        toggle.setAttribute('aria-expanded', String(!collapsed));
+        body.inert = collapsed;
         localStorage.setItem('mixbox_instructions_open', String(!collapsed));
     });
 }
@@ -2474,6 +2562,7 @@ function initLangToggle() {
         I18N.applyToDOM();
 
         // 更新动态生成的内容
+        updateEngineTitle();
         updateColorPicker();
         initPaletteDropdown();
         updatePaletteInfo();

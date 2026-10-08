@@ -1,6 +1,11 @@
 {
   "versions": [
     {
+      "version": "V1.6.0",
+      "zh": "### 新功能\r\n- **隐藏色板** — 色板可以隐藏了\r\n- **画笔按钮与笔刷选择分开** — 工具栏新增画笔按钮，和涂抹成对切换；选笔刷的入口独立成\"笔刷\"一栏，画笔和涂抹模式下都能换笔刷\r\n\r\n### 优化\r\n- **界面重新设计** — 面板整体重新设计，更紧凑",
+      "en": "### New Features\r\n- **Hide palette** — The palette can now be hidden\r\n- **Brush button and brush selection are now separate** — The toolbar has a new Brush button that pairs with Smudge, while choosing a brush has its own \"Brush\" slot that works in both Brush and Smudge modes\r\n\r\n### Improvements\r\n- **Redesigned UI** — The whole panel has been redesigned to be more compact"
+    },
+    {
       "version": "V1.5.6e",
       "zh": "### 优化\r\n- **水彩笔默认湿度调整为 100** — 新用户和重置后的水彩笔默认使用最高湿度，直接获得更充分的晕染与流动效果",
       "en": "### Improvements\r\n- **Default watercolor wetness increased to 100** — New and reset watercolor brushes now start at maximum wetness for fuller diffusion and flow"
@@ -9,12 +14,7 @@
       "version": "V1.5.6d",
       "zh": "### 修复\r\n- **旧版 PS 插件无法同步颜色** — 如果你的 Photoshop 插件版本较旧，打开时会提示前往 Adobe Exchange 更新，避免出现部分功能（如选区传输、从 PS 导入像素）静默失效",
       "en": "### Bug Fixes\r\n- **Old PS plugin can't sync colors** — If your Photoshop plugin is outdated, you'll now see a prompt to update via Adobe Exchange, preventing silent failure of features like region transfer and importing pixels from PS"
-    },
-    {
-      "version": "V1.5.6c",
-      "zh": "### 修复\r\n- **水滴流挂开关失效** — 修复了部分情况下水滴流挂效果无法开启的问题",
-      "en": "### Bug Fixes\r\n- **Drip toggle not working** — Fixed an issue where the watercolor drip effect could fail to turn on in some cases"
     }
   ],
-  "generatedAt": "2026-07-28T03:49:16.741Z"
+  "generatedAt": "2026-10-08T07:52:20.897Z"
 }

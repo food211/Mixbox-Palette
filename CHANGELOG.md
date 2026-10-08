@@ -1,5 +1,22 @@
 # 更新日志 / Changelog
 
+== V1.6.0 ==
+[ZH]
+### 新功能
+- **隐藏色板** — 色板可以隐藏了
+- **画笔按钮与笔刷选择分开** — 工具栏新增画笔按钮，和涂抹成对切换；选笔刷的入口独立成"笔刷"一栏，画笔和涂抹模式下都能换笔刷
+
+### 优化
+- **界面重新设计** — 面板整体重新设计，更紧凑
+
+[EN]
+### New Features
+- **Hide palette** — The palette can now be hidden
+- **Brush button and brush selection are now separate** — The toolbar has a new Brush button that pairs with Smudge, while choosing a brush has its own "Brush" slot that works in both Brush and Smudge modes
+
+### Improvements
+- **Redesigned UI** — The whole panel has been redesigned to be more compact
+
 == V1.5.6e ==
 [ZH]
 ### 优化
