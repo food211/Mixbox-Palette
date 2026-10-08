@@ -60,3 +60,8 @@
         visibility: visible;
     }
 }
+
+/* Author display:flex must not override the hidden attribute. */
+.color-picker[hidden] {
+    display: none;
+}

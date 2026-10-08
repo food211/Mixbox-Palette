@@ -248,7 +248,9 @@ async function switchEngine(engine) {
 }
 
 // DOM元素
+let presetColorsVisible = true;
 const colorPicker = document.getElementById('colorPicker');
+const presetColorsToggle = document.getElementById('presetColorsToggle');
 const mixCanvas = document.getElementById('mixCanvas');
 const brushSizeInput = document.getElementById('brushSize');
 const brushSizeValue = document.getElementById('brushSizeValue');
@@ -323,6 +325,9 @@ async function initApp() {
     // 4b. 加载应用全局设置（颜色、压感）
     const savedAppSettings = paletteStorage.loadAppSettings();
     if (savedAppSettings) {
+        if (typeof savedAppSettings.presetColorsVisible === 'boolean') {
+            presetColorsVisible = savedAppSettings.presetColorsVisible;
+        }
         if (savedAppSettings.foregroundColor) {
             foregroundColor = savedAppSettings.foregroundColor;
             currentBrushColor = foregroundColor;
@@ -531,6 +536,8 @@ function switchPalette(paletteKey) {
  * 更新颜色选择器
  */
 function updateColorPicker() {
+    colorPicker.hidden = !presetColorsVisible;
+    presetColorsToggle.checked = presetColorsVisible;
     // 清空颜色选择器
     colorPicker.innerHTML = '';
     
@@ -699,6 +706,14 @@ function initCustomRanges() {
 }
 
 function bindEvents() {
+    presetColorsToggle.addEventListener('change', () => {
+        presetColorsVisible = presetColorsToggle.checked;
+        colorPicker.hidden = !presetColorsVisible;
+        paletteStorage.saveAppSettings({ presetColorsVisible });
+        // A discrete preference should survive even an immediate panel reload.
+        paletteStorage.flushAppSettings();
+    });
+
 
     // 三个 slider 走统一通道：DOM 输入 → 写入当前 state → 持久化 → 通知 painter
     brushSizeInput.addEventListener('input', (e) => {
