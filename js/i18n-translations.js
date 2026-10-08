@@ -3,6 +3,7 @@ window.I18N_TRANSLATIONS = {
   "en": {
     "title": "🎨 Mixbox Palette",
     "switchPalette": "Palette",
+    "presetColors": "Preset colors",
     "clear": "Clear",
     "brushSize": "Size",
     "brushSpacing": "Sp.",
@@ -135,6 +136,7 @@ window.I18N_TRANSLATIONS = {
   "zh": {
     "title": "🎨 Mixbox 调色板",
     "switchPalette": "切换颜料",
+    "presetColors": "预设色块",
     "clear": "清空",
     "brushSize": "大小",
     "brushSpacing": "间距",
@@ -267,6 +269,7 @@ window.I18N_TRANSLATIONS = {
   "ja": {
     "title": "🎨 Mixbox パレット",
     "switchPalette": "パレット",
+    "presetColors": "プリセットカラー",
     "clear": "クリア",
     "brushSize": "サイズ",
     "brushSpacing": "間隔",

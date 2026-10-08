@@ -1,6 +1,7 @@
 key,en,zh,ja
 title,🎨 Mixbox Palette,🎨 Mixbox 调色板,🎨 Mixbox パレット
 switchPalette,Palette,切换颜料,パレット
+presetColors,Preset colors,预设色块,プリセットカラー
 clear,Clear,清空,クリア
 brushSize,Size,大小,サイズ
 brushSpacing,Sp.,间距,間隔
