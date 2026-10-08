@@ -6,6 +6,10 @@
     --text: #e8eaed;
     --muted: #a5aab0;
     --accent: #579ce0;
+    /* Foreground = solid ring, background = dashed ring (swatch selection and the preview boxes share these). */
+    --ring-color: #f1f3f4;
+    --ring-width: 2px;
+    --ring-offset: 1px;
 }
 
 * {

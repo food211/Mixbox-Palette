@@ -1,24 +1,28 @@
 /* Panel header: title doubles as the engine switch. */
 .header-container {
-    display: flex;
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas: "title palette actions";
     align-items: center;
-    gap: 12px;
-    padding: 14px 0;
+    column-gap: 8px;
+    row-gap: 6px;
+    padding: 7px 0;
     border-bottom: 1px solid var(--border);
 }
 .header-container h1 {
+    grid-area: title;
     margin: 0;
     height: auto;
     line-height: 1;
     text-align: left;
     min-width: 0;
-    flex: 1;
 }
 .engine-title {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 4px 0;
+    padding: 2px 0;
     border: 0;
     background: transparent;
     color: var(--text);
@@ -43,10 +47,10 @@
     opacity: .6;
 }
 .header-actions {
+    grid-area: actions;
     display: flex;
     align-items: center;
     gap: 4px;
-    flex-shrink: 0;
 }
 .lang-btn, .zoom-btn {
     height: 26px;
@@ -70,27 +74,24 @@
     gap: 5px;
 }
 .zoom-btn::after, .palette-btn::after {
-    content: '\2304';
-    font-size: 12px;
+    content: '';
     flex-shrink: 0;
+    width: 10px;
+    height: 10px;
+    background: currentColor;
+    mask-image: url('../icons/caret-down.svg');
+    -webkit-mask-image: url('../icons/caret-down.svg');
+    mask-size: contain;
+    -webkit-mask-size: contain;
+    mask-repeat: no-repeat;
+    -webkit-mask-repeat: no-repeat;
+    mask-position: center;
+    -webkit-mask-position: center;
 }
-.header-controls {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    padding: 14px 0 10px;
-}
-.palette-info {
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--muted);
-    white-space: nowrap;
-}
+/* Fixed width: the button shows a short palette name, so changing palettes never shifts the header. */
 .palette-selector {
-    position: relative;
-    min-width: 0;
-    max-width: 68%;
+    grid-area: palette;
+    width: 132px;
 }
 .palette-btn {
     display: flex;
@@ -98,9 +99,8 @@
     justify-content: space-between;
     gap: 8px;
     width: 100%;
-    max-width: 260px;
     padding: 0 9px;
-    height: 28px;
+    height: 26px;
     border: 1px solid var(--border);
     border-radius: 4px;
     color: var(--text);
@@ -131,6 +131,12 @@
 .palette-dropdown.show, .zoom-dropdown.show {
     display: block;
 }
+/* The palette list spans the whole header row instead of hanging off the narrow button. */
+.palette-dropdown {
+    left: 0;
+    width: auto;
+    max-width: none;
+}
 .palette-option {
     display: block;
     width: 100%;
@@ -150,11 +156,10 @@
     background: #345a7f;
     color: #fff;
 }
-.palette-visibility-option {
+.palette-option-separated {
     margin-top: 5px;
     border-top: 1px solid var(--border);
     border-radius: 0 0 3px 3px;
-    color: var(--muted);
     padding-top: 10px;
 }
 .zoom-dropdown {
@@ -219,6 +224,15 @@
         background-color: #3a3d41;
     }
 }
+@media (max-width: 460px) {
+    .header-container {
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas: "title actions" "palette palette";
+    }
+    .palette-selector {
+        width: auto;
+    }
+}
 @media (max-width: 360px) {
     .engine-title {
         font-size: 13px;
@@ -230,11 +244,5 @@
     }
     .engine-swap {
         width: 10px;
-    }
-    .header-container {
-        gap: 8px;
-    }
-    .palette-info {
-        font-size: 11px;
     }
 }

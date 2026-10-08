@@ -80,6 +80,11 @@ const I18N = {
         return this.t('paletteName_' + paletteKey);
     },
 
+    /** 下拉按钮里用的简称；完整名字只在展开的列表和悬停提示里出现 */
+    paletteShortName(paletteKey) {
+        return this.t('paletteShort_' + paletteKey);
+    },
+
     brushName(brushType) {
         return this.t('brush_' + brushType);
     },

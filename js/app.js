@@ -75,6 +75,8 @@ function reportAnalyticsEnv() {
     } catch (_) {}
 }
 
+// 隐藏色板：调色盘下拉菜单里的一个选项，选中后不加载任何色块，颜色选择器隐藏
+const HIDDEN_PALETTE = 'hidden';
 // 当前颜料预设
 let currentPalette = 'winsorNewtonCotman';
 let colors = palettePresets[currentPalette].colors;
@@ -100,7 +102,7 @@ let lastImportPsBounds = null;   // { top, left, bottom, right } 最近一次导
 const TOOL_STATE_DEFAULTS = {
     brush:      { size: 40, mixStrength: 77, spacingRatio: 0.05, brushType: 'watercolor' },
     watercolor: { mixStrength: 77, wetness: 100, brushType: 'watercolor' },
-    smudge:     { size: 40, strength: 50, spacingRatio: 0.05, brushType: 'watercolor' },
+    smudge:     { size: 40, strength: 50, spacingRatio: 0.05, brushType: 'circle' },
 };
 const toolStates = {
     brush:      { ...TOOL_STATE_DEFAULTS.brush },
@@ -246,7 +248,6 @@ async function switchEngine(engine) {
 }
 
 // DOM元素
-let presetColorsVisible = true;
 const colorPicker = document.getElementById('colorPicker');
 const mixCanvas = document.getElementById('mixCanvas');
 const brushSizeInput = document.getElementById('brushSize');
@@ -302,10 +303,10 @@ async function initApp() {
     
     // 3. 加载保存的调色盘预设
     const savedPalette = paletteStorage.loadPalettePreset();
-    if (savedPalette && palettePresets[savedPalette]) {
+    if (savedPalette && isSelectablePalette(savedPalette)) {
         currentPalette = savedPalette;
-        colors = palettePresets[currentPalette].colors;
-        console.log('✅ 已加载保存的调色盘预设:', palettePresets[currentPalette].name);
+        colors = getPaletteColors(currentPalette);
+        console.log('✅ 已加载保存的调色盘预设:', currentPalette);
     }
     
     // 4. 加载工具状态（toolStates 重构后）
@@ -321,9 +322,6 @@ async function initApp() {
     // 4b. 加载应用全局设置（颜色、压感）
     const savedAppSettings = paletteStorage.loadAppSettings();
     if (savedAppSettings) {
-        if (typeof savedAppSettings.presetColorsVisible === 'boolean') {
-            presetColorsVisible = savedAppSettings.presetColorsVisible;
-        }
         if (savedAppSettings.foregroundColor) {
             foregroundColor = savedAppSettings.foregroundColor;
             currentBrushColor = foregroundColor;
@@ -473,40 +471,28 @@ function initUI() {
 function initPaletteDropdown() {
     // 清空下拉菜单
     paletteDropdown.innerHTML = '';
-    
-    // 添加预设选项
-    for (const key in palettePresets) {
+
+    // 预设色板 + 隐藏色板；隐藏色板排在最后，和色板之间用分隔线隔开
+    for (const key of [...Object.keys(palettePresets), HIDDEN_PALETTE]) {
         const option = document.createElement('button');
         option.type = 'button';
         option.className = 'palette-option';
+        option.classList.toggle('palette-option-separated', key === HIDDEN_PALETTE);
         option.setAttribute('aria-pressed', String(key === currentPalette));
         if (key === currentPalette) {
             option.classList.add('active');
         }
         option.textContent = I18N.paletteName(key);
         option.dataset.palette = key;
-        
+
         option.addEventListener('click', () => {
             switchPalette(option.dataset.palette);
             setPaletteMenuOpen(false);
             paletteBtn.focus();
         });
-        
+
         paletteDropdown.appendChild(option);
     }
-    
-    const visibilityOption = document.createElement('button');
-    visibilityOption.type = 'button';
-    visibilityOption.id = 'presetVisibilityOption';
-    visibilityOption.className = 'palette-option palette-visibility-option';
-    visibilityOption.setAttribute('aria-controls', 'colorPicker');
-    visibilityOption.addEventListener('click', () => {
-        setPresetColorsVisible(!presetColorsVisible);
-        setPaletteMenuOpen(false);
-        paletteBtn.focus();
-    });
-    paletteDropdown.appendChild(visibilityOption);
-    updatePresetVisibilityOption();
 
     // 更新调色板信息
     updatePaletteInfo();
@@ -516,33 +502,45 @@ function initPaletteDropdown() {
  * 更新调色板信息
  */
 function updatePaletteInfo() {
-    const name = I18N.paletteName(currentPalette);
-    paletteBtn.querySelector('span').textContent = name;
-    paletteBtn.title = name;
+    paletteBtn.querySelector('span').textContent = I18N.paletteShortName(currentPalette);
+    paletteBtn.title = I18N.paletteName(currentPalette);
+}
+
+/**
+ * 下拉菜单可选的调色盘：预设色板或隐藏色板
+ */
+function isSelectablePalette(key) {
+    return key === HIDDEN_PALETTE || Boolean(palettePresets[key]);
+}
+
+/**
+ * 隐藏色板不加载任何色块
+ */
+function getPaletteColors(key) {
+    return key === HIDDEN_PALETTE ? [] : palettePresets[key].colors;
 }
 
 /**
  * 切换调色板
  */
 function switchPalette(paletteKey) {
-    if (palettePresets[paletteKey] && paletteKey !== currentPalette) {
+    if (isSelectablePalette(paletteKey) && paletteKey !== currentPalette) {
         track('palette_preset_change', { from_palette: currentPalette, to_palette: paletteKey });
         if (window.Onboarding) window.Onboarding.onPaletteSwitch();
         currentPalette = paletteKey;
-        colors = palettePresets[paletteKey].colors;
-        
+        colors = getPaletteColors(paletteKey);
+
         // 更新UI
         updateColorPicker();
         updateColorDisplay();
         updatePaletteInfo();
-        
+
         // 更新下拉菜单激活状态
         document.querySelectorAll('.palette-option').forEach(option => {
-            if (!option.dataset.palette) return;
             option.classList.toggle('active', option.dataset.palette === paletteKey);
             option.setAttribute('aria-pressed', String(option.dataset.palette === paletteKey));
         });
-        
+
         // 保存调色盘预设（新增）
         paletteStorage.savePalettePreset(paletteKey);
     }
@@ -560,27 +558,11 @@ function setPaletteMenuOpen(open) {
     paletteBtn.setAttribute('aria-expanded', String(open));
 }
 
-function updatePresetVisibilityOption() {
-    const option = document.getElementById('presetVisibilityOption');
-    if (!option) return;
-    option.textContent = t(presetColorsVisible ? 'hidePresetColors' : 'showPresetColors');
-    option.setAttribute('aria-expanded', String(presetColorsVisible));
-}
-
-function setPresetColorsVisible(visible) {
-    presetColorsVisible = visible;
-    colorPicker.hidden = !visible;
-    updatePresetVisibilityOption();
-    paletteStorage.saveAppSettings({ presetColorsVisible });
-    paletteStorage.flushAppSettings();
-}
-
 /**
  * 更新颜色选择器
  */
 function updateColorPicker() {
-    colorPicker.hidden = !presetColorsVisible;
-    updatePresetVisibilityOption();
+    colorPicker.hidden = currentPalette === HIDDEN_PALETTE;
     // 清空颜色选择器
     colorPicker.innerHTML = '';
     
@@ -863,12 +845,9 @@ function bindEvents() {
     const smudgeBtn = document.getElementById('smudgeBtn');
     smudgeBtn.addEventListener('click', () => {
         if (window.Onboarding) window.Onboarding.onSmudgeUse();
-        const brushPreviewBtn = document.getElementById('brushPreviewBtn');
         if (currentTool === 'brush') {
             currentTool = 'smudge';
             currentBrush = { type: toolStates.smudge.brushType, image: null };
-            smudgeBtn.classList.add('active');
-            if (brushPreviewBtn) brushPreviewBtn.classList.add('smudge-active');
             updateStatus('smudge');
         } else {
             currentTool = 'brush';
@@ -878,10 +857,9 @@ function bindEvents() {
                 toolStates.brush.brushType === 'watercolor') {
                 currentBrush.type = 'watercolor';
             }
-            smudgeBtn.classList.remove('active');
-            if (brushPreviewBtn) brushPreviewBtn.classList.remove('smudge-active');
             updateStatus('draw');
         }
+        syncToolModeButtons();
         const mode = getCurrentMode();
         if (painter) {
             painter.setHeatmapDecayActive(mode === 'smudge');
@@ -1192,6 +1170,11 @@ function bindEvents() {
             return;
         }
         previousTool = current;
+        activateTool(targetTool);
+    }
+
+    // 退出当前特殊模式并进入目标工具（快捷键和工具按钮共用）
+    function activateTool(targetTool) {
         // 先退出当前特殊模式
         if (isEyedropperMode) document.getElementById('eyedropperBtn').click();
         if (isRectSelectMode) exitRectSelectMode();
@@ -1213,6 +1196,8 @@ function bindEvents() {
                 break;
         }
     }
+
+    document.getElementById('brushBtn').addEventListener('click', () => activateTool('brush'));
 
     document.addEventListener('keydown', (e) => {
         // Keep Space's focus handoff in Photoshop; ordinary browsers use native button activation.
@@ -2088,6 +2073,14 @@ function extractAndSendPixels(sx, sy, sw, sh) {
         region_h: sh,
         area_ratio: Math.round(areaRatio * 100) / 100
     });
+}
+
+/**
+ * 画笔 / 涂抹是一组互斥的模式按钮，高亮跟随 currentTool
+ */
+function syncToolModeButtons() {
+    document.getElementById('brushBtn').classList.toggle('active', currentTool === 'brush');
+    document.getElementById('smudgeBtn').classList.toggle('active', currentTool === 'smudge');
 }
 
 /**

@@ -40,11 +40,13 @@ const CACHE_URLS = [
   './js/history-worker.js',
   './assets/km-lut.png',
   './icons/smudge.svg',
+  './icons/brush.svg',
   './icons/eyedropper.svg',
   './icons/rect-select.svg',
   './icons/import-from-ps.svg',
   './icons/github.svg',
   './icons/discord.svg',
+  './icons/caret-down.svg',
   './icons/eyedropper-cursor.svg'
 ];
 

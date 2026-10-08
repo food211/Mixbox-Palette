@@ -1,9 +1,9 @@
-/* Group spacing is deliberate: 4px within tools, 16px between modules. */
+/* Group spacing is deliberate: 4px within tools, 6px between modules. */
 .controls {
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    padding: 16px 0;
+    gap: 6px;
+    padding: 6px 0;
     border-bottom: 1px solid var(--border);
 }
 .toolbar-row, .pressure-row {
@@ -13,7 +13,11 @@
     gap: 16px;
     width: 100%;
 }
-.drawing-tools, .brush-preview-group, .tool-buttons, .history-buttons, .pressure-controls, .pressure-sens-buttons {
+.pressure-row {
+    flex-wrap: wrap;
+    gap: 6px 12px;
+}
+.tool-buttons, .history-buttons, .pressure-controls, .pressure-sens-buttons {
     display: flex;
     align-items: center;
     gap: 4px;
@@ -27,12 +31,15 @@
     font-size: 12px;
     color: var(--muted);
 }
+.pressure-controls .brush-preview-btn {
+    margin-right: 4px;
+}
 .brush-preview-btn, .tool-btn, .history-buttons button, .pressure-btn, .drip-toggle-btn, .pressure-sens-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: 26px;
+    height: 26px;
     padding: 0;
     border-radius: 4px;
     border: 1px solid var(--border);
@@ -44,9 +51,6 @@
 .brush-preview-btn canvas {
     width: 22px;
     height: 22px;
-}
-.brush-preview-btn.smudge-active {
-    border-color: var(--accent);
 }
 .history-buttons button {
     font-size: 18px;
@@ -67,8 +71,8 @@
     display: none;
 }
 .pressure-sens-btn {
-    width: 25px;
-    height: 25px;
+    width: 24px;
+    height: 24px;
 }
 .pressure-sens-btn.active {
     border-color: var(--accent);
@@ -127,8 +131,8 @@
 .custom-range-wrap {
     position: relative;
     width: 100%;
-    height: 22px;
-    margin-top: 4px;
+    height: 16px;
+    margin-top: 2px;
 }
 .brush-size input[type="range"] {
     position: absolute;
@@ -201,8 +205,21 @@
     .toolbar-row {
         gap: 10px;
     }
-    .brush-preview-btn, .tool-btn, .history-buttons button {
-        width: 26px;
-        height: 26px;
+    .pressure-row {
+        gap: 6px 8px;
+    }
+    .pressure-controls {
+        gap: 4px;
+        font-size: 11px;
+    }
+    .pressure-controls .brush-preview-btn {
+        margin-right: 0;
+    }
+    .pressure-sens-buttons {
+        gap: 2px;
+    }
+    .pressure-sens-btn {
+        width: 22px;
+        height: 22px;
     }
 }
