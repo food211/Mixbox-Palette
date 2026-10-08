@@ -240,9 +240,7 @@ async function switchEngine(engine) {
     // 更新按钮文字
     const engineBtn = document.getElementById('engineBtn');
     if (engineBtn) {
-        engineBtn.textContent = engine === 'km' ? 'KM' : 'MB';
-        engineBtn.classList.toggle('active', engine === 'km');
-        engineBtn.classList.toggle('mb', engine === 'mixbox');
+        updateEngineTitle();
     }
     console.log('✅ 引擎已切换为:', engine);
 }
@@ -250,7 +248,6 @@ async function switchEngine(engine) {
 // DOM元素
 let presetColorsVisible = true;
 const colorPicker = document.getElementById('colorPicker');
-const presetColorsToggle = document.getElementById('presetColorsToggle');
 const mixCanvas = document.getElementById('mixCanvas');
 const brushSizeInput = document.getElementById('brushSize');
 const brushSizeValue = document.getElementById('brushSizeValue');
@@ -267,7 +264,6 @@ const closeModalBtn = document.getElementById('closeModalBtn');
 const brushGrid = document.getElementById('brushGrid');
 const paletteDropdown = document.getElementById('paletteDropdown');
 const paletteBtn = document.getElementById('paletteBtn');
-const paletteInfo = document.querySelector('.palette-info');
 const brushMixSlider = document.getElementById('brushMix');
 const brushMixValue = document.getElementById('brushMixStrength');
 const brushSpacingSlider = document.getElementById('brushSpacing');
@@ -480,22 +476,38 @@ function initPaletteDropdown() {
     
     // 添加预设选项
     for (const key in palettePresets) {
-        const option = document.createElement('div');
+        const option = document.createElement('button');
+        option.type = 'button';
         option.className = 'palette-option';
+        option.setAttribute('aria-pressed', String(key === currentPalette));
         if (key === currentPalette) {
             option.classList.add('active');
         }
         option.textContent = I18N.paletteName(key);
         option.dataset.palette = key;
         
-        option.addEventListener('click', (e) => {
-            switchPalette(e.target.dataset.palette);
-            paletteDropdown.classList.remove('show');
+        option.addEventListener('click', () => {
+            switchPalette(option.dataset.palette);
+            setPaletteMenuOpen(false);
+            paletteBtn.focus();
         });
         
         paletteDropdown.appendChild(option);
     }
     
+    const visibilityOption = document.createElement('button');
+    visibilityOption.type = 'button';
+    visibilityOption.id = 'presetVisibilityOption';
+    visibilityOption.className = 'palette-option palette-visibility-option';
+    visibilityOption.setAttribute('aria-controls', 'colorPicker');
+    visibilityOption.addEventListener('click', () => {
+        setPresetColorsVisible(!presetColorsVisible);
+        setPaletteMenuOpen(false);
+        paletteBtn.focus();
+    });
+    paletteDropdown.appendChild(visibilityOption);
+    updatePresetVisibilityOption();
+
     // 更新调色板信息
     updatePaletteInfo();
 }
@@ -504,7 +516,9 @@ function initPaletteDropdown() {
  * 更新调色板信息
  */
 function updatePaletteInfo() {
-    paletteInfo.textContent = I18N.paletteName(currentPalette);
+    const name = I18N.paletteName(currentPalette);
+    paletteBtn.querySelector('span').textContent = name;
+    paletteBtn.title = name;
 }
 
 /**
@@ -524,7 +538,9 @@ function switchPalette(paletteKey) {
         
         // 更新下拉菜单激活状态
         document.querySelectorAll('.palette-option').forEach(option => {
+            if (!option.dataset.palette) return;
             option.classList.toggle('active', option.dataset.palette === paletteKey);
+            option.setAttribute('aria-pressed', String(option.dataset.palette === paletteKey));
         });
         
         // 保存调色盘预设（新增）
@@ -532,12 +548,39 @@ function switchPalette(paletteKey) {
     }
 }
 
+function updateEngineTitle() {
+    const title = document.getElementById('engineTitle');
+    const key = currentEngine === 'km' ? 'engineTitleKM' : 'engineTitleMixbox';
+    title.textContent = t(key);
+    document.title = title.textContent;
+}
+
+function setPaletteMenuOpen(open) {
+    paletteDropdown.classList.toggle('show', open);
+    paletteBtn.setAttribute('aria-expanded', String(open));
+}
+
+function updatePresetVisibilityOption() {
+    const option = document.getElementById('presetVisibilityOption');
+    if (!option) return;
+    option.textContent = t(presetColorsVisible ? 'hidePresetColors' : 'showPresetColors');
+    option.setAttribute('aria-expanded', String(presetColorsVisible));
+}
+
+function setPresetColorsVisible(visible) {
+    presetColorsVisible = visible;
+    colorPicker.hidden = !visible;
+    updatePresetVisibilityOption();
+    paletteStorage.saveAppSettings({ presetColorsVisible });
+    paletteStorage.flushAppSettings();
+}
+
 /**
  * 更新颜色选择器
  */
 function updateColorPicker() {
     colorPicker.hidden = !presetColorsVisible;
-    presetColorsToggle.checked = presetColorsVisible;
+    updatePresetVisibilityOption();
     // 清空颜色选择器
     colorPicker.innerHTML = '';
     
@@ -706,15 +749,6 @@ function initCustomRanges() {
 }
 
 function bindEvents() {
-    presetColorsToggle.addEventListener('change', () => {
-        presetColorsVisible = presetColorsToggle.checked;
-        colorPicker.hidden = !presetColorsVisible;
-        paletteStorage.saveAppSettings({ presetColorsVisible });
-        // A discrete preference should survive even an immediate panel reload.
-        paletteStorage.flushAppSettings();
-    });
-
-
     // 三个 slider 走统一通道：DOM 输入 → 写入当前 state → 持久化 → 通知 painter
     brushSizeInput.addEventListener('input', (e) => {
         const value = parseInt(e.target.value);
@@ -767,9 +801,11 @@ function bindEvents() {
     // 涂抹工具按钮
     const pressureBtn = document.getElementById('pressureBtn');
     pressureBtn.classList.toggle('active', pressureEnabled);
+    pressureBtn.setAttribute('aria-pressed', String(pressureEnabled));
     pressureBtn.addEventListener('click', () => {
         pressureEnabled = !pressureEnabled;
         pressureBtn.classList.toggle('active', pressureEnabled);
+        pressureBtn.setAttribute('aria-pressed', String(pressureEnabled));
         paletteStorage.saveAppSettings({ pressureEnabled });
     });
 
@@ -793,7 +829,10 @@ function bindEvents() {
         pressureSizeFloor = parseFloat(btn.dataset.sizeFloor);
         pressureSizeCeil  = parseFloat(btn.dataset.sizeCeil);
         pressureMixFloor  = parseFloat(btn.dataset.mixFloor);
-        pressureSensBtns.forEach(b => b.classList.toggle('active', b === btn));
+        pressureSensBtns.forEach(b => {
+            b.classList.toggle('active', b === btn);
+            b.setAttribute('aria-pressed', String(b === btn));
+        });
         if (persist) {
             paletteStorage.saveAppSettings({
                 pressureGamma,
@@ -1054,19 +1093,24 @@ function bindEvents() {
         }
     }
 
-    // 引擎切换按钮
+    // The title is the engine switch; serialize async switches during rapid clicks.
     const engineBtn = document.getElementById('engineBtn');
-    if (engineBtn) {
-        engineBtn.textContent = currentEngine === 'km' ? 'KM' : 'MB';
-        engineBtn.classList.toggle('active', currentEngine === 'km');
-        engineBtn.classList.toggle('mb', currentEngine === 'mixbox');
-        engineBtn.addEventListener('click', () => {
-            const nextEngine = currentEngine === 'mixbox' ? 'km' : 'mixbox';
+    updateEngineTitle();
+    engineBtn.addEventListener('click', async () => {
+        if (engineBtn.disabled) return;
+        const nextEngine = currentEngine === 'mixbox' ? 'km' : 'mixbox';
+        engineBtn.disabled = true;
+        engineBtn.setAttribute('aria-busy', 'true');
+        try {
             track('engine_switch', { from_engine: currentEngine, to_engine: nextEngine });
             if (window.Onboarding) window.Onboarding.onEngineSwitch();
-            switchEngine(nextEngine);
-        });
-    }
+            await switchEngine(nextEngine);
+        } finally {
+            engineBtn.disabled = false;
+            engineBtn.removeAttribute('aria-busy');
+            updateEngineTitle();
+        }
+    });
 
     // 打开笔刷选择器
     brushPreviewBtn.addEventListener('click', () => {
@@ -1088,16 +1132,44 @@ function bindEvents() {
     // 调色板下拉菜单
     paletteBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        paletteDropdown.classList.toggle('show');
+        setPaletteMenuOpen(!paletteDropdown.classList.contains('show'));
     });
     
     // 点击其他地方关闭下拉菜单
     document.addEventListener('click', (e) => {
         if (!paletteBtn.contains(e.target) && !paletteDropdown.contains(e.target)) {
-            paletteDropdown.classList.remove('show');
+            setPaletteMenuOpen(false);
         }
     });
     
+    paletteBtn.addEventListener('keydown', (e) => {
+        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+        e.preventDefault();
+        setPaletteMenuOpen(true);
+        const options = paletteDropdown.querySelectorAll('button');
+        options[e.key === 'ArrowUp' ? options.length - 1 : 0]?.focus();
+    });
+    paletteDropdown.addEventListener('keydown', (e) => {
+        const options = [...paletteDropdown.querySelectorAll('button')];
+        let index = options.indexOf(document.activeElement);
+        if (e.key === 'ArrowDown') index = (index + 1) % options.length;
+        else if (e.key === 'ArrowUp') index = (index - 1 + options.length) % options.length;
+        else if (e.key === 'Home') index = 0;
+        else if (e.key === 'End') index = options.length - 1;
+        else return;
+        e.preventDefault();
+        options[index].focus();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && paletteDropdown.classList.contains('show')) {
+            setPaletteMenuOpen(false);
+            paletteBtn.focus();
+        }
+    });
+    document.addEventListener('focusin', (e) => {
+        if (!e.target.closest('.palette-selector')) setPaletteMenuOpen(false);
+    });
+
     // 键盘事件
     let shiftSmudgeActive = false; // Shift 临时涂抹模式
     let previousTool = null; // 记录上一次的工具，用于快捷键双击回切
@@ -1143,6 +1215,10 @@ function bindEvents() {
     }
 
     document.addEventListener('keydown', (e) => {
+        // Keep Space's focus handoff in Photoshop; ordinary browsers use native button activation.
+        if (e.key === 'Enter' && e.target.closest('button')) return;
+        if (e.key === ' ' && e.target.closest('button') && !isInWebView()) return;
+
         // 阻止空格滚动页面；主动释放焦点让 PS 可以接管
         if (e.key === ' ') {
             e.preventDefault();
@@ -2460,7 +2536,9 @@ function initInstructionsToggle() {
     const chevron = document.getElementById('instructionsChevron');
     if (!toggle || !body || !chevron) return;
 
-    const isOpen = localStorage.getItem('mixbox_instructions_open') !== 'false';
+    const isOpen = localStorage.getItem('mixbox_instructions_open') === 'true';
+    toggle.setAttribute('aria-expanded', String(isOpen));
+    body.inert = !isOpen;
     if (!isOpen) {
         body.classList.add('collapsed');
     } else {
@@ -2470,6 +2548,8 @@ function initInstructionsToggle() {
     toggle.addEventListener('click', () => {
         const collapsed = body.classList.toggle('collapsed');
         chevron.classList.toggle('open', !collapsed);
+        toggle.setAttribute('aria-expanded', String(!collapsed));
+        body.inert = collapsed;
         localStorage.setItem('mixbox_instructions_open', String(!collapsed));
     });
 }
@@ -2489,6 +2569,7 @@ function initLangToggle() {
         I18N.applyToDOM();
 
         // 更新动态生成的内容
+        updateEngineTitle();
         updateColorPicker();
         initPaletteDropdown();
         updatePaletteInfo();

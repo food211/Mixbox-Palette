@@ -1,3 +1,12 @@
+/* Shared neutral palette for the Photoshop panel. */
+:root {
+    --panel: #252729;
+    --surface: #2c2f32;
+    --border: #41454a;
+    --text: #e8eaed;
+    --muted: #a5aab0;
+    --accent: #579ce0;
+}
 
 * {
     margin: 0;
@@ -15,7 +24,7 @@
 }
 
 body {
-    background-color: #6b6b6b;
+    background-color: #1e2022;
     color: #e0e0e0;
     padding: 0 12px 12px;
     display: flex;
@@ -29,24 +38,26 @@ body {
 
 .focus-indicator {
     width: calc(100% + 30px);
-    margin: -15px -15px 8px;
-    height: 14px;
-    background-color: #3a3a3a;
+    margin: -15px -15px 0;
+    height: 18px;
+    background-color: #282b2e;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 11px;
     color: transparent;
+    overflow: hidden;
+    white-space: nowrap;
     transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .focus-indicator.active {
-    background-color: #29b6f6;
+    background-color: #294c70;
     color: #fff;
 }
 
 .container {
-    background-color: #272727;
+    background-color: var(--panel);
     padding: 15px;
     max-width: 400px;
     width: 100%;
@@ -122,8 +133,27 @@ h1 {
 }
 
 /* 状态文本颜色（原 inline style，迁移到 class 以便 i18n 纯文本化） */
-#statusValue.status-draw { color: #e8a838; }
-#statusValue.status-smudge { color: #c87dd4; }
-#statusValue.status-eyedropper-fg { color: #1473e6; }
-#statusValue.status-eyedropper-bg { color: #44b556; }
-#statusValue.status-rect-select { color: #FF9800; }
+#statusValue.status-draw {
+    color: #e8a838;
+}
+#statusValue.status-smudge {
+    color: #c87dd4;
+}
+#statusValue.status-eyedropper-fg {
+    color: #1473e6;
+}
+#statusValue.status-eyedropper-bg {
+    color: #44b556;
+}
+#statusValue.status-rect-select {
+    color: #FF9800;
+}
+
+/* Native controls remain keyboard-visible despite the legacy global reset. */
+button:focus-visible, a:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+button {
+    font-family: inherit;
+}

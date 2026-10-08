@@ -1,60 +1,63 @@
 
 .mix-area-container {
-    margin-bottom: 5px;
+    margin: 0;
 }
-
 .mix-area-header {
     display: flex;
     align-items: center;
-    margin-bottom: 5px;
+    justify-content: space-between;
+    gap: 18px;
+    padding: 14px 0 10px;
 }
-
-.mix-area-header h3 {
-    font-size: 14px;
-    color: #e0e0e0;
-    width: 90px;
-}
-
-:lang(ja) .mix-area-header h3 {
-    font-size: 12px;
-    white-space: nowrap;
-}
-
-.color-indicators {
-    display: flex;
-    gap: 15px;
-}
-
-.color-indicator {
+.mix-heading {
     display: flex;
     align-items: center;
-    gap: 5px;
-    font-size: 12px;
-    color: #b0b0b0;
+    gap: 6px;
+    flex-shrink: 0;
 }
-
+.mix-area-header h3 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+}
+.color-indicators {
+    position: relative;
+    width: 38px;
+    height: 34px;
+    flex-shrink: 0;
+}
+.color-indicator {
+    position: static;
+}
 .color-indicator span {
-    width: 24px;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
 }
-
 .color-box {
-    width: 20px;
-    height: 20px;
-    border-radius: 4px;
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    border-radius: 3px;
+    border: 1px solid #e6e9ed;
 }
-
 .color-box.foreground {
-    border: 2px solid #fff;
+    top: 0;
+    left: 0;
+    z-index: 2;
 }
-
 .color-box.background {
-    border: 2px dashed #fff;
+    bottom: 0;
+    right: 0;
+    z-index: 1;
 }
-
 .mix-area {
     position: relative;
     border: 1px solid #4c4c4c;
-    border-radius: 8px;
+    border-radius: 5px;
     overflow: hidden;
     background-color: #2c2c2c;
 }
@@ -80,56 +83,72 @@
 }
 
 .info {
-    background-color: #2c2c2c;
-    padding: 6px 15px 15px;
-    border-radius: 8px;
-    font-size: 13px;
-    line-height: 1.5;
-    color: #b0b0b0;
+    border-top: 1px solid var(--border);
+    margin-top: 12px;
+    padding-top: 10px;
+    font-size: 11px;
+    color: var(--muted);
 }
-
-.info p {
-    margin-bottom: 5px;
+.footer-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 12px;
 }
-
-.info strong {
-    color: #e0e0e0;
+#statusText {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
 }
-
+#statusValue {
+    font-weight: 500;
+}
+.status-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+}
 .info-header {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
+    border: 0;
+    background: none;
+    color: var(--muted);
     cursor: pointer;
-    user-select: none;
-    margin-bottom: 5px;
+    font-size: 10px;
+    padding: 2px 0;
 }
-
 .info-chevron {
-    color: #b0b0b0;
-    transition: transform 0.2s ease;
-    flex-shrink: 0;
+    transition: transform .2s;
 }
-
 .info-chevron.open {
     transform: rotate(180deg);
 }
-
 .info-body {
     overflow: hidden;
-    transition: max-height 0.25s ease, opacity 0.25s ease;
-    max-height: 300px;
-    opacity: 1;
+    max-height: none;
+    padding-top: 12px;
+    line-height: 1.8;
 }
-
+.info-body p {
+    margin-bottom: 4px;
+}
+.info-body strong {
+    font-weight: 500;
+    color: var(--text);
+}
 .info-body.collapsed {
-    max-height: 0;
-    opacity: 0;
+    display: none;
 }
-
 /* ── Value Ruler ─────────────────────────────────────── */
 .value-ruler {
     flex: 1;
+    min-width: 48px;
+    max-width: 180px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -138,8 +157,8 @@
 
 .value-ruler-track {
     position: relative;
-    width: 120px;
-    height: 12px;
+    width: 100%;
+    height: 8px;
     border-radius: 6px;
     overflow: visible;
 }
@@ -181,7 +200,7 @@
 .value-ruler-labels {
     display: flex;
     justify-content: space-between;
-    width: 120px;
+    width: 100%;
     font-size: 9px;
     color: #666;
     line-height: 1;
@@ -252,4 +271,20 @@
     display: none;
     will-change: transform, background-color;
     z-index: 20;
+}
+
+@media (max-width: 360px) {
+    .mix-area-header {
+        gap: 10px;
+    }
+    .mix-area-header h3 {
+        font-size: 11px;
+    }
+    .clear {
+        font-size: 10px;
+        padding: 4px 5px;
+    }
+    .footer-row {
+        gap: 6px 8px;
+    }
 }

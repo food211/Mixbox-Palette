@@ -56,105 +56,117 @@
     </div>
     <div class="resize-handle resize-handle-left" id="resizeHandleLeft" data-i18n-title="resizeHandleTip"></div>
     <div class="container">
-        <div class="focus-indicator" id="focusIndicator"><span data-i18n="focusHint">Hold Space + click PS canvas to return shortcuts</span></div>
+        <div class="focus-indicator" id="focusIndicator" data-i18n-title="focusHint"><span data-i18n="focusHint">Hold Space + click PS canvas to return shortcuts</span></div>
         <div class="header-container">
-            <!-- 语言切换 - 左上角 -->
-            <div class="lang-selector">
-                <button id="langBtn" class="lang-btn" data-i18n-title="switchLanguage" title="Switch Language (EN / ZH)">EN</button>
-                <button id="engineBtn" class="engine-btn active" data-i18n-title="switchEngine" title="Switch Mixing Engine">KM</button>
-            </div>
-            <!-- 缩放控制 - 右上角 -->
-            <div class="zoom-selector">
-                <button id="zoomBtn" class="zoom-btn" data-i18n-title="zoomTitle" title="Zoom — Zoom in expands canvas size, zoom out does not">100%</button>
-                <div id="zoomDropdown" class="zoom-dropdown">
-                    <div class="zoom-option" data-zoom="0.6">60%</div>
-                    <div class="zoom-option" data-zoom="0.7">70%</div>
-                    <div class="zoom-option" data-zoom="0.8">80%</div>
-                    <div class="zoom-option" data-zoom="0.9">90%</div>
-                    <div class="zoom-option" data-zoom="1.0">100%</div>
-                    <div class="zoom-option" data-zoom="1.1">110%</div>
-                    <div class="zoom-option" data-zoom="1.2">120%</div>
-                    <div class="zoom-option" data-zoom="1.3">130%</div>
-                    <div class="zoom-option" data-zoom="1.4">140%</div>
-                    <div class="zoom-option" data-zoom="1.5">150%</div>
+            <h1>
+                <button id="engineBtn" class="engine-title" data-i18n-title="switchEngine" type="button">
+                    <svg class="brand-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1.5-3.3 1.5 1.5 0 0 1 1.2-2.5H18a3 3 0 0 0 3-3 9 9 0 0 0-9-9Z"/><circle cx="7.5" cy="10" r=".7"/><circle cx="10" cy="6.5" r=".7"/><circle cx="15" cy="7" r=".7"/><circle cx="17" cy="11" r=".7"/></svg>
+                    <span id="engineTitle">KM Palette</span>
+                    <svg class="engine-swap" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><path d="M2 5h12m-3-3 3 3-3 3M14 11H2m3-3-3 3 3 3"/></svg>
+                </button>
+            </h1>
+            <div class="header-actions">
+                <button id="langBtn" class="lang-btn" data-i18n-title="switchLanguage" type="button">EN</button>
+                <div class="zoom-selector">
+                    <button id="zoomBtn" class="zoom-btn" data-i18n-title="zoomTitle" title="Zoom — Zoom in expands canvas size, zoom out does not">100%</button>
+                    <div id="zoomDropdown" class="zoom-dropdown">
+                        <div class="zoom-option" data-zoom="0.6">60%</div>
+                        <div class="zoom-option" data-zoom="0.7">70%</div>
+                        <div class="zoom-option" data-zoom="0.8">80%</div>
+                        <div class="zoom-option" data-zoom="0.9">90%</div>
+                        <div class="zoom-option" data-zoom="1.0">100%</div>
+                        <div class="zoom-option" data-zoom="1.1">110%</div>
+                        <div class="zoom-option" data-zoom="1.2">120%</div>
+                        <div class="zoom-option" data-zoom="1.3">130%</div>
+                        <div class="zoom-option" data-zoom="1.4">140%</div>
+                        <div class="zoom-option" data-zoom="1.5">150%</div>
+                    </div>
                 </div>
-            </div>
-
-            <h1 data-i18n="title">🎨 Mixbox Palette</h1>
-            <div class="palette-info"></div>
-            <div class="header-controls">
-                <div class="palette-selector">
-                    <button id="paletteBtn" class="palette-btn" data-i18n="switchPalette">Palette</button>
-                    <div id="paletteDropdown" class="palette-dropdown"></div>
-                </div>
-                <label class="preset-colors-toggle">
-                    <input type="checkbox" id="presetColorsToggle" aria-controls="colorPicker" checked>
-                    <span data-i18n="presetColors">Preset colors</span>
-                </label>
             </div>
         </div>
-        
+        <div class="header-controls">
+            <span class="palette-info" data-i18n="presetColors">Preset colors</span>
+            <div class="palette-selector">
+                <button id="paletteBtn" class="palette-btn" type="button" aria-expanded="false" aria-controls="paletteDropdown"><span></span></button>
+                <div id="paletteDropdown" class="palette-dropdown" aria-labelledby="paletteBtn"></div>
+            </div>
+        </div>
         <!-- 16 色选择器 -->
         <div class="color-picker" id="colorPicker"></div>
-        
-        <!-- 控制按钮 -->
+        <!-- Toolbar, brush parameters and pressure are separate spacing groups. -->
         <div class="controls">
-            <div class="brush-size">
-                <label class="label-size" data-i18n="brushSize" data-i18n-title="brushSizeTitle" title="Brush Size">Brush Size</label>
-                <div class="custom-range-wrap">
-                    <input type="range" id="brushSize" min="2" max="80" value="15">
-                    <div class="custom-range" data-for="brushSize"></div>
+            <div class="toolbar-row">
+                <div class="drawing-tools">
+                    <div class="brush-preview-group">
+                        <button type="button" class="brush-preview-btn" id="brushPreviewBtn" data-i18n-title="selectBrush" title="Select Brush">
+                            <canvas id="brushPreviewCanvas" width="28" height="28"></canvas>
+                        </button>
+                    </div>
+                    <div class="tool-buttons">
+                        <button id="smudgeBtn" class="tool-btn" data-i18n-title="smudgeTool" title="Smudge Tool"><img src="icons/smudge.svg" width="14" height="14" alt="Smudge"></button>
+                        <button id="eyedropperBtn" class="tool-btn" data-i18n-title="eyedropperTool" title="Eyedropper (Alt)"><img src="icons/eyedropper.svg" width="14" height="14" alt="Eyedropper"></button>
+                        <button id="rectSelectBtn" class="tool-btn" data-i18n-title="rectSelectTool" title="Select area to PS"><img src="icons/rect-select.svg" width="14" height="14" alt="Select"></button>
+                        <button id="importBtn" class="tool-btn" data-i18n-title="importFromPSTool" title="Import from PS"><img src="icons/import-from-ps.svg" width="14" height="14" alt="Import"></button>
+                    </div>
                 </div>
-                <span id="brushSizeValue">15</span><span class="unit">px</span>
-                <button id="pressureBtn" class="pressure-btn" title="Pressure Sensitivity">✏</button>
-            </div>
-            <div class="brush-size">
-                <label id="mixLabel" class="label-conc" data-i18n="paintConcentration" data-i18n-title="paintConcentrationTitle" title="Paint Concentration">Concentration</label>
-                <div class="custom-range-wrap">
-                    <input type="range" id="brushMix" min="1" max="100" value="77">
-                    <div class="custom-range" data-for="brushMix"></div>
-                </div>
-                <span id="brushMixStrength">77</span><span class="unit">%</span>
-            </div>
-            <div class="brush-size">
-                <label class="label-spacing" data-i18n="brushSpacing" data-i18n-title="brushSpacingTitle" title="Spacing">Spacing</label>
-                <div class="custom-range-wrap">
-                    <input type="range" id="brushSpacing" min="1" max="100" value="5">
-                    <div class="custom-range" data-for="brushSpacing"></div>
-                </div>
-                <span id="brushSpacingValue">5</span><span class="unit">%</span>
-                <button id="dripToggleBtn" class="drip-toggle-btn" data-i18n-title="dripToggleTitle" title="Toggle paint drip effect" hidden>💧</button>
-            </div>
-            <div class="controls-break"></div>
-            <button id="clearBtn" class="clear" data-i18n="clear">Clear</button>
-            <div class="brush-preview-group">
-                <span class="brush-label" data-i18n="brushLabel">Brush</span>
-                <div class="brush-preview-btn" id="brushPreviewBtn" data-i18n-title="selectBrush" title="Select Brush">
-                    <canvas id="brushPreviewCanvas" width="28" height="28"></canvas>
+                <div class="history-buttons">
+                    <button id="undoBtn" data-i18n-title="undo" title="Undo" disabled>↶</button>
+                    <button id="redoBtn" data-i18n-title="redo" title="Redo" disabled>↷</button>
                 </div>
             </div>
-            <div class="history-buttons">
-                <button id="undoBtn" data-i18n-title="undo" title="Undo" disabled>↶</button>
-                <button id="redoBtn" data-i18n-title="redo" title="Redo" disabled>↷</button>
+            <div class="parameter-row">
+                <div class="brush-size">
+                    <div class="parameter-label">
+                        <label for="brushSize" class="label-size" data-i18n="brushSize" data-i18n-title="brushSizeTitle" title="Brush Size">Brush Size</label>
+                        <span id="brushSizeValue">15</span><span class="unit">px</span>
+                    </div>
+                    <div class="custom-range-wrap">
+                        <input type="range" id="brushSize" min="2" max="80" value="15">
+                        <div class="custom-range" data-for="brushSize"></div>
+                    </div>
+                </div>
+                <div class="brush-size">
+                    <div class="parameter-label">
+                        <label for="brushMix" id="mixLabel" class="label-conc" data-i18n="paintConcentration" data-i18n-title="paintConcentrationTitle" title="Paint Concentration">Concentration</label>
+                        <span id="brushMixStrength">77</span><span class="unit">%</span>
+                    </div>
+                    <div class="custom-range-wrap">
+                        <input type="range" id="brushMix" min="1" max="100" value="77">
+                        <div class="custom-range" data-for="brushMix"></div>
+                    </div>
+                </div>
+                <div class="brush-size">
+                    <div class="parameter-label">
+                        <label for="brushSpacing" class="label-spacing" data-i18n="brushSpacing" data-i18n-title="brushSpacingTitle" title="Spacing">Spacing</label>
+                        <span id="brushSpacingValue">5</span><span class="unit">%</span>
+                    </div>
+                    <div class="custom-range-wrap">
+                        <input type="range" id="brushSpacing" min="1" max="100" value="5">
+                        <div class="custom-range" data-for="brushSpacing"></div>
+                    </div>
+                </div>
             </div>
-            <div class="tool-buttons">
-                <button id="smudgeBtn" class="tool-btn" data-i18n-title="smudgeTool" title="Smudge Tool"><img src="icons/smudge.svg" width="14" height="14" alt="Smudge"></button>
-                <button id="eyedropperBtn" class="tool-btn" data-i18n-title="eyedropperTool" title="Eyedropper (Alt)"><img src="icons/eyedropper.svg" width="14" height="14" alt="Eyedropper"></button>
-                <button id="rectSelectBtn" class="tool-btn" data-i18n-title="rectSelectTool" title="Select area to PS"><img src="icons/rect-select.svg" width="14" height="14" alt="Select"></button>
-                <button id="importBtn" class="tool-btn" data-i18n-title="importFromPSTool" title="Import from PS"><img src="icons/import-from-ps.svg" width="14" height="14" alt="Import"></button>
-            </div>
-            <div class="pressure-sens-buttons" data-i18n-title="pressureSensitivity" title="Pressure Sensitivity">
-                <button class="pressure-sens-btn" data-gamma="0.3" data-size-floor="0.2"  data-size-ceil="1.5" data-mix-floor="0.3"  data-i18n-title="pressureSensVery"   title="Softest tip"><span class="dot dot-xl"></span></button>
-                <button class="pressure-sens-btn" data-gamma="0.6" data-size-floor="0.3"  data-size-ceil="1.2" data-mix-floor="0.4"  data-i18n-title="pressureSensHigh"   title="Soft tip"><span class="dot dot-lg"></span></button>
-                <button class="pressure-sens-btn active" data-gamma="1.0" data-size-floor="0.4"  data-size-ceil="1.0" data-mix-floor="0.5"  data-i18n-title="pressureSensLinear" title="Medium tip"><span class="dot dot-md"></span></button>
-                <button class="pressure-sens-btn" data-gamma="2.0" data-size-floor="0.55" data-size-ceil="1.0" data-mix-floor="0.65" data-i18n-title="pressureSensFirm"   title="Firm tip"><span class="dot dot-sm"></span></button>
+            <div class="pressure-row">
+                <div class="pressure-controls">
+                    <span data-i18n="pressureLabel">Pressure</span>
+                    <button id="pressureBtn" class="pressure-btn" data-i18n-title="pressureToggleTitle" aria-pressed="false" title="Toggle pen pressure"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 15c7 0 3-10 14-10"/></svg></button>
+                    <button id="dripToggleBtn" class="drip-toggle-btn" data-i18n-title="dripToggleTitle" title="Toggle paint drip effect" hidden><svg width="14" height="16" viewBox="0 0 16 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 2s-5 7-5 11a5 5 0 0 0 10 0C13 9 8 2 8 2Z"/></svg></button>
+                </div>
+                <div class="pressure-sens-buttons" data-i18n-title="pressureSensitivity" title="Pressure Sensitivity">
+                    <button class="pressure-sens-btn" data-gamma="0.3" data-size-floor="0.2"  data-size-ceil="1.5" data-mix-floor="0.3"  data-i18n-title="pressureSensVery"   title="Softest tip"><span class="dot dot-xl"></span></button>
+                    <button class="pressure-sens-btn" data-gamma="0.6" data-size-floor="0.3"  data-size-ceil="1.2" data-mix-floor="0.4"  data-i18n-title="pressureSensHigh"   title="Soft tip"><span class="dot dot-lg"></span></button>
+                    <button class="pressure-sens-btn active" data-gamma="1.0" data-size-floor="0.4"  data-size-ceil="1.0" data-mix-floor="0.5"  data-i18n-title="pressureSensLinear" title="Medium tip"><span class="dot dot-md"></span></button>
+                    <button class="pressure-sens-btn" data-gamma="2.0" data-size-floor="0.55" data-size-ceil="1.0" data-mix-floor="0.65" data-i18n-title="pressureSensFirm"   title="Firm tip"><span class="dot dot-sm"></span></button>
+                </div>
             </div>
         </div>
-        
         <!-- 混色区 -->
         <div class="mix-area-container">
             <div class="mix-area-header">
-                <h3 data-i18n="mixArea">Mixing Area</h3>
+                <div class="mix-heading">
+                    <h3 data-i18n="mixArea">Mixing Area</h3>
+                    <button id="clearBtn" class="clear" data-i18n="clear">Clear</button>
+                </div>
                 <!-- 明度标尺 -->
                 <div class="value-ruler" id="valueRuler" title="Value Ruler">
                     <div class="value-ruler-track">
@@ -170,11 +182,11 @@
                 </div>
                 <div class="color-indicators">
                     <div class="color-indicator">
-                        <div class="color-box foreground" id="fgColorBox"></div>
+                        <div class="color-box foreground" id="fgColorBox" data-i18n-title="foreground" title="Foreground"></div>
                         <span data-i18n="foreground">Foreground</span>
                     </div>
                     <div class="color-indicator">
-                        <div class="color-box background" id="bgColorBox"></div>
+                        <div class="color-box background" id="bgColorBox" data-i18n-title="background" title="Background"></div>
                         <span data-i18n="background">Background</span>
                     </div>
                 </div>
@@ -185,14 +197,19 @@
                 <div id="eyedropperPreview" aria-hidden="true"></div>
             </div>
         </div>
-        
-        <!-- 信息显示 -->
         <div class="info">
-            <p id="statusText">• <span data-i18n="statusDraw_prefix"></span> <strong id="statusValue" class="status-draw" data-i18n="statusDraw_value"></strong></p>
-            <p class="info-header" id="instructionsToggle">
-                <strong data-i18n="instructions">Instructions</strong>
-                <svg class="info-chevron" id="instructionsChevron" width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><path d="M2 4l4 4 4-4"/></svg>
-            </p>
+            <div class="footer-row">
+                <p id="statusText"><span class="status-dot" aria-hidden="true"></span><strong id="statusValue" class="status-draw" data-i18n="statusDraw_value"></strong></p>
+                <button class="info-header" id="instructionsToggle" type="button" aria-expanded="false" aria-controls="instructionsBody">
+                    <span data-i18n="instructions">Instructions</span>
+                    <svg class="info-chevron" id="instructionsChevron" width="10" height="10" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M2 4l4 4 4-4"/></svg>
+                </button>
+                <p class="github-link">
+                    <a href="javascript:void(0)" onclick="openExternalURL('https://github.com/food211/mixbox-palette')" title="GitHub"><span class="icon-github"></span></a>
+                    <a href="javascript:void(0)" onclick="openExternalURL('https://discord.gg/d3ubWGpe')" title="Join our Discord" class="discord-link"><span class="icon-discord"></span></a>
+                    <a href="javascript:void(0)" id="versionLabel" class="version-link"></a>
+                </p>
+            </div>
             <div class="info-body" id="instructionsBody">
                 <p>• <strong data-i18n="inst1_action"></strong> → <span data-i18n="inst1_desc"></span></p>
                 <p>• <strong data-i18n="inst2_action"></strong> → <span data-i18n="inst2_desc"></span></p>
@@ -205,11 +222,6 @@
                 <p>• <span data-i18n="inst9_question"></span> <strong data-i18n="inst9_action"></strong> <span data-i18n="inst9_desc"></span></p>
                 <p>• <strong data-i18n="inst10_condition"></strong> <span data-i18n="inst10_desc"></span></p>
             </div>
-            <p class="github-link">
-                <a href="javascript:void(0)" onclick="openExternalURL('https://github.com/food211/mixbox-palette')" title="GitHub"><span class="icon-github"></span></a>
-                <a href="javascript:void(0)" onclick="openExternalURL('https://discord.gg/d3ubWGpe')" title="Join our Discord" class="discord-link"><span class="icon-discord"></span></a>
-                <a href="javascript:void(0)" id="versionLabel" class="version-link"></a>
-            </p>
         </div>
     </div>
     <div class="resize-handle resize-handle-right" id="resizeHandleRight" data-i18n-title="resizeHandleTip"></div>
