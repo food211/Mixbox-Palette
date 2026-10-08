@@ -7,7 +7,7 @@ const url = process.argv[2] || 'http://127.0.0.1:8765/app.html';
 (async () => {
     const browser = await chromium.launch({headless: true, executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--no-sandbox']});
     try {
-        const context = await browser.newContext({viewport: {width: 320, height: 900}, locale: 'en-US'});
+        const context = await browser.newContext({viewport: {width: 460, height: 900}, locale: 'en-US'});
         const page = await context.newPage();
         // The release announcement is unrelated to panel layout and blocks controls.
         await page.route('**/js/announcer.js', route => route.fulfill({contentType: 'application/javascript', body: 'window.Announcer = {init(){}, checkUpdate(){}};'}));
@@ -70,7 +70,7 @@ const url = process.argv[2] || 'http://127.0.0.1:8765/app.html';
             assert.equal(await page.locator('.pressure-controls [data-i18n="brushLabel"]').textContent(), {en: 'Brush', zh: '笔刷', ja: 'ブラシ'}[lang]);
             await menu.click();
             const bounds = await page.locator('#paletteDropdown').boundingBox();
-            assert(bounds.x >= 0 && bounds.x + bounds.width <= 320);
+            assert(bounds.x >= 0 && bounds.x + bounds.width <= 460);
             await page.keyboard.press('Escape');
             assert.equal(await menu.getAttribute('aria-expanded'), 'false');
             await choose('digitalArtist');
@@ -176,7 +176,7 @@ const url = process.argv[2] || 'http://127.0.0.1:8765/app.html';
         assert.equal(await page.locator('#eyedropperBtn.active').count(), 0);
         assert.equal(await page.evaluate(() => currentTool), 'brush');
         // Geometry checks avoid generating a user-facing preview image.
-        for (const width of [320, 480, 1000]) {
+        for (const width of [460, 480, 1000]) {
             await page.setViewportSize({width, height: 1000});
             for (let i = 0; i < 3; i++) {
                 await page.locator('#langBtn').click();
@@ -209,6 +209,17 @@ const url = process.argv[2] || 'http://127.0.0.1:8765/app.html';
                 assert(geometry.pressureRowHeight < 40);
             }
         }
+        // Narrower panels never shrink the page below 460px: it scrolls sideways and keeps the one-row title.
+        await page.setViewportSize({width: 360, height: 1000});
+        const narrow = await page.evaluate(() => ({
+            scrollWidth: document.documentElement.scrollWidth,
+            container: document.querySelector('.container').getBoundingClientRect().width,
+            oneRow: Math.abs(document.querySelector('#paletteBtn').getBoundingClientRect().top - document.querySelector('.header-actions').getBoundingClientRect().top) < 6,
+        }));
+        assert.equal(narrow.scrollWidth, 460);
+        assert.equal(narrow.container, 436);
+        assert.equal(narrow.oneRow, true);
+        await page.setViewportSize({width: 1000, height: 1000});
         // Focus cue remains at the top and never reflows the panel.
         const focusGeometry = await page.evaluate(() => {
             const indicator = document.getElementById('focusIndicator');
@@ -286,7 +297,7 @@ const url = process.argv[2] || 'http://127.0.0.1:8765/app.html';
         assert.equal(await page.evaluate(() => currentEngine), 'km');
         assert.equal(await page.evaluate(() => pressureGamma), 0.6);
         // Boot through the Photoshop code path with a fake transport, preserving Space handoff.
-        const hostContext = await browser.newContext({viewport: {width: 320, height: 900}, locale: 'en-US'});
+        const hostContext = await browser.newContext({viewport: {width: 460, height: 900}, locale: 'en-US'});
         await hostContext.addInitScript(() => {
             window.hostMessages = [];
             window.uxpHost = {postMessage: message => window.hostMessages.push(message)};
@@ -315,6 +326,6 @@ const url = process.argv[2] || 'http://127.0.0.1:8765/app.html';
         assert.equal(await hostPage.locator('#zoomBtn').textContent(), '80%');
         await hostContext.close();
         assert.deepEqual(errors, []);
-        console.log('PASS: menu/keyboard, hidden palette/persistence, EN/ZH/JA at 320/480/1000px, engine titles, PS bridge, KM/Mixbox painting, eyedropper, undo/redo, sliders/pressure, foreground layering, focus cue');
+        console.log('PASS: menu/keyboard, hidden palette/persistence, EN/ZH/JA at 460/480/1000px, 460px floor, engine titles, PS bridge, KM/Mixbox painting, eyedropper, undo/redo, sliders/pressure, foreground layering, focus cue');
     } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });

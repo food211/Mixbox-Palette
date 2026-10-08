@@ -36,6 +36,8 @@ body {
     align-items: center;
     min-height: 100vh;
     overflow-y: auto;
+    /* 标题行（引擎名 + 色板下拉 + 语言/缩放）一行放下至少要 460px：更窄时横向滚动，不再继续缩小 */
+    min-width: 460px;
     /* 注意：body 不设 touch-action: none 以保留移动端页面滚动/双指缩放；
        画布和滑条自己设 touch-action: none 屏蔽绘画/拖拽时的手势干扰 */
 }

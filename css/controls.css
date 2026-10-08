@@ -13,10 +13,6 @@
     gap: 16px;
     width: 100%;
 }
-.pressure-row {
-    flex-wrap: wrap;
-    gap: 6px 12px;
-}
 .tool-buttons, .history-buttons, .pressure-controls, .pressure-sens-buttons {
     display: flex;
     align-items: center;
@@ -204,22 +200,5 @@
     }
     .toolbar-row {
         gap: 10px;
-    }
-    .pressure-row {
-        gap: 6px 8px;
-    }
-    .pressure-controls {
-        gap: 4px;
-        font-size: 11px;
-    }
-    .pressure-controls .brush-preview-btn {
-        margin-right: 0;
-    }
-    .pressure-sens-buttons {
-        gap: 2px;
-    }
-    .pressure-sens-btn {
-        width: 22px;
-        height: 22px;
     }
 }
