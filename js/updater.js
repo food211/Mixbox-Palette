@@ -13,7 +13,7 @@ const Updater = {
     RECENT_URL: UPDATE_BASE + 'recent-changelogs.json',
     CHANGELOG_PAGE: UPDATE_BASE + 'changelog.html',
     STORAGE_KEY: 'mixbox_dismissed_update',
-    CURRENT_VERSION: 'V1.5.6e',
+    CURRENT_VERSION: 'V1.6.0',
 
     /** 将 markdown 列表转为简单 HTML（支持加粗和链接） */
     _mdToHtml(md) {
