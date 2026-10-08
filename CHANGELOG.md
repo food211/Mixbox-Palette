@@ -3,25 +3,19 @@
 == V1.6.0 ==
 [ZH]
 ### 新功能
-- **隐藏色板** — 色板下拉菜单最后新增"隐藏色板"选项，选中后收起整块预设色块、不加载任何颜色，给画布腾出更多空间；选择会被记住，刷新后保持
-- **画笔工具按钮** — 工具栏第一格新增画笔按钮，和涂抹成对切换（快捷键 B / S）；笔刷样式选择器独立放在压感行最左的"笔刷"一栏，画笔和涂抹两种模式下都能换笔刷
+- **隐藏色板** — 色板可以隐藏了
+- **画笔按钮与笔刷选择分开** — 工具栏新增画笔按钮，和涂抹成对切换；选笔刷的入口独立成"笔刷"一栏，画笔和涂抹模式下都能换笔刷
 
 ### 优化
-- **面板重新设计，更紧凑** — 标题就是引擎切换按钮；色板选择移到标题行，去掉了"预设色块"一行；页面最小宽度为 460px，面板更窄时左右滚动而不再继续缩小；工具、参数、压感按行分组，行距和按钮高度全面收紧，面板（不含画布）整体矮了约 180px
-- **色板按钮显示简称** — 色板下拉固定宽度，按钮里显示简称（如 W&N Cotman），完整名称在展开的列表和悬停提示里，切换色板不再让界面抖动
-- **前景 / 背景标识统一** — 前景是实线框、背景是虚线框，色块的选中状态和右侧显示框用同一套样式并加粗；同一个色块同时是前景和背景时，左半边实线、右半边虚线
-- **涂抹默认圆形笔刷，图标换成手指** — 新用户和重置后的涂抹工具默认使用圆形笔刷（已有设置不受影响）；涂抹图标改为食指和拇指张开的手形，画笔图标同系列，下拉箭头也换成了矢量图标
+- **界面重新设计** — 面板整体重新设计，更紧凑
 
 [EN]
 ### New Features
-- **Hide palette** — A new "Hide palette" option at the end of the palette dropdown collapses the whole preset swatch area and loads no colors, freeing room for the canvas. Your choice is remembered across reloads
-- **Brush tool button** — The first tool slot is now a Brush button that pairs with Smudge (shortcuts B / S). The brush tip picker has its own "Brush" slot at the left of the pressure row and works in both Brush and Smudge modes
+- **Hide palette** — The palette can now be hidden
+- **Brush button and brush selection are now separate** — The toolbar has a new Brush button that pairs with Smudge, while choosing a brush has its own "Brush" slot that works in both Brush and Smudge modes
 
 ### Improvements
-- **Redesigned, more compact panel** — The title doubles as the engine switch; the palette selector moved into the title row and the "Preset colors" row is gone; the page keeps a 460px minimum width and scrolls sideways on narrower panels instead of shrinking further; tools, parameters and pressure are grouped by row with tighter spacing and smaller buttons, making the panel (excluding the canvas) about 180px shorter
-- **Short palette names on the button** — The palette dropdown now has a fixed width and shows a short name (e.g. W&N Cotman) on the button, with the full name in the list and tooltip, so switching palettes no longer shifts the layout
-- **Consistent foreground / background markers** — Foreground is a solid outline, background a dashed one; swatch selection and the preview boxes now share the same, thicker style. When one swatch is both foreground and background, its outline is solid on the left half and dashed on the right half
-- **Smudge defaults to the circle brush, new finger icon** — New and reset smudge tools start with the circle brush (existing settings are unchanged); the smudge icon is now a hand with index finger and thumb spread, the brush icon matches, and dropdown arrows are now vector icons
+- **Redesigned UI** — The whole panel has been redesigned to be more compact
 
 == V1.5.6e ==
 [ZH]
