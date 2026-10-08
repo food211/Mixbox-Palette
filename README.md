@@ -63,7 +63,7 @@ Try the [KM Tuner](https://food211.github.io/Mixbox-Palette/km-tuner.html) to co
 - **6 brush presets** — Circle, Soft, Watercolor, Splatter, Flat, Dry; brush and smudge each remember their last preset
 - **Right-click paint** — drag to paint with background color
 - **Eyedropper** — `Alt + Left/Right Click` for foreground/background
-- **Transfer to Photoshop** — export a region of the mixing canvas directly to your active layer
+- **Bidirectional pixel transfer** — import Photoshop selections into the mixing canvas, then send your edits back to a new layer at the original position
 - **Bidirectional color sync** — plugin ↔ Photoshop, including PS color picker, swatches, X swap, D reset
 - **Zoom** — 60%–150% via top-right dropdown
 - **Undo/Redo** — up to 50 steps, GPU-backed canvas snapshots
@@ -96,10 +96,23 @@ Try the [KM Tuner](https://food211.github.io/Mixbox-Palette/km-tuner.html) to co
 3. **Paint** — draw on the mixing canvas to blend colors
 4. **Use in Photoshop** — selected colors sync to PS automatically; PS color changes sync back
 
-### Transfer Pixels to Photoshop
-1. Select an area on your Photoshop canvas
-2. In the plugin, switch to the rect select tool
-3. Draw a region on the mixing canvas — selected pixels transfer to the active layer
+### Transfer Pixels Between Photoshop and the Plugin
+
+#### Photoshop → plugin
+
+1. Create a selection on the Photoshop canvas.
+2. In the plugin, click **Import from PS**.
+3. Drag to select a destination area on the mixing canvas. The pixels from the Photoshop selection will fill this area, ready for painting and blending.
+
+#### Plugin → Photoshop
+
+1. Create or keep a selection on the Photoshop canvas.
+2. In the plugin, click **Send to PS**. If selection mode opens, drag to select the area of the mixing canvas to send.
+3. The selected pixels are fitted to the Photoshop selection and placed on a **new layer** above the active layer.
+
+**Keep pixel proportions:** Hold `Shift` while dragging a rectangular selection in both Photoshop and the plugin to make both selections square. This keeps the width-to-height ratio identical in both areas and avoids stretching.
+
+**Blend directly at the original position:** Import a Photoshop selection, then paint or blend it in the plugin. Keep the original Photoshop selection and the plugin canvas size unchanged, then click **Send to PS**. The plugin automatically sends the original import area back without another drag selection, placing your blended result at the original position on a **new layer**.
 
 ### Keyboard Shortcuts
 
@@ -109,7 +122,7 @@ Try the [KM Tuner](https://food211.github.io/Mixbox-Palette/km-tuner.html) to co
 | `S` | Smudge tool |
 | `I` | Eyedropper tool |
 | `X` | Swap foreground/background colors |
-| `Shift` (hold) | Temporary smudge tool |
+| `Shift` (hold) | Temporary smudge while painting; constrain drag selections to a square |
 | `Alt` (hold) | Temporary eyedropper |
 | `Alt + Left Click` | Pick foreground color |
 | `Alt + Right Click` | Pick background color |
@@ -215,7 +228,7 @@ Adobe Photoshop UXP 调色板插件，内置双物理混色引擎，模拟真实
 - **6 种笔刷预设** —— 圆形、柔和、水彩、飞溅、平头、干笔；画笔和涂抹工具各自记忆上次使用的笔刷
 - **右键绘制** —— 右键拖拽使用背景色绘制
 - **吸管工具** —— `Alt + 左键/右键` 取色为前景/背景
-- **传输至 PS** —— 将混色画布的区域传输到 Photoshop 活动图层
+- **双向像素传输** —— 将 Photoshop 选区导入混色画布，修改后可传回原位置的新图层
 - **双向颜色同步** —— 插件 ↔ Photoshop，包含拾色器、色板、X 交换、D 复位
 - **缩放控制** —— 右上角下拉菜单，60%–150%
 - **50 步撤销/重做** —— 直接保存画布快照，使用 GPU 显存记录增量
@@ -248,10 +261,23 @@ Adobe Photoshop UXP 调色板插件，内置双物理混色引擎，模拟真实
 3. **混色** —— 在混色画布上绘制
 4. **同步到 PS** —— 选取的颜色自动同步到 Photoshop；反之 PS 改色也会同步回插件
 
-### 传输像素到 Photoshop
-1. 在 Photoshop 画布上用任意选区工具选好区域
-2. 在插件中切换到矩形选取工具
-3. 在混色画布上框选 —— 所选像素自动传输到活跃图层的选区范围
+### 与 Photoshop 双向传输像素
+
+#### Photoshop → 插件
+
+1. 在 Photoshop 画布上选好要导入的区域。
+2. 在插件中点击 **从 PS 导入**。
+3. 在混色画布上框选接收区域，PS 选区内的像素会填入这个区域，随后即可绘制、涂抹和混色。
+
+#### 插件 → Photoshop
+
+1. 在 Photoshop 画布上创建或保留选区。
+2. 在插件中点击 **传输至PS**。如果进入框选模式，在混色画布上框选要发送的区域。
+3. 所选像素会缩放适配 PS 选区，并放到活动图层上方的**新图层**中。
+
+**保持像素比例：** 在 Photoshop 和插件中框选时，都按住 `Shift` 绘制正方形选区。两边都使用正方形选区，可以保持像素的宽高比例完全一致，避免拉伸变形。
+
+**在原位置直接绘制混色效果：** 从 PS 导入选区后，在插件里绘制或混色。保留 PS 侧的原选区，并保持插件画布尺寸不变，再点击 **传输至PS**，插件就会自动使用原来的导入区域回传，无需再次框选。混色结果会出现在 PS 的原位置，并**新建图层**保存。
 
 ## 快捷键
 
@@ -261,7 +287,7 @@ Adobe Photoshop UXP 调色板插件，内置双物理混色引擎，模拟真实
 | `S` | 涂抹工具 |
 | `I` | 吸管工具 |
 | `X` | 交换前景/背景色 |
-| `Shift`（按住）| 临时切换为涂抹工具 |
+| `Shift`（按住）| 绘制时临时切换为涂抹工具；框选时约束为正方形 |
 | `Alt`（按住）| 临时切换为吸管工具 |
 | `Alt + 左键` | 取色为前景色 |
 | `Alt + 右键` | 取色为背景色 |
