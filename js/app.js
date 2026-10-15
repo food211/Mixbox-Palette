@@ -244,6 +244,7 @@ async function switchEngine(engine) {
     if (engineBtn) {
         updateEngineTitle();
     }
+    window.requestBrushCursorPreload?.();
     console.log('✅ 引擎已切换为:', engine);
 }
 
@@ -290,7 +291,7 @@ function loadToolStatesFromStorage() {
  */
 async function initApp() {
     // 0. 检查宿主版本兼容性
-    if (!checkHostCompatibility()) return;
+    if (!checkHostCompatibility()) return { ready: false, reason: 'incompatible-host' };
 
     reportAnalyticsEnv();
 
@@ -358,12 +359,16 @@ async function initApp() {
 
     // 9. 初始化缩放控制
     initZoomControl();
+    const cursorPreviewReady = window.requestBrushCursorPreload();
 
     // 10. 初始化语言切换
     initLangToggle();
 
     // 11. 启动新手引导（老用户自动跳过）
     if (window.Onboarding) window.Onboarding.init();
+
+    // The loader may await initApp; preview failures degrade without blocking startup forever.
+    const cursorPreview = await cursorPreviewReady;
 
     // 12. 通知 UXP Host 加载完成
     if (isInWebView()) {
@@ -378,6 +383,7 @@ async function initApp() {
             cache: cacheName
         });
     }
+    return { ready: true, cursorPreview };
 }
 
 // saveBrushSettings 已被 persistCurrentState() 取代
@@ -1653,17 +1659,17 @@ function bindEvents() {
     });
 
     // ── 笔刷光标 ──────────────────────────────────────
-    const brushCursorCanvas = document.getElementById('brushCursor');
-    const brushCursorCtx = brushCursorCanvas.getContext('2d');
+    let brushCursorCanvas = document.getElementById('brushCursor');
+    let brushCursorCtx = brushCursorCanvas.getContext('2d');
     let _cursorCacheKey = null;  // 上次绘制时的 key，用于判断是否需要重绘
     let _cursorAppliedSizeKey = null;  // 上次应用到 style 的 size key，避免每帧写 width/height
 
-    function _rebuildCursorImage(canvasSize, cssDiameter) {
+    function _rebuildCursorImage(canvasSize, cssDiameter, target = brushCursorCanvas, brush = currentBrush) {
         const pad = 3; // 给描边留出空间，防止被裁切
         const totalSize = canvasSize + pad * 2;
-        brushCursorCanvas.width  = totalSize;
-        brushCursorCanvas.height = totalSize;
-        const ctx = brushCursorCtx;
+        target.width  = totalSize;
+        target.height = totalSize;
+        const ctx = target === brushCursorCanvas ? brushCursorCtx : target.getContext('2d');
         ctx.clearRect(0, 0, totalSize, totalSize);
 
         // 1. 在离屏 canvas 上画出笔刷形状（白色 fill，与背景无关）
@@ -1672,9 +1678,9 @@ function bindEvents() {
         offscreen.height = totalSize;
         const oc = offscreen.getContext('2d');
         oc.fillStyle = '#000';
-        const brushSrc = currentBrush.image
-            ? currentBrush.image
-            : brushManager.createBrushTexture(Math.ceil(cssDiameter / 2), currentBrush);
+        const brushSrc = brush.image
+            ? brush.image
+            : brushManager.createBrushTexture(Math.ceil(cssDiameter / 2), brush);
         oc.drawImage(brushSrc, pad, pad, canvasSize, canvasSize);
 
         // 2. 黑色外描边：以离屏形状作 shadow，自身透明
@@ -1696,7 +1702,261 @@ function bindEvents() {
         ctx.globalCompositeOperation = 'destination-out';
         ctx.drawImage(offscreen, 0, 0);
         ctx.globalCompositeOperation = 'source-over';
+        return brushSrc;
     }
+
+    // Only the selected preview is prepared. Keep one job and one latest request.
+    const cursorPreviewCache = [];
+    const CURSOR_PREVIEW_TIMEOUT_MS = 1500;
+    let cursorPreviewOutcome = { status: 'unavailable' };
+    let cursorPreviewLoading = null;
+    let cursorPreviewWanted = null;
+    let cursorPreviewTask = null;
+    let cursorPreviewResume = null;
+    let cursorPreviewIdle = null;
+    let cursorPreviewCancelFlush = null;
+    let cursorPreviewDisposed = false;
+    let cursorPreviewGeneration = 0;
+    const cursorPreviewImageIds = new WeakMap();
+    let cursorPreviewImageSeq = 0;
+
+    function cursorPreviewSourceToken(source) {
+        if (!cursorPreviewImageIds.has(source)) cursorPreviewImageIds.set(source, ++cursorPreviewImageSeq);
+        return cursorPreviewImageIds.get(source);
+    }
+
+    function cursorPreviewSpec() {
+        if (!brushManager || !mixCanvas.width) return null;
+        const rect = mixCanvas.getBoundingClientRect();
+        const zoom = typeof getCurrentZoom === 'function' ? getCurrentZoom() : 1;
+        const activeSize = currentTool === 'smudge' ? smudgeBrushSize : brushSize;
+        const diameter = activeSize * rect.width / mixCanvas.width / zoom;
+        if (!(diameter > 0)) return null;
+        const size = Math.ceil(diameter);
+        const brushKey = currentBrush.image ? `custom:${cursorPreviewSourceToken(currentBrush.image)}` : currentBrush.type;
+        return { key: `${brushKey}_${size}`, size, diameter,
+            brush: { type: currentBrush.type, image: currentBrush.image } };
+    }
+
+    function sameCursorPreview(a, b) {
+        return a && b && a.key === b.key;
+    }
+
+    function cachedCursorPreview(spec) {
+        const index = cursorPreviewCache.findIndex(entry => sameCursorPreview(entry.spec, spec));
+        if (index < 0) return null;
+        const [entry] = cursorPreviewCache.splice(index, 1);
+        const source = spec.brush.image || brushManager.createBrushTexture(Math.ceil(spec.diameter / 2), spec.brush);
+        if (entry.sourceToken !== cursorPreviewSourceToken(source)) {
+            releaseCursorPreview(entry);
+            return null;
+        }
+        cursorPreviewCache.push(entry);
+        return entry;
+    }
+
+    function releaseCursorPreview(entry) {
+        if (entry.canvas === brushCursorCanvas) return;
+        entry.canvas.width = entry.canvas.height = 0;
+    }
+
+    function adoptCursorPreview(entry) {
+        if (entry.canvas === brushCursorCanvas) return;
+        const previous = brushCursorCanvas;
+        entry.canvas.style.cssText = previous.style.cssText;
+        entry.canvas.className = previous.className;
+        entry.canvas.id = previous.id;
+        previous.replaceWith(entry.canvas);
+        previous.id = '';
+        brushCursorCanvas = entry.canvas;
+        brushCursorCtx = brushCursorCanvas.getContext('2d');
+        _cursorAppliedSizeKey = null;
+        if (cursorPreviewLoading?.canvas !== previous && !cursorPreviewCache.some(cached => cached.canvas === previous)) {
+            previous.width = previous.height = 0;
+        }
+    }
+
+    function flushCursorPreview(entry, owner) {
+        const gl = owner.gl;
+        return new Promise((resolve, reject) => {
+            let texture = null, fence = null, frame = null, finished = false;
+            const finish = error => {
+                if (finished) return;
+                finished = true;
+                if (frame !== null) cancelAnimationFrame(frame);
+                try { if (fence) gl.deleteSync(fence); } catch (_) {}
+                try { if (texture) gl.deleteTexture(texture); } catch (_) {}
+                cursorPreviewCancelFlush = null;
+                if (error) reject(error); else resolve();
+            };
+            cursorPreviewCancelFlush = () => finish(new Error('cursor preview cancelled'));
+            try {
+                const binding = gl.getParameter(gl.TEXTURE_BINDING_2D);
+                try {
+                    texture = gl.createTexture();
+                    if (!texture) throw new Error('cursor texture unavailable');
+                    gl.bindTexture(gl.TEXTURE_2D, texture);
+                    // Upload only a hidden UI snapshot. No framebuffer or draw call is involved.
+                    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, entry.canvas);
+                    fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+                    if (!fence) throw new Error('cursor fence unavailable');
+                    gl.flush();
+                } finally {
+                    gl.bindTexture(gl.TEXTURE_2D, binding);
+                }
+                const poll = () => {
+                    if (finished) return;
+                    if (cursorPreviewDisposed || entry.generation !== cursorPreviewGeneration ||
+                        painter !== owner || gl.isContextLost()) {
+                        finish(new Error('cursor context changed'));
+                        return;
+                    }
+                    try {
+                        const status = gl.clientWaitSync(fence, 0, 0);
+                        if (status === gl.TIMEOUT_EXPIRED) frame = requestAnimationFrame(poll);
+                        else if (status === gl.ALREADY_SIGNALED || status === gl.CONDITION_SATISFIED) finish();
+                        else finish(new Error('cursor fence failed'));
+                    } catch (error) { finish(error); }
+                };
+                frame = requestAnimationFrame(poll);
+            } catch (error) { finish(error); }
+        });
+    }
+
+    function cursorPreviewIdleTurn() {
+        return new Promise(resolve => {
+            const done = () => { cursorPreviewIdle = null; resolve(); };
+            if (typeof requestIdleCallback === 'function') {
+                cursorPreviewIdle = { idle: true, handle: requestIdleCallback(done), done };
+            } else {
+                cursorPreviewIdle = { idle: false, handle: requestAnimationFrame(done), done };
+            }
+        });
+    }
+
+    async function runCursorPreviewPreload() {
+        while (cursorPreviewWanted && !cursorPreviewDisposed) {
+            if (isDrawing) {
+                await new Promise(resolve => { cursorPreviewResume = resolve; });
+                cursorPreviewResume = null;
+                continue;
+            }
+            // Do not put cold UI raster work ahead of an already queued GPU history read.
+            if (painter?._idleBackupScheduled) {
+                await cursorPreviewIdleTurn();
+                continue;
+            }
+            const spec = cursorPreviewSpec();
+            cursorPreviewWanted = null;
+            if (!spec) {
+                cursorPreviewOutcome = { status: 'unavailable' };
+                continue;
+            }
+            if (cachedCursorPreview(spec)) {
+                cursorPreviewOutcome = { status: 'ready', key: spec.key };
+                continue;
+            }
+            const entry = { spec, canvas: document.createElement('canvas'), generation: cursorPreviewGeneration };
+            let retained = false;
+            cursorPreviewLoading = entry;
+            try {
+                if (!painter?.gl?.fenceSync) {
+                    cursorPreviewOutcome = { status: 'unavailable', key: spec.key };
+                    continue;
+                }
+                if (isDrawing) {
+                    await new Promise(resolve => { cursorPreviewResume = resolve; });
+                    cursorPreviewResume = null;
+                }
+                if (cursorPreviewDisposed || entry.generation !== cursorPreviewGeneration ||
+                    (cursorPreviewWanted && !sameCursorPreview(spec, cursorPreviewSpec()))) continue;
+                entry.sourceToken = cursorPreviewSourceToken(_rebuildCursorImage(spec.size, spec.diameter, entry.canvas, spec.brush));
+                await flushCursorPreview(entry, painter);
+                if (cursorPreviewDisposed || entry.generation !== cursorPreviewGeneration) continue;
+                spec.brush = null; // cached previews must not retain full custom source images
+                cursorPreviewCache.push(entry);
+                retained = true;
+                cursorPreviewOutcome = { status: 'ready', key: spec.key };
+                while (cursorPreviewCache.length > 3) releaseCursorPreview(cursorPreviewCache.shift());
+            } catch (_) {
+                if (entry.generation === cursorPreviewGeneration) {
+                    cursorPreviewOutcome = { status: 'failed', key: spec.key };
+                }
+                // The normal on-demand preview remains available on unsupported/failed GPU preparation.
+            } finally {
+                cursorPreviewLoading = null;
+                if (!retained) releaseCursorPreview(entry);
+            }
+        }
+    }
+
+    function cancelCursorPreviewPreload() {
+        cursorPreviewGeneration++;
+        cursorPreviewWanted = null;
+        if (cursorPreviewIdle) {
+            const pending = cursorPreviewIdle;
+            if (pending.idle) cancelIdleCallback(pending.handle); else cancelAnimationFrame(pending.handle);
+            pending.done();
+        }
+        if (cursorPreviewCancelFlush) cursorPreviewCancelFlush();
+        if (cursorPreviewResume) cursorPreviewResume();
+    }
+
+    function startCursorPreviewPreload() {
+        if (!cursorPreviewTask && cursorPreviewWanted && !cursorPreviewDisposed) {
+            cursorPreviewOutcome = { status: 'unavailable' };
+            // Bound the whole batch, including history/pen-up waits and GPU completion.
+            const timeout = setTimeout(() => {
+                cursorPreviewOutcome = { status: 'timeout' };
+                cancelCursorPreviewPreload();
+            }, CURSOR_PREVIEW_TIMEOUT_MS);
+            // A microtask coalesces selections made in one turn; no input throttle.
+            cursorPreviewTask = Promise.resolve().then(runCursorPreviewPreload).catch(() => {
+                cursorPreviewOutcome = { status: 'failed' };
+                cancelCursorPreviewPreload();
+            }).then(() => {
+                clearTimeout(timeout);
+                cursorPreviewTask = null;
+                if (cursorPreviewWanted && !cursorPreviewDisposed) return startCursorPreviewPreload();
+                return { ...cursorPreviewOutcome };
+            });
+        }
+        return cursorPreviewTask || Promise.resolve({ status: 'cancelled' });
+    }
+
+    // Always settles with ready/timeout/failed/unavailable/cancelled; never rejects.
+    window.requestBrushCursorPreload = () => {
+        if (cursorPreviewDisposed) return Promise.resolve({ status: 'cancelled' });
+        cursorPreviewWanted = true; // read layout only when the latest request is processed
+        return startCursorPreviewPreload();
+    };
+
+    function resumeCursorPreviewPreload() {
+        if (!isDrawing && cursorPreviewResume) cursorPreviewResume();
+    }
+    for (const event of ['pointerup', 'pointercancel', 'pointerleave']) {
+        mixCanvas.addEventListener(event, resumeCursorPreviewPreload);
+    }
+    brushSizeInput.addEventListener('input', window.requestBrushCursorPreload);
+    const cursorPreviewResizeObserver = typeof ResizeObserver === 'function'
+        ? new ResizeObserver(window.requestBrushCursorPreload) : null;
+    if (cursorPreviewResizeObserver) cursorPreviewResizeObserver.observe(mixCanvas);
+    window.addEventListener('pagehide', () => {
+        cursorPreviewDisposed = true;
+        cursorPreviewOutcome = { status: 'cancelled' };
+        cancelCursorPreviewPreload();
+        if (cursorPreviewResizeObserver) cursorPreviewResizeObserver.disconnect();
+        for (const entry of cursorPreviewCache) releaseCursorPreview(entry);
+        cursorPreviewCache.length = 0;
+    });
+    window.addEventListener('pageshow', event => {
+        if (!event.persisted) return;
+        cursorPreviewDisposed = false;
+        _cursorCacheKey = null;
+        _cursorAppliedSizeKey = null;
+        if (cursorPreviewResizeObserver) cursorPreviewResizeObserver.observe(mixCanvas);
+        window.requestBrushCursorPreload();
+    });
 
     function updateBrushCursor(cssX, cssY) {
         if (!brushManager || isRectSelectMode) {
@@ -1709,20 +1969,22 @@ function bindEvents() {
             return;
         }
 
-        const rect = mixCanvas.getBoundingClientRect();
-        const zoom = typeof getCurrentZoom === 'function' ? getCurrentZoom() : 1;
-        const scaleX = rect.width / mixCanvas.width / zoom;
-        const activeSize = currentTool === 'smudge' ? smudgeBrushSize : brushSize;
-        const cssDiameter = activeSize * scaleX;
-        const canvasSize = Math.ceil(cssDiameter);
+        const spec = cursorPreviewSpec();
+        if (!spec) return;
+        const canvasSize = spec.size;
         const pad = 3;
         const totalSize = canvasSize + pad * 2;
 
         // 只在笔刷类型或尺寸变化时重绘（随机笔刷也只重建一次，避免每帧抖动）
-        const brushKey = currentBrush.image ? 'custom' : currentBrush.type;
-        const cacheKey = `${brushKey}_${canvasSize}`;
+        const cacheKey = spec.key;
         if (cacheKey !== _cursorCacheKey) {
-            _rebuildCursorImage(canvasSize, cssDiameter);
+            const cached = cachedCursorPreview(spec) ||
+                (sameCursorPreview(cursorPreviewLoading?.spec, spec) ? cursorPreviewLoading : null);
+            if (cached && cached.canvas.width) {
+                adoptCursorPreview(cached);
+            } else {
+                _rebuildCursorImage(canvasSize, spec.diameter);
+            }
             _cursorCacheKey = cacheKey;
         }
 
@@ -1858,6 +2120,7 @@ function updateBrushPreview() {
     } else {
         brushManager.drawBrushPreview(previewCtx, 14, 14, 12, currentBrush.type);
     }
+    window.requestBrushCursorPreload?.();
 }
 
 /**
