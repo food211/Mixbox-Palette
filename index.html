@@ -101,14 +101,9 @@
 const _isZh = (navigator.language || '').toLowerCase().startsWith('zh');
 const T = {
     detecting:     _isZh ? '检测最快的服务器...'         : 'Detecting fastest server...',
-    loadingEngine: _isZh ? '加载引擎文件...'              : 'Loading engine files...',
-    loadingFile:   _isZh ? '加载中: '                     : 'Loading: ',
-    loadDone:      _isZh ? '加载完成，准备启动应用...'    : 'Load complete, starting app...',
     launching:     _isZh ? '启动应用...'                  : 'Launching app...',
-    selectedServer:_isZh ? '已选择最快的服务器: '         : 'Selected fastest server: ',
     fallback:      _isZh ? '无法连接到服务器，使用默认源' : 'Cannot reach server, using default source',
     errorLoad:     _isZh ? '加载失败，请检查网络连接。'   : 'Load failed. Please check your network connection.',
-    errorPartial:  _isZh ? '部分核心文件加载失败，请检查网络连接后重试。' : 'Some core files failed to load. Please check your network and retry.',
     errorConnect:  _isZh ? '无法连接到服务器，请检查网络连接后重试。'     : 'Cannot connect to server. Please check your network and retry.',
     retrying:      _isZh ? '重新连接...'                  : 'Reconnecting...',
     retry:         _isZh ? '重试'                         : 'Retry',
@@ -126,33 +121,6 @@ const SOURCES = [
 const PROBE_FILE = "js/updater.js";
 const TIMEOUT_MS = 4000;
 
-// 核心文件列表 - 这些文件会在跳转前预加载
-const CORE_FILES = [
-    "js/params.js",
-    "js/i18n-translations.js",
-    "js/i18n.js",
-    "js/mixbox.js",
-    "js/device-profile.js",
-    "js/frame-scheduler.js",
-    "js/base-painter.js",
-    "js/heatmap.js",
-    "js/wetpaper.js",
-    "js/drip.js",
-    "js/mixbox-painter.js",
-    "js/km-painter.js",
-    "assets/km-lut.png",
-    "js/brush-manager.js",
-    "js/palette-storage.js",
-    "js/palette-presets.js",
-    "js/ps-bridge.js",
-    "js/zoom.js",
-    "js/onboarding.js",
-    "js/app.js",
-    "js/updater.js",
-    "js/announcer.js",
-    "js/history-worker.js"
-];
-
 // 更新进度条
 function updateProgress(percent, message) {
     document.getElementById('progressBar').style.width = `${percent}%`;
@@ -169,64 +137,22 @@ function showError(message) {
 }
 
 
-// 预加载文件
-async function preloadFiles(baseUrl) {
-    // 确定需要加载的引擎文件
-    let filesToLoad = [...CORE_FILES];
-    
-    updateProgress(10, T.loadingEngine);
-    
-    const totalFiles = filesToLoad.length;
-    let loadedFiles = 0;
-    let failedFiles = 0;
-    
-    // 并行加载所有文件
-    const promises = filesToLoad.map(file => {
-        return fetch(baseUrl + file, { cache: 'no-store' })
-            .then(response => {
-                if (!response.ok) throw new Error(`Failed to load ${file}`);
-                return response.blob(); // 预加载文件内容
-            })
-            .then(() => {
-                loadedFiles++;
-                const percent = 10 + Math.floor(loadedFiles / totalFiles * 85);
-                updateProgress(percent, T.loadingFile + file.split('/').pop());
-            })
-            .catch(err => {
-                console.error(`Failed to preload ${file}:`, err);
-                failedFiles++;
-                // 如果失败文件不多，继续尝试
-                if (failedFiles <= 2) {
-                    return Promise.resolve(); // 不中断整体加载
-                } else {
-                    return Promise.reject(new Error('Too many files failed to load'));
-                }
-            });
-    });
-    
-    try {
-        await Promise.all(promises);
-        updateProgress(95, T.loadDone);
-        return true;
-    } catch (error) {
-        console.error("预加载文件失败:", error);
-        showError(T.errorPartial);
-        return false;
-    }
-}
-
 async function race() {
     // 透传 URL 参数（如 ?host=1.0.4）到 app.html
     const params = new URLSearchParams(window.location.search);
     const suffix = params.toString() ? '?' + params.toString() : '';
 
+    const controller = new AbortController();
+    let timeout;
     try {
         updateProgress(0, T.detecting);
-        
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-        const fastest = await Promise.any(
+        const deadline = new Promise((_, reject) => {
+            timeout = setTimeout(() => {
+                controller.abort();
+                reject(new Error('Source detection timed out'));
+            }, TIMEOUT_MS);
+        });
+        const probes = Promise.any(
             SOURCES.map((base, i) =>
                 fetch(base + PROBE_FILE, { cache: 'no-store', signal: controller.signal })
                     .then(r => {
@@ -235,37 +161,25 @@ async function race() {
                     })
             )
         );
-
-        clearTimeout(timeout);
+        const fastest = await Promise.race([probes, deadline]);
         const baseUrl = SOURCES[fastest];
-        updateProgress(5, T.selectedServer + baseUrl.replace(/https:\/\/|\/$/g, ''));
-        
-        // 预加载核心文件
-        const preloadSuccess = await preloadFiles(baseUrl);
-        
-        if (preloadSuccess) {
-            // 给用户一点时间看到100%
-            setTimeout(() => {
-                updateProgress(100, T.launching);
-                // 跳转到应用页面
-                window.location.replace(baseUrl + "app.html" + suffix);
-            }, 500);
-        }
+        // 下载由 app.html / SW 负责。no-store 预下载无法复用，只会多下载一整套文件。
+        updateProgress(100, T.launching);
+        window.location.replace(baseUrl + "app.html" + suffix);
     } catch (e) {
         console.error("服务器检测失败:", e);
         updateProgress(5, T.fallback);
         
-        // 尝试使用第一个源进行预加载
-        try {
-            const preloadSuccess = await preloadFiles(SOURCES[0]);
-            if (preloadSuccess) {
-                setTimeout(() => {
-                    window.location.replace(SOURCES[0] + "app.html" + suffix);
-                }, 500);
-            }
-        } catch (err) {
+        // 离线时探测可能失败，但当前源已有完整 SW 快照；直接导航仍可由 SW 恢复。
+        const currentSource = SOURCES.find(base => new URL(base).origin === location.origin);
+        if (currentSource) {
+            window.location.replace(currentSource + "app.html" + suffix);
+        } else {
             showError(T.errorConnect);
         }
+    } finally {
+        clearTimeout(timeout);
+        controller.abort(); // 取消败者和未消费的探测响应，成功路径也不遗留请求。
     }
 }
 

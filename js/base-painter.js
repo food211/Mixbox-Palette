@@ -819,22 +819,33 @@ class BaseWebGLPainter {
         return null;
     }
 
+    /** 读回存储用像素并就地翻转行；只额外分配一行，不再复制整帧。 */
+    _readPixelsForStorage(framebuffer, w, h) {
+        const gl = this.gl;
+        const raw = new Uint8Array(w * h * 4);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+        try {
+            gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, raw);
+        } finally {
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        }
+        const rowSize = w * 4;
+        const row = new Uint8Array(rowSize);
+        for (let top = 0, bottom = (h - 1) * rowSize; top < bottom; top += rowSize, bottom -= rowSize) {
+            row.set(raw.subarray(top, top + rowSize));
+            raw.copyWithin(top, bottom, bottom + rowSize);
+            raw.set(row, bottom);
+        }
+        // 同一块独占 buffer 的视图；每次读回仍返回独立快照，不复用历史帧。
+        return new Uint8ClampedArray(raw.buffer);
+    }
+
     /** 同步从当前 canvas framebuffer 读取像素到 frame.cpuPixels（GPU slot 无法分配时的兜底）*/
     _readCanvasToCPU(frame) {
-        const gl = this.gl;
         const cw = this.canvas.width;
         const ch = this.canvas.height;
         try {
-            gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
-            const raw = new Uint8Array(cw * ch * 4);
-            gl.readPixels(0, 0, cw, ch, gl.RGBA, gl.UNSIGNED_BYTE, raw);
-            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-            const flipped = new Uint8ClampedArray(raw.length);
-            const rowSize = cw * 4;
-            for (let row = 0; row < ch; row++) {
-                flipped.set(raw.subarray((ch - 1 - row) * rowSize, (ch - row) * rowSize), row * rowSize);
-            }
-            frame.cpuPixels = flipped;
+            frame.cpuPixels = this._readPixelsForStorage(this.framebuffers.canvas, cw, ch);
             frame.cpuReady  = true;
         } catch (e) {
             console.error('BaseWebGLPainter: readPixels 失败', e);
@@ -844,22 +855,10 @@ class BaseWebGLPainter {
     /** 同步从 GPU 读取帧数据到 CPU（仅在驱逐前必要时调用）*/
     _syncReadFrameToCPU(frame) {
         if (frame.cpuReady || !frame.gpuSlot) return;
-        const gl = this.gl;
         const cw = this.canvas.width;
         const ch = this.canvas.height;
 
-        gl.bindFramebuffer(gl.FRAMEBUFFER, frame.gpuSlot.fb);
-        const raw = new Uint8Array(cw * ch * 4);
-        gl.readPixels(0, 0, cw, ch, gl.RGBA, gl.UNSIGNED_BYTE, raw);
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-        // 翻转 Y（与 writeFromPixels 保持一致）
-        const flipped = new Uint8ClampedArray(raw.length);
-        const rowSize = cw * 4;
-        for (let row = 0; row < ch; row++) {
-            flipped.set(raw.subarray((ch - 1 - row) * rowSize, (ch - row) * rowSize), row * rowSize);
-        }
-        frame.cpuPixels = flipped;
+        frame.cpuPixels = this._readPixelsForStorage(frame.gpuSlot.fb, cw, ch);
         frame.cpuReady  = true;
 
         // 取消 idle 任务（已同步完成）
@@ -1092,9 +1091,18 @@ class BaseWebGLPainter {
                 else if (type === 'compressed') entry.resolve(e.data.blob);
                 else if (type === 'decompressed') entry.resolve(new Uint8ClampedArray(e.data.pixels));
             };
-            this._historyWorker.onerror = (err) => {
+            const worker = this._historyWorker;
+            const failWorker = (err) => {
+                if (this._historyWorker !== worker) return;
                 console.error('[history-worker] error:', err);
+                this._historyWorker = null;
+                try { worker.terminate(); } catch (_) {}
+                const pending = [...this._workerPending.values()];
+                this._workerPending.clear();
+                for (const { reject } of pending) reject(new Error(err.message || 'worker failed'));
             };
+            worker.onerror = failWorker;
+            worker.onmessageerror = failWorker;
         } catch (err) {
             console.warn('[history-worker] 创建失败，历史压缩禁用', err);
             this._historyWorker = null;
@@ -1108,7 +1116,12 @@ class BaseWebGLPainter {
         const id = ++this._workerMsgId;
         return new Promise((resolve, reject) => {
             this._workerPending.set(id, { resolve, reject });
-            w.postMessage({ ...msg, id }, transfer || []);
+            try {
+                w.postMessage({ ...msg, id }, transfer || []);
+            } catch (err) {
+                this._workerPending.delete(id);
+                reject(err);
+            }
         });
     }
 
@@ -1321,6 +1334,13 @@ class BaseWebGLPainter {
         const doBackup = () => {
             this._idleBackupScheduled = false;
             if (this._disposed) return;
+
+            // A queued callback can run after drawing resumes. Keep the existing quiet-period gate.
+            if (this._strokeActive) {
+                this._pendingIdle.set(frame.id, { type: 'shared' });
+                this._backupDeferred = true;
+                return;
+            }
 
             // 挑一个最需要备份的帧：有 GPU slot、还没 cpuReady、距当前步最远
             let readIdx = -1;
@@ -1624,22 +1644,11 @@ class BaseWebGLPainter {
      * 通过 readPixels → 离屏 2D canvas → toDataURL 实现
      */
     toDataURL(type = 'image/png', quality) {
-        const gl = this.gl;
         const cw = this.canvas.width;
         const ch = this.canvas.height;
 
-        // 从离屏 canvas framebuffer 读像素（不碰 default framebuffer）
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
-        const raw = new Uint8Array(cw * ch * 4);
-        gl.readPixels(0, 0, cw, ch, gl.RGBA, gl.UNSIGNED_BYTE, raw);
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-        // WebGL 坐标 Y 轴朝上，翻转回屏幕坐标
-        const flipped = new Uint8ClampedArray(cw * ch * 4);
-        const rowSize = cw * 4;
-        for (let row = 0; row < ch; row++) {
-            flipped.set(raw.subarray((ch - 1 - row) * rowSize, (ch - row) * rowSize), row * rowSize);
-        }
+        // 从离屏 framebuffer 读回并转成屏幕行序，不碰 default framebuffer。
+        const flipped = this._readPixelsForStorage(this.framebuffers.canvas, cw, ch);
 
         // 用离屏 2D canvas 生成 dataURL，不触碰 WebGL canvas
         const offscreen = document.createElement('canvas');
@@ -1650,32 +1659,29 @@ class BaseWebGLPainter {
     }
 
     /**
-     * 异步导出 dataURL，编码走浏览器后台线程（不阻塞主线程）。
-     * 大画布下比同步 toDataURL 快很多，适合 idle-save 场景。
+     * Async export: WebP at quality 1 reuses the history worker for encoding preparation.
+     * Other formats and worker failures use the original main-thread canvas fallback.
      */
     async toDataURLAsync(type = 'image/webp', quality = 1.0) {
-        const gl = this.gl;
         const cw = this.canvas.width;
         const ch = this.canvas.height;
 
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.canvas);
-        const raw = new Uint8Array(cw * ch * 4);
-        gl.readPixels(0, 0, cw, ch, gl.RGBA, gl.UNSIGNED_BYTE, raw);
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        const flipped = this._readPixelsForStorage(this.framebuffers.canvas, cw, ch);
 
-        const flipped = new Uint8ClampedArray(cw * ch * 4);
-        const rowSize = cw * 4;
-        for (let row = 0; row < ch; row++) {
-            flipped.set(raw.subarray((ch - 1 - row) * rowSize, (ch - row) * rowSize), row * rowSize);
-        }
-
-        // OffscreenCanvas + convertToBlob：编码走浏览器后台，主线程不阻塞
+        // convertToBlob can perform synchronous preparation before returning its Promise.
         let blob;
-        if (typeof OffscreenCanvas !== 'undefined') {
+        // Match the history worker's existing WebP codec and quality exactly.
+        // Clone rather than transfer: retain this snapshot for the fallback if the worker fails.
+        if (type === 'image/webp' && quality === 1.0) {
+            try {
+                blob = await this._workerRequest({ type: 'compress', pixels: flipped.buffer, w: cw, h: ch });
+            } catch (_) {}
+        }
+        if (!blob && typeof OffscreenCanvas !== 'undefined') {
             const oc = new OffscreenCanvas(cw, ch);
             oc.getContext('2d').putImageData(new ImageData(flipped, cw, ch), 0, 0);
             blob = await oc.convertToBlob({ type, quality });
-        } else {
+        } else if (!blob) {
             // 回退路径
             const c = document.createElement('canvas');
             c.width = cw; c.height = ch;

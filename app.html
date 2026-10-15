@@ -45,6 +45,8 @@
             border: 3px solid #404040; border-top-color: #4a9eff;
             animation: app-spin 0.9s linear infinite;
         }
+        #appLoader .status { max-width: 340px; margin: 18px 20px 0; text-align: center; font-size: 13px; }
+        #appLoader button { margin-top: 12px; padding: 8px 18px; cursor: pointer; }
         @keyframes app-spin { to { transform: rotate(360deg); } }
     </style>
 </head>
@@ -53,6 +55,8 @@
         <div class="icon">🎨</div>
         <div class="title">Mixbox Palette</div>
         <div class="spinner"></div>
+        <div class="status" id="appLoadStatus" role="status"></div>
+        <button id="appLoadRetry" type="button" hidden>Retry</button>
     </div>
     <div class="resize-handle resize-handle-left" id="resizeHandleLeft" data-i18n-title="resizeHandleTip"></div>
     <div class="container">
@@ -101,6 +105,14 @@
                     <button id="importBtn" class="tool-btn" data-i18n-title="importFromPSTool" title="Import from PS"><img src="icons/import-from-ps.svg" width="14" height="14" alt="Import"></button>
                 </div>
                 <div class="history-buttons">
+                    <button id="resizeLockBtn" class="resize-lock-btn" type="button" data-i18n-title="lockCanvasSize" title="Lock canvas size" aria-pressed="false">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path class="lock-open" d="M8 11V7a4 4 0 0 1 7.5-2"/>
+                            <path class="lock-closed" d="M8 11V7a4 4 0 0 1 8 0v4"/>
+                            <rect x="5" y="11" width="14" height="10" rx="2"/>
+                            <path d="M12 15v2"/>
+                        </svg>
+                    </button>
                     <button id="undoBtn" data-i18n-title="undo" title="Undo" disabled>↶</button>
                     <button id="redoBtn" data-i18n-title="redo" title="Redo" disabled>↷</button>
                 </div>
@@ -188,7 +200,7 @@
             </div>
             <div class="mix-area">
                 <canvas id="mixCanvas" width="550" height="400"></canvas>
-                <canvas id="brushCursor" style="position:absolute;top:0;left:0;pointer-events:none;display:none;"></canvas>
+                <canvas id="brushCursor" style="position:absolute;top:0;left:0;pointer-events:none;display:none;will-change:transform;"></canvas>
                 <div id="eyedropperPreview" aria-hidden="true"></div>
             </div>
         </div>
@@ -289,6 +301,23 @@
 
 <!-- 脚本加载 -->
 <script>
+    const markStartup = (stage) => performance.mark('palette:' + stage);
+    markStartup('start');
+    const loadIsZh = (navigator.language || '').toLowerCase().startsWith('zh');
+    const retryButton = document.getElementById('appLoadRetry');
+    retryButton.textContent = loadIsZh ? '重试' : 'Retry';
+    retryButton.addEventListener('click', () => location.reload());
+    function showLoadProblem(failed) {
+        const status = document.getElementById('appLoadStatus');
+        if (!status) return; // 宿主版本不兼容时由 app.js 展示专用页面。
+        status.textContent = failed
+            ? (loadIsZh ? '加载失败，请检查网络连接后重试。' : 'Loading failed. Check your connection and retry.')
+            : (loadIsZh ? '加载时间较长，正在继续尝试。您也可以重试。' : 'Loading is taking longer. Still trying; you can also retry.');
+        retryButton.hidden = false;
+    }
+    // 超时只提供恢复操作，绝不把尚未初始化的 UI 宣告为可用。
+    const loadingWatchdog = setTimeout(() => showLoadProblem(false), 15000);
+
     // 创建script标签加载适当的库（同一 src 只加载一次，返回同一 Promise）
     const _loadScriptCache = new Map();
     function loadScript(src) {
@@ -319,6 +348,48 @@
         await loadScript('js/mixbox.js');
         await loadScript('js/mixbox-painter.js');
     };
+
+    // 先下载、后按原有依赖层执行，避免 app.js 等大文件等到最后一层才开始下载。
+    function preloadResource(href, as) {
+        const link = document.createElement('link');
+        link.rel = 'preload';
+        link.as = as;
+        link.href = href;
+        if (as === 'fetch') link.crossOrigin = 'anonymous';
+        document.head.appendChild(link);
+    }
+
+    async function prepareServiceWorker() {
+        if (!('serviceWorker' in navigator) || location.protocol === 'file:') return;
+        const sw = navigator.serviceWorker;
+        // 更新检查仍执行；已有控制器时资源直接读完整旧快照，安装新版不阻塞启动。
+        const registration = Promise.resolve().then(() => sw.register('./sw.js'));
+        registration.catch(error => console.warn('Service Worker 注册失败:', error));
+        if (sw.controller) return;
+        let timeout, onController, installing, onState;
+        try {
+            // ready 不保证页面已被 claim。等 controllerchange，离线冷启动才不会抢跑网络。
+            await new Promise((resolve) => {
+                onController = () => { if (sw.controller) resolve(); };
+                sw.addEventListener('controllerchange', onController);
+                timeout = setTimeout(resolve, 3000);
+                registration.then(reg => {
+                    installing = reg.installing;
+                    if (installing) {
+                        onState = () => { if (installing.state === 'redundant') resolve(); };
+                        installing.addEventListener('statechange', onState);
+                        onState();
+                    }
+                    onController();
+                }, resolve);
+                onController();
+            });
+        } finally {
+            clearTimeout(timeout);
+            sw.removeEventListener('controllerchange', onController);
+            if (installing && onState) installing.removeEventListener('statechange', onState);
+        }
+    }
     
     // 检测WebGL支持
     function isWebGLSupported() {
@@ -334,19 +405,26 @@
     // 初始化应用
     async function loadAppScripts() {
         try {
-            // 等待 SW 就绪，确保后续资源请求都能被缓存拦截
-            if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-                await navigator.serviceWorker.ready;
-                console.log('✅ Service Worker 就绪');
-            }
+            await prepareServiceWorker();
+            markStartup('cache-ready');
 
             if (!isWebGLSupported()) {
-                alert('您的浏览器不支持 WebGL，无法运行本应用。');
-                return;
+                throw new Error('WebGL is not supported');
             }
 
             // 判断启动引擎：若用户上次用的是 KM，首帧就需要 KM
             const savedEngine = localStorage.getItem('mixbox_engine') || 'km';
+            const coreScripts = [
+                'js/params.js', 'js/device-profile.js', 'js/frame-scheduler.js',
+                'js/base-painter.js', 'js/brush-manager.js', 'js/palette-storage.js',
+                'js/ps-bridge.js', 'js/palette-presets.js', 'js/zoom.js', 'js/onboarding.js',
+            ];
+            const painterExtensions = ['js/heatmap.js', 'js/wetpaper.js', 'js/drip.js'];
+            const engineScripts = savedEngine === 'mixbox'
+                ? ['js/mixbox.js', 'js/mixbox-painter.js'] : ['js/km-painter.js'];
+            ['js/i18n-translations.js', 'js/i18n.js', ...coreScripts, ...painterExtensions,
+                ...engineScripts, 'js/app.js'].forEach(src => preloadResource(src, 'script'));
+            if (savedEngine !== 'mixbox') preloadResource('assets/km-lut.png', 'fetch');
 
             // 前置：i18n 必须在所有其他脚本之前就绪，否则后续脚本顶层代码读取 I18N 会拿到未初始化状态
             await Promise.all([
@@ -354,49 +432,32 @@
                 loadScript('js/i18n.js'),
             ]);
             I18N.init();
+            markStartup('i18n-ready');
             console.log('✅ i18n 就绪:', I18N.getLang());
 
             // Tier 0：无依赖的脚本全部并行下载
-            const tier0 = Promise.all([
-                loadScript('js/params.js'),
-                loadScript('js/device-profile.js'),
-                loadScript('js/frame-scheduler.js'),
-                loadScript('js/base-painter.js'),
-                loadScript('js/brush-manager.js'),
-                loadScript('js/palette-storage.js'),
-                loadScript('js/ps-bridge.js'),
-                loadScript('js/palette-presets.js'),
-                loadScript('js/zoom.js'),
-                loadScript('js/onboarding.js'),
-            ]);
+            const tier0 = Promise.all(coreScripts.map(loadScript));
+            // 后面的层可能先失败，先挂 catch 避免未处理拒绝；最终仍由 await 抛出。
+            tier0.catch(() => {});
 
             // Tier 1：依赖 base-painter.js（class 定义 / prototype 挂载）
             await loadScript('js/base-painter.js'); // dedupe 命中，仅等 tier0 中的同一份
-            const tier1 = Promise.all([
-                loadScript('js/heatmap.js'),
-                loadScript('js/wetpaper.js'),
-                loadScript('js/drip.js'),
-            ]);
+            const tier1 = Promise.all(painterExtensions.map(loadScript));
+            tier1.catch(() => {});
 
-            // updater / announcer 不依赖其他脚本，此时就发起下载（不 await，让请求尽早排队）
-            const auxPromise = Promise.all([
-                loadScript('js/updater.js'),
-                loadScript('js/announcer.js'),
-            ]);
+            // 轻量版本信息不阻塞核心；公告代码在可交互后加载。
+            const updaterPromise = loadScript('js/updater.js').catch(error => {
+                console.warn('版本信息加载失败:', error);
+            });
 
-            // 启动引擎按需加载；非启动引擎 idle 时预取（不阻塞首屏）
+            // 只执行启动引擎。另一引擎保留 ensure*Loaded 按需入口，完整 SW 快照仍包含它。
             let bootEnginePromise = null;
             if (savedEngine === 'mixbox') {
                 bootEnginePromise = window.ensureMBLoaded();
-                (window.requestIdleCallback || ((cb) => setTimeout(cb, 2000)))(() => {
-                    window.ensureKMLoaded().then(() => console.log('✅ KM 引擎已空闲预取'));
-                });
             } else {
                 bootEnginePromise = window.ensureKMLoaded();
-                (window.requestIdleCallback || ((cb) => setTimeout(cb, 2000)))(() => {
-                    window.ensureMBLoaded().then(() => console.log('✅ Mixbox 引擎已空闲预取'));
-                });
             }
+            bootEnginePromise.catch(() => {});
 
             await tier0;
             await tier1;
@@ -407,11 +468,20 @@
 
             // app.js 依赖以上全部
             await loadScript('js/app.js');
+            markStartup('scripts-ready');
             console.log('✅ app.js 已加载');
 
             // 重要：手动调用 app.js 中的 initApp 函数
             console.log('🚀 正在初始化应用...');
-            window.initApp();
+            markStartup('init-start');
+            const result = await window.initApp();
+            clearTimeout(loadingWatchdog);
+            if (result?.ready === false && result.reason === 'incompatible-host') return;
+            if (result?.ready !== true) throw new Error('initApp did not report core readiness');
+            if (result?.cursorPreview && result.cursorPreview.status !== 'ready') {
+                console.warn('光标预热降级:', result.cursorPreview.status);
+            }
+            markStartup('interactive');
 
             // 揭示主界面，淡出 loading 覆盖层
             document.body.classList.add('app-ready');
@@ -422,7 +492,7 @@
             }
 
             // 辅助模块加载完后再挂版本号 / 公告
-            auxPromise.then(() => {
+            Promise.all([updaterPromise, loadScript('js/announcer.js')]).then(() => {
                 const versionLabel = document.getElementById('versionLabel');
                 if (versionLabel && typeof Updater !== 'undefined') {
                     versionLabel.textContent = Updater.CURRENT_VERSION;
@@ -438,43 +508,19 @@
                 } else {
                     setTimeout(startAnnouncer, 3000);
                 }
-            });
+            }).catch(error => console.warn('公告加载失败:', error));
 
         } catch (error) {
             console.error('初始化失败:', error);
-            // 揭示主界面避免卡在 loading，便于用户看到 alert / 错误状态
-            document.body.classList.add('app-ready');
-            const loader = document.getElementById('appLoader');
-            if (loader) loader.remove();
-            alert('加载应用程序时出错，请检查控制台获取详细信息。');
+            clearTimeout(loadingWatchdog);
+            markStartup('failed');
+            showLoadProblem(true);
         }
     }
     
     // 页面加载完成后加载脚本
     window.addEventListener('DOMContentLoaded', loadAppScripts);
 
-    // 兜底：15 秒仍未 ready 就揭示主界面，避免 loader 卡死
-    setTimeout(() => {
-        if (!document.body.classList.contains('app-ready')) {
-            console.warn('⚠️ 加载超时 15 秒，强制揭示主界面');
-            document.body.classList.add('app-ready');
-            const loader = document.getElementById('appLoader');
-            if (loader) loader.remove();
-        }
-    }, 15000);
-
-    // 注册 Service Worker（file:// 协议不支持，跳过）
-    if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-        window.addEventListener('load', () => {
-            navigator.serviceWorker.register('./sw.js')
-                .then((registration) => {
-                    console.log('✅ Service Worker 注册成功:', registration.scope);
-                })
-                .catch((error) => {
-                    console.log('❌ Service Worker 注册失败:', error);
-                });
-        });
-    }
 </script>
 </body>
 </html>

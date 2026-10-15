@@ -12,7 +12,7 @@
  */
 const IS_DEV_HOST = self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1';
 const CACHE_PREFIX = 'km-palette-';
-const CACHE_NAME = 'km-palette-v104';
+const CACHE_NAME = 'km-palette-v105';
 const CACHE_URLS = [
   './app.html',
   './css/base.css',
@@ -58,6 +58,9 @@ const CACHE_URLS = [
 
 // 快照里每个文件的绝对地址，同时是缓存的 key（请求的查询参数不参与匹配）
 const SNAPSHOT_KEYS = new Set(CACHE_URLS.map((path) => new URL(path, self.location).href));
+// Cloudflare Pages 将 app.html 规范化到 /app；两种导航必须读取同一快照。
+const APP_HTML_KEY = new URL('./app.html', self.location).href;
+const APP_CANONICAL_KEY = APP_HTML_KEY.replace(/\.html$/, '');
 
 // 安装 - 整套拉取快照（dev 域跳过）
 self.addEventListener('install', (event) => {
@@ -88,10 +91,17 @@ async function precacheSnapshot() {
   const bust = Date.now().toString(36);
   const results = await Promise.allSettled([...SNAPSHOT_KEYS].map(async (key) => {
     const res = await fetch(`${key}?sw=${bust}`, { cache: 'reload' });
-    if (!res.ok || res.redirected) {
+    // 只接受已知的同源 HTML 规范化，其他重定向（含登录页/跨源）仍使安装失败。
+    const canonicalApp = key === APP_HTML_KEY &&
+      new URL(res.url).origin + new URL(res.url).pathname === APP_CANONICAL_KEY;
+    if (!res.ok || (res.redirected && !canonicalApp)) {
       throw new Error(`${key} → ${res.status}${res.redirected ? '（重定向）' : ''}`);
     }
-    await cache.put(key, res);
+    // FetchEvent 的导航不能返回带 redirected 标记的响应。
+    const snapshotResponse = res.redirected
+      ? new Response(res.body, { status: res.status, statusText: res.statusText, headers: res.headers })
+      : res;
+    await cache.put(key, snapshotResponse);
   }));
   const failed = results.filter((r) => r.status === 'rejected');
   if (failed.length > 0) {
@@ -155,7 +165,8 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  const snapshotKey = url.origin + url.pathname;
+  const requestKey = url.origin + url.pathname;
+  const snapshotKey = requestKey === APP_CANONICAL_KEY ? APP_HTML_KEY : requestKey;
   event.respondWith(
     SNAPSHOT_KEYS.has(snapshotKey)
       ? fromSnapshot(request, snapshotKey)
