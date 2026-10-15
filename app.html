@@ -101,6 +101,14 @@
                     <button id="importBtn" class="tool-btn" data-i18n-title="importFromPSTool" title="Import from PS"><img src="icons/import-from-ps.svg" width="14" height="14" alt="Import"></button>
                 </div>
                 <div class="history-buttons">
+                    <button id="resizeLockBtn" class="resize-lock-btn" type="button" data-i18n-title="lockCanvasSize" title="Lock canvas size" aria-pressed="false">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path class="lock-open" d="M8 11V7a4 4 0 0 1 7.5-2"/>
+                            <path class="lock-closed" d="M8 11V7a4 4 0 0 1 8 0v4"/>
+                            <rect x="5" y="11" width="14" height="10" rx="2"/>
+                            <path d="M12 15v2"/>
+                        </svg>
+                    </button>
                     <button id="undoBtn" data-i18n-title="undo" title="Undo" disabled>↶</button>
                     <button id="redoBtn" data-i18n-title="redo" title="Redo" disabled>↷</button>
                 </div>

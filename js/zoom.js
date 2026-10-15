@@ -16,6 +16,8 @@ function initResizeHandle() {
     const confirmText = document.getElementById('resizeConfirmText');
     const okBtn       = document.getElementById('resizeConfirmOkBtn');
     const cancelBtn   = document.getElementById('resizeConfirmCancelBtn');
+    const lockBtn     = document.getElementById('resizeLockBtn');
+    let resizeLocked = paletteStorage.loadAppSettings()?.canvasResizeLocked === true;
 
     // 应用已保存的宽度
     _applyContainerWidth(_containerMaxWidth);
@@ -24,6 +26,29 @@ function initResizeHandle() {
     let dragStartX = 0;
     let dragStartWidth = 0;
     let pendingWidth = 0;
+    let dragPointerId = null;
+
+    // 锁定状态统一控制命中区域、悬停提示和拖拽入口，避免仅改变按钮外观。
+    function _applyResizeLock() {
+        lockBtn.setAttribute('aria-pressed', String(resizeLocked));
+        for (const handle of [handleLeft, handleRight]) {
+            handle.hidden = resizeLocked;
+            handle.setAttribute('aria-disabled', String(resizeLocked));
+        }
+        if (resizeLocked) {
+            _stopDrag();
+            modal.classList.remove('active');
+            container.classList.remove('glow-left', 'glow-right');
+            _applyContainerWidth(_containerMaxWidth);
+        }
+    }
+
+    lockBtn.addEventListener('click', () => {
+        resizeLocked = !resizeLocked;
+        _applyResizeLock();
+        paletteStorage.saveAppSettings({ canvasResizeLocked: resizeLocked });
+        paletteStorage.flushAppSettings();
+    });
 
     function _positionHandles() {
         const rect = container.getBoundingClientRect();
@@ -68,8 +93,8 @@ function initResizeHandle() {
         pendingWidth = newWidth;
     }
 
-    function _onPointerUp(e) {
-        if (!dragSide) return;
+    function _stopDrag() {
+        if (!dragSide) return false;
         const handle = dragSide === 'left' ? handleLeft : handleRight;
         handleLeft.classList.remove('dragging');
         handleRight.classList.remove('dragging');
@@ -78,7 +103,15 @@ function initResizeHandle() {
         handle.removeEventListener('pointermove', _onPointerMove);
         handle.removeEventListener('pointerup', _onPointerUp);
         handle.removeEventListener('pointercancel', _onPointerUp);
-        try { if (e) handle.releasePointerCapture(e.pointerId); } catch (_) {}
+        try { handle.releasePointerCapture(dragPointerId); } catch (_) {}
+        dragPointerId = null;
+        cancelAnimationFrame(_dragRafId);
+        _dragRafId = 0;
+        return true;
+    }
+
+    function _onPointerUp() {
+        if (!_stopDrag()) return;
 
         if (pendingWidth === _containerMaxWidth) return; // 没变化
 
@@ -105,8 +138,10 @@ function initResizeHandle() {
     }
 
     function _startDrag(side, e) {
+        if (resizeLocked || dragSide) return;
         if (typeof isRectSelectMode !== 'undefined' && isRectSelectMode) return;
         dragSide = side;
+        dragPointerId = e.pointerId;
         dragStartX = e.clientX;
         dragStartWidth = _containerMaxWidth;
         pendingWidth = _containerMaxWidth;
@@ -126,10 +161,11 @@ function initResizeHandle() {
     handleLeft.addEventListener('pointerdown',  (e) => { e.preventDefault(); _startDrag('left',  e); });
     handleRight.addEventListener('pointerdown', (e) => { e.preventDefault(); _startDrag('right', e); });
 
-    handleLeft.addEventListener('mouseenter',  () => container.classList.add('glow-left'));
+    handleLeft.addEventListener('mouseenter',  () => { if (!resizeLocked) container.classList.add('glow-left'); });
     handleLeft.addEventListener('mouseleave',  () => container.classList.remove('glow-left'));
-    handleRight.addEventListener('mouseenter', () => container.classList.add('glow-right'));
+    handleRight.addEventListener('mouseenter', () => { if (!resizeLocked) container.classList.add('glow-right'); });
     handleRight.addEventListener('mouseleave', () => container.classList.remove('glow-right'));
+    _applyResizeLock();
 }
 
 function _applyContainerWidth(w) {

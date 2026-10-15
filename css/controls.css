@@ -55,10 +55,14 @@
     opacity: .35;
     cursor: default;
 }
-.tool-btn.active, .pressure-btn.active, .drip-toggle-btn.active {
+.tool-btn.active, .pressure-btn.active, .drip-toggle-btn.active, .resize-lock-btn[aria-pressed="true"] {
     background: #345a7f;
     border-color: #477bab;
     color: #fff;
+}
+.resize-lock-btn[aria-pressed="false"] .lock-closed,
+.resize-lock-btn[aria-pressed="true"] .lock-open {
+    display: none;
 }
 .pressure-btn, .drip-toggle-btn {
     font-size: 14px;
