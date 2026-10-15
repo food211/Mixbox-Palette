@@ -12,7 +12,7 @@
  */
 const IS_DEV_HOST = self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1';
 const CACHE_PREFIX = 'km-palette-';
-const CACHE_NAME = 'km-palette-v104';
+const CACHE_NAME = 'km-palette-v105';
 const CACHE_URLS = [
   './app.html',
   './css/base.css',

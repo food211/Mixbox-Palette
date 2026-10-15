@@ -1,5 +1,22 @@
 # 更新日志 / Changelog
 
+== V1.6.1 ==
+[ZH]
+### 新功能
+- **锁定画布大小** — 点击撤销按钮左侧的锁即可禁用两侧缩放手柄，避免误改画布大小；再次点击解锁，刷新后保留锁定状态
+
+### 优化
+- **绘画更流畅** — 减少连续绘画、涂抹和移动光标时的停顿
+- **启动加载优化** — 画布准备好后即可开始绘画，加载时间较长或失败时可直接重试
+
+[EN]
+### New Features
+- **Lock canvas size** — Click the lock next to Undo to disable both resize handles and prevent accidental resizing; click again to unlock. The lock setting is remembered after reloading
+
+### Improvements
+- **Smoother painting** — Reduced pauses while painting, smudging, and moving the cursor
+- **Improved startup** — Start painting as soon as the canvas is ready, with a retry button if loading takes too long or fails
+
 == V1.6.0 ==
 [ZH]
 ### 新功能
