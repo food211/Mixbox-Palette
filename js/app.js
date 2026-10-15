@@ -2243,7 +2243,10 @@ function pushSnapshot() {
 async function restoreState(step) {
     if (!painter) return;
     const ok = await painter.restoreHistoryFrame(step);
-    if (ok) updateHistoryButtons();
+    if (ok) {
+        updateHistoryButtons();
+        saveCanvasToStorage();
+    }
 }
 
 /**
@@ -2287,7 +2290,8 @@ async function _doSave() {
     _lastSavedAt = performance.now();
     try {
         const dataURL = await painter.toDataURLAsync('image/webp', 1.0);
-        paletteStorage.save(dataURL);
+        // save() 将配额/权限错误转成 false；保持脏状态，允许下次重试。
+        if (!paletteStorage.save(dataURL)) _canvasDirty = true;
     } catch (e) {
         console.warn('自动保存失败', e);
         _canvasDirty = true; // 失败重新标脏，下个窗口再试
@@ -2317,7 +2321,8 @@ window.flushCanvasSave = flushCanvasSave;
 window.addEventListener('beforeunload', () => {
     // 应用设置可能有未 debounce 的 pending 写入，必须先 flush
     try { if (paletteStorage) { paletteStorage.flushAppSettings(); paletteStorage.flushToolStates(); } } catch (_) {}
-    if (!_canvasDirty || !painter) return;
+    // 编码完成前脏标记已清除，但异步保存可能在卸载时被中断。
+    if ((!_canvasDirty && !_saveInFlight) || !painter) return;
     try {
         paletteStorage.save(painter.toDataURL('image/webp', 1.0));
     } catch (_) {}
