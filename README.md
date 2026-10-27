@@ -2,9 +2,9 @@
 
 [点击查看中文版](#-mixbox-调色板---adobe-photoshop-插件) · [日本語版はこちら](README.ja.md)
 
-A UXP plugin for realistic pigment mixing in Adobe Photoshop, with dual physical mixing engines.
+A watercolor palette for Adobe Photoshop where colors mix like real paint.
 
-[Try the online SPA](https://mixbox-palette.pages.dev/)
+Mix colors right in your browser: [Use it online for free](https://mixbox-palette.pages.dev/) (to send your colors or painting to Photoshop, install the [plugin](#installation))
 
 ![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg)
 ![Mixbox License](https://img.shields.io/badge/Mixbox-CC%20BY--NC%204.0-lightgrey.svg)
@@ -14,7 +14,7 @@ A UXP plugin for realistic pigment mixing in Adobe Photoshop, with dual physical
 
 <img src="./assets/gifs/red_blue_yellow.gif" alt="Red + blue + yellow mixing" width="480">
 
-*Real subtractive pigment mixing — yellow + blue = green, not muddy gray.*
+*Mixes like real paint — yellow + blue makes green, not muddy gray.*
 
 ---
 
@@ -44,16 +44,29 @@ Drag the handles on either side of the black panel to resize the mixing canvas (
 
 ---
 
-## Dual Mixing Engines — KM / MB
+## Two Mixing Engines — KM and MB
 
-Both engines are calibrated to produce visually similar results in most cases. Switch anytime via the **MB/KM** button in the top-left. Canvas auto-repaints from stroke history.
+The plugin offers two ways of mixing paint: **KM** (the default, made for this plugin) and **MB** (Mixbox). Most mixes look nearly the same in both, so you can simply stay with the default.
 
-- **KM** — Default. Self-implemented. 32³ LUT maps RGB to 38-wavelength reflectance spectra (data from [spectral.js](https://github.com/rvanwijnen/spectral.js), MIT), then Kubelka-Munk mixing in spectral space. GPL v3. **More physically accurate and more sensitive** — small differences in pigment RGB produce visibly different mixing behavior, closer to how real paints respond to subtle variations. Algorithmically more prone to producing greens in certain blue/yellow combinations.
-- **Mixbox (MB)** — [Mixbox](https://scrtwpns.com/mixbox/) LUT-based algorithm, CC BY-NC 4.0. Hand-tuned anchor pigments → coarser but more uniform — produces consistent results across a wide range of inputs. Lower precision than KM, higher stability.
+- **KM — sensitive.** Small differences between two paints show up in the mix, the way real paint behaves. Some blue + yellow mixes lean a little greener.
+- **MB — forgiving.** Slightly different paints still give nearly the same mix.
 
-The two engines now produce comparable results — pick KM (default) for higher precision and sensitivity, switch to MB for a more uniform feel or to avoid the GPL license. Differences are most visible at 25–75% concentration and on certain blue+yellow composites.
+You'll notice the difference most when two colors are mixed in roughly equal amounts.
 
-Try the [KM Tuner](https://food211.github.io/Mixbox-Palette/km-tuner.html) to compare side by side.
+**Selling your work?** KM is the safe choice. Mixbox's license only allows non-commercial use; KM was made from scratch without that restriction. See [License](#license).
+
+**To switch**, click the panel title in the top-left (it reads **KM Palette** or **Mixbox Palette**, with a ⇄ arrow next to it). What you've painted is redrawn with the new engine, so nothing is lost. To compare the two side by side, open the [KM Tuner](https://food211.github.io/Mixbox-Palette/km-tuner.html).
+
+<details>
+<summary>Technical details</summary>
+
+- **Why two engines**: the plugin was first built on [Mixbox](https://scrtwpns.com/mixbox/) (CC BY-NC 4.0, non-commercial). KM was written from scratch as a replacement and released under GPL v3; Mixbox stays as an option.
+- **KM**: models how pigment layers absorb and scatter light. A 32³ lookup table maps RGB to a 38-wavelength reflectance spectrum (spectral data from [spectral.js](https://github.com/rvanwijnen/spectral.js), MIT), then Kubelka-Munk mixing is done in spectral space.
+- **MB**: the official Mixbox LUT library (`js/mixbox.js`), unmodified; it models paint with a set of hand-tuned base pigments.
+- **Where they differ**: mostly at mix ratios of roughly 25–75%, and in some blue + yellow mixes.
+- **Switching**: the canvas is repainted from stroke history with the new engine.
+
+</details>
 
 ---
 
@@ -63,16 +76,29 @@ Try the [KM Tuner](https://food211.github.io/Mixbox-Palette/km-tuner.html) to co
 - **6 brush presets** — Circle, Soft, Watercolor, Splatter, Flat, Dry; brush and smudge each remember their last preset
 - **Right-click paint** — drag to paint with background color
 - **Eyedropper** — `Alt + Left/Right Click` for foreground/background
-- **Bidirectional pixel transfer** — import Photoshop selections into the mixing canvas, then send your edits back to a new layer at the original position
-- **Bidirectional color sync** — plugin ↔ Photoshop, including PS color picker, swatches, X swap, D reset
+- **Move pixels between Photoshop and the plugin** — import Photoshop selections into the mixing canvas, then send your edits back to a new layer at the original position
+- **Colors stay in sync with Photoshop** — both ways, including the color picker, swatches, X (swap) and D (reset)
 - **Zoom** — 60%–150% via top-right dropdown
-- **Undo/Redo** — up to 50 steps, GPU-backed canvas snapshots
+- **Undo/Redo** — up to 50 steps
 - **Auto-save** — canvas, settings, and history persist automatically
 - **Multilingual** — English / 中文 / 日本語, auto-detects system language
 
 ---
 
+## Requirements
+
+Mixbox Palette is a web app, so it runs on any platform with a modern browser — use it inside Photoshop, or on its own in the browser on a computer, tablet or phone.
+
+- **In Photoshop**: Photoshop 2022 (v23.3) or later
+- **In the browser**: a recent Chrome, Edge, Firefox or Safari
+- **A graphics card that supports WebGL 2** — most devices from recent years do. If you keep seeing "Engine initialization failed", try updating your graphics driver
+- **Internet on first launch** — after that it also works offline
+- **Pen pressure**: works with Apple Pencil on iPad and with Wacom tablets (on Windows, turn on Windows Ink in the Wacom driver settings)
+
 ## Installation
+
+### Use Online
+Open [https://mixbox-palette.pages.dev/](https://mixbox-palette.pages.dev/) in your browser — nothing to install. Works on computers, tablets and phones.
 
 ### From Adobe Marketplace
 1. Visit [MixBox Watercolor Palette on Adobe Marketplace](https://exchange.adobe.com/apps/cc/cc9344fb/mixbox-watercolor-palette)
@@ -135,7 +161,7 @@ WebView hybrid: UI and mixing engines hosted remotely (Cloudflare Pages, GitHub 
 
 ## Tech Stack
 
-- **Mixing Engines**: Mixbox (LUT-based, CC BY-NC 4.0) + KM (38-wavelength Kubelka-Munk, spectral data from spectral.js MIT, GPL v3)
+- **Mixing Engines**: KM (default, spectral Kubelka-Munk, GPL v3) + Mixbox (optional, CC BY-NC 4.0)
 - **Rendering**: WebGL (mixing) + Canvas 2D (cursor, overlays)
 - **Platform**: Adobe UXP + WebView
 - **Hosting**: Cloudflare Pages (primary) / GitHub Pages (fallback)
@@ -144,12 +170,12 @@ WebView hybrid: UI and mixing engines hosted remotely (Cloudflare Pages, GitHub 
 
 ## License
 
-Two licenses in this project:
+This project contains code under two licenses:
 
-- **Original code** (KM engine, UI, etc.) — [GPL-3.0](LICENSE)
-- **Mixbox library** (`js/mixbox.js`) — [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) (non-commercial only, by Secret Weapons)
+- **Original code** (KM engine, UI, etc.) — [GPL-3.0](LICENSE). Commercial use is allowed.
+- **Mixbox library** (`js/mixbox.js`, by Secret Weapons) — [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). Non-commercial use only.
 
-When using the Mixbox engine, the CC BY-NC 4.0 restriction applies. The KM engine has no such restriction.
+These licenses cover the plugin's code — using, copying and redistributing it. GPL-3.0 places no restriction on what you paint with the KM engine. If you redistribute this project (modified or not), you must share its source under GPL-3.0; to redistribute it commercially, remove `js/mixbox.js`. If you plan to use the MB engine for paid work, check [Mixbox's terms](https://scrtwpns.com/mixbox/) first.
 
 ## Trademarks
 
@@ -165,7 +191,6 @@ See [Changelog](https://food211.github.io/Mixbox-Palette/changelog.html) for ver
 - 💬 [Join our Discord](https://discord.gg/d3ubWGpe) — bug reports, feedback, and discussion
 - 🐛 [Report bugs](https://github.com/food211/Mixbox-Palette/issues)
 - 💡 Suggest features
-- ☕ Support my open-source work: Alipay food211@qq.com / WeChat 172660507
 
 ---
 
@@ -173,13 +198,13 @@ See [Changelog](https://food211.github.io/Mixbox-Palette/changelog.html) for ver
 
 [Click here for English version](#-mixbox-palette-for-adobe-photoshop) · [日本語版はこちら](README.ja.md)
 
-Adobe Photoshop UXP 调色板插件，内置双物理混色引擎，模拟真实颜料混合效果。
+Adobe Photoshop 水彩调色板插件，颜色像真实颜料一样混合。
 
-[在线体验 SPA](https://mixbox-palette.pages.dev/)
+直接在浏览器里调色：[在线免费使用](https://mixbox-palette.pages.dev/)（如需把调好的颜色或画面传到 PS，需要安装[插件](#安装)）
 
 <img src="./assets/gifs/red_blue_yellow.gif" alt="红蓝黄三原色混合" width="480">
 
-*真实减色混合 —— 黄+蓝=绿，不是糊成灰。*
+*像真实颜料一样混色 —— 黄+蓝=绿，不是糊成灰。*
 
 ---
 
@@ -205,20 +230,33 @@ Adobe Photoshop UXP 调色板插件，内置双物理混色引擎，模拟真实
 
 <img src="./assets/gifs/resize_canvas.gif" alt="拖动 handle 调整画布大小" width="480">
 
-拖拽黑色面板两侧的 handle 调整混色画布宽度（480–2000px）。
+拖拽黑色面板两侧的手柄调整混色画布宽度（480–2000px）。
 
 ---
 
-## 双混色引擎 —— KM / MB
+## 两个混色引擎 —— KM 和 MB
 
-两个引擎已完成校准，多数场景下视觉效果接近。左上角 **MB/KM** 按钮随时切换，画布自动用笔画历史重绘。
+插件提供两种混色方式：**KM**（默认，为本插件自研）和 **MB**（Mixbox）。大多数混色两者看起来差不多，用默认的就好。
 
-- **KM** —— **默认引擎**。自研。32³ LUT 把 RGB 映射到 38 波长反射率光谱（光谱数据来自 [spectral.js](https://github.com/rvanwijnen/spectral.js)，MIT），在光谱空间应用 Kubelka-Munk 公式混色。GPL v3。**计算更精确、对颜料 RGB 更灵敏** —— 颜料 RGB 的细微差异会带来可见的混色差异，更接近真实颜料对细微变化的响应。算法特性使某些蓝+黄组合更容易混合出绿色。
-- **Mixbox (MB)** —— 基于 [Mixbox](https://scrtwpns.com/mixbox/) LUT 算法，CC BY-NC 4.0。人工调校的锚点颜料 → 较粗糙但更均一 —— 在更广的输入范围内产出一致结果。精确度低于 KM，但稳定性更好。
+- **KM —— 灵敏。** 两种颜料的细微差别会体现在混色里，和真实颜料一样。部分蓝+黄混色会稍微偏绿。
+- **MB —— 稳定。** 颜料略有不同，混出来也差不多。
 
-两个引擎现在效果接近 —— 默认用 KM 获得更高精度和灵敏度，想要更均一的手感或需要规避 GPL 许可时切换到 MB。差异在 25–75% 浓度区间和某些蓝+黄复合色上最明显。
+两色用量差不多时，差别最明显。
 
-可使用 [KM Tuner](https://food211.github.io/Mixbox-Palette/km-tuner.html) 对比两引擎效果。
+**要拿作品商用？** 选 KM 最稳妥。Mixbox 的许可只允许非商业用途；KM 是从零自研的，没有这个限制。详见[许可证](#许可证)。
+
+**切换方法**：点左上角的面板标题（显示为 **KM 调色板** 或 **Mixbox 调色板**，旁边带 ⇄ 箭头）。已经画的内容会用新引擎重新画一遍，不会丢。想并排对比，可以打开 [KM Tuner](https://food211.github.io/Mixbox-Palette/km-tuner.html)。
+
+<details>
+<summary>技术细节</summary>
+
+- **为什么有两个引擎**：插件最早基于 [Mixbox](https://scrtwpns.com/mixbox/)（CC BY-NC 4.0，禁止商用）。KM 是从零自研的替代引擎，以 GPL v3 发布；Mixbox 作为可选引擎保留。
+- **KM**：模拟颜料层对光的吸收与散射。用 32³ 查找表把 RGB 映射到 38 个波长的反射率光谱（光谱数据来自 [spectral.js](https://github.com/rvanwijnen/spectral.js)，MIT），再在光谱空间按 Kubelka-Munk 公式混色。
+- **MB**：直接使用官方 Mixbox LUT 库（`js/mixbox.js`），未作修改；它用一组人工调校的基础颜料来模拟颜料。
+- **差异位置**：主要在混合比例约 25–75% 的区间，以及部分蓝+黄混色。
+- **切换**：画布按笔画历史用新引擎重绘。
+
+</details>
 
 ---
 
@@ -231,13 +269,26 @@ Adobe Photoshop UXP 调色板插件，内置双物理混色引擎，模拟真实
 - **双向像素传输** —— 将 Photoshop 选区导入混色画布，修改后可传回原位置的新图层
 - **双向颜色同步** —— 插件 ↔ Photoshop，包含拾色器、色板、X 交换、D 复位
 - **缩放控制** —— 右上角下拉菜单，60%–150%
-- **50 步撤销/重做** —— 直接保存画布快照，使用 GPU 显存记录增量
+- **50 步撤销/重做**
 - **自动保存** —— 画布、历史和设置自动保存
 - **多语言支持** —— English / 中文 / 日本語，自动跟随系统语言，可手动切换
 
 ---
 
+## 系统要求
+
+Mixbox 调色板是网页应用，有现代浏览器的平台都能用 —— 可以在 Photoshop 里用，也可以直接在电脑、平板或手机的浏览器里用。
+
+- **在 Photoshop 中使用**：Photoshop 2022（v23.3）或更新版本
+- **在浏览器中使用**：较新的 Chrome、Edge、Firefox 或 Safari
+- **支持 WebGL 2 的显卡** —— 近几年的设备基本都支持。如果一直提示“引擎初始化失败”，可以先更新显卡驱动
+- **首次启动需要联网** —— 之后断网也能用
+- **压感**：支持 iPad 上的 Apple Pencil 和 Wacom 数位板（Windows 上需在 Wacom 驱动设置里开启 Windows Ink）
+
 ## 安装
+
+### 在线使用
+直接在浏览器打开 [https://mixbox-palette.pages.dev/](https://mixbox-palette.pages.dev/)，无需安装。电脑、平板、手机都能用。
 
 ### 通过 Adobe Marketplace
 1. 访问 [MixBox Watercolor Palette - Adobe Marketplace](https://exchange.adobe.com/apps/cc/cc9344fb/mixbox-watercolor-palette)
@@ -302,10 +353,10 @@ WebView 混合架构：UI 和混色引擎托管在远端（Cloudflare Pages，Gi
 
 本项目包含两种许可证的代码：
 
-- **自研代码**（KM 引擎、UI 等）— [GPL-3.0](LICENSE)
-- **Mixbox 库**（`js/mixbox.js`）— [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/)（仅限非商业用途，由 Secret Weapons 提供）
+- **自研代码**（KM 引擎、UI 等）— [GPL-3.0](LICENSE)。允许商用。
+- **Mixbox 库**（`js/mixbox.js`，由 Secret Weapons 提供）— [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/)。仅限非商业用途。
 
-使用 Mixbox 引擎时，整体使用受 CC BY-NC 4.0 限制；KM 引擎无此限制。
+这些许可约束的是插件代码本身——使用、复制和再分发。GPL-3.0 不限制你用 KM 引擎画出来的作品。再分发本项目（无论是否修改）须按 GPL-3.0 提供源码；商业再分发时请移除 `js/mixbox.js`。如果打算用 MB 引擎做商业作品，请先查看 [Mixbox 的条款](https://scrtwpns.com/mixbox/)。
 
 ## 商标声明
 
@@ -321,4 +372,3 @@ Adobe 和 Photoshop 是 Adobe 在美国和/或其他国家/地区的注册商标
 - 💬 [加入 Discord 社区](https://discord.gg/d3ubWGpe) — 反馈问题、提出建议、日常交流
 - 🐛 [提交 Bug](https://github.com/food211/Mixbox-Palette/issues)
 - 💡 提出功能建议
-- ☕ 支持开源：支付宝 food211@qq.com / 微信 172660507
